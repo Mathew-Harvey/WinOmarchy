@@ -110,3 +110,32 @@ with -Force and survives unreadable files, and theme cycling compares names
 case-insensitively.
 
 Status: closed.
+
+## FLAG-9: taskbar and desktop icon techniques need machine verification
+
+Context: the brief (Section 3) prescribes SHAppBarMessage ABM_SETSTATE for
+taskbar auto-hide and WM_COMMAND 0x7402 to SHELLDLL_DefView for the live icon
+toggle, with registry fallbacks, and says to verify both on the machine in
+Phase 3 before relying on them. The container cannot exercise either. Both
+are implemented with the registry state read first (0x7402 is a blind
+toggle) and the icon path falls back to HideIcons plus an Explorer restart
+when SHELLDLL_DefView cannot be found.
+
+Open question for Mat: checklist items A1 and A2 in
+docs/manual-test-checklist.md cover this; if either technique no-ops on the
+current Windows 11 build, say so and the fallback becomes the primary.
+
+Status: deferred-to-machine.
+
+## FLAG-10: config/ is deployed alongside bin/, themes/ and templates/
+
+Context: the brief Section 7.5 step 4 lists bin/, themes/ and templates/ as
+the payload copied to %LOCALAPPDATA%\winmarchy. The theme engine re-renders
+the yasb stylesheet at runtime from config/yasb/styles.template.css, so that
+file must exist in the deployed tree too.
+
+Decision: install.ps1 also copies config/ to %LOCALAPPDATA%\winmarchy\config,
+keeping one path shape (root/config/yasb/styles.template.css) valid in both
+the repo and the deployed layout.
+
+Status: closed.

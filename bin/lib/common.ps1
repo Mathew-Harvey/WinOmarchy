@@ -550,3 +550,510 @@ function Clear-WinmarchyJournal {
 function Test-WinmarchyJournalPending {
     return (@(Get-WinmarchyJournalEntries).Count -gt 0)
 }
+
+# ---------------------------------------------------------------------------
+# Runtime path helpers for deployed configuration surfaces
+# ---------------------------------------------------------------------------
+
+function Get-WinmarchyUserProfile {
+    # WINMARCHY_USERPROFILE overrides for tests; USERPROFILE on Windows;
+    # HOME as the last resort for the Linux build container.
+    if ($env:WINMARCHY_USERPROFILE) { return $env:WINMARCHY_USERPROFILE }
+    if ($env:USERPROFILE) { return $env:USERPROFILE }
+    if ($env:HOME) { return $env:HOME }
+    throw 'No user profile directory could be resolved.'
+}
+
+function Get-WinmarchyGlazewmConfigPath {
+    return (Join-Path (Get-WinmarchyUserProfile) (Join-Path '.glzr' (Join-Path 'glazewm' 'config.yaml')))
+}
+
+function Get-WinmarchyYasbConfigDir {
+    return (Join-Path (Get-WinmarchyUserProfile) (Join-Path '.config' 'yasb'))
+}
+
+function Get-WinmarchyYasbStylesTemplatePath {
+    # Lives under <root>/config/yasb both in the repo and in the deployed
+    # layout (install.ps1 copies config/ alongside bin/, themes/, templates/).
+    return (Join-Path (Get-WinmarchyRepoRoot) (Join-Path 'config' (Join-Path 'yasb' 'styles.template.css')))
+}
+
+function Get-WinmarchyNvimConfigDir {
+    if ($env:WINMARCHY_NVIM_DIR) { return $env:WINMARCHY_NVIM_DIR }
+    if ($env:LOCALAPPDATA) { return (Join-Path $env:LOCALAPPDATA 'nvim') }
+    return (Join-Path (Get-WinmarchyUserProfile) 'nvim')
+}
+
+function Update-WinmarchyGlazewmBorders {
+    # Pure text transform: swaps the hex colours on the two marker-comment
+    # lines of the GlazeWM config (focused border = accent, other border =
+    # muted). Idempotent; lines without the markers are untouched.
+    param(
+        [Parameter(Mandatory = $true)][string]$ConfigText,
+        [Parameter(Mandatory = $true)]$Theme
+    )
+    $result = [regex]::Replace($ConfigText, "color: '#[0-9a-fA-F]{6}' # winmarchy:focused-border", ("color: '" + $Theme.colors.accent + "' # winmarchy:focused-border"))
+    $result = [regex]::Replace($result, "color: '#[0-9a-fA-F]{6}' # winmarchy:other-border", ("color: '" + $Theme.colors.muted + "' # winmarchy:other-border"))
+    return $result
+}
+
+# ---------------------------------------------------------------------------
+# Operating system effectors. Windows-only; every function here is a plain
+# boundary the tests mock. Native API facts are cited where used.
+# ---------------------------------------------------------------------------
+
+function Test-WinmarchyIsWindows {
+    # $IsWindows does not exist on Windows PowerShell 5.1; the OS env var
+    # does and is always Windows_NT there.
+    return ($env:OS -eq 'Windows_NT')
+}
+
+function Assert-WinmarchyWindows {
+    param([string]$Operation)
+    if (-not (Test-WinmarchyIsWindows)) {
+        throw ($Operation + ' requires Windows.')
+    }
+}
+
+function Initialize-WinmarchyNativeMethods {
+    # P/Invoke declarations, compiled once per session.
+    # SHAppBarMessage: shell32, documented at
+    # learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shappbarmessage
+    # (ABM_GETSTATE 0x4, ABM_SETSTATE 0xA, ABS_AUTOHIDE 0x1).
+    # FindWindow/FindWindowEx/SendMessage and SystemParametersInfo: user32,
+    # documented under learn.microsoft.com/en-us/windows/win32/api/winuser/.
+    # The desktop icon toggle (WM_COMMAND 0x7402 to SHELLDLL_DefView) and the
+    # SPI_SETDESKWALLPAPER call are the techniques named in the build brief
+    # Sections 3 and 5.
+    if ('Winmarchy.NativeMethods' -as [type]) { return }
+    $source = @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace Winmarchy
+{
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AppBarRect
+    {
+        public int left;
+        public int top;
+        public int right;
+        public int bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AppBarData
+    {
+        public int cbSize;
+        public IntPtr hWnd;
+        public uint uCallbackMessage;
+        public uint uEdge;
+        public AppBarRect rc;
+        public IntPtr lParam;
+    }
+
+    public static class NativeMethods
+    {
+        [DllImport("shell32.dll")]
+        public static extern UIntPtr SHAppBarMessage(uint dwMessage, ref AppBarData pData);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr childAfter, string className, string windowName);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, string pvParam, uint fWinIni);
+    }
+}
+'@
+    Add-Type -TypeDefinition $source -Language CSharp
+}
+
+function Get-WinmarchyTaskbarAutoHide {
+    Assert-WinmarchyWindows -Operation 'Taskbar state query'
+    Initialize-WinmarchyNativeMethods
+    $data = New-Object Winmarchy.AppBarData
+    $data.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($data)
+    # ABM_GETSTATE = 0x4; result bit 0x1 = ABS_AUTOHIDE.
+    $state = [Winmarchy.NativeMethods]::SHAppBarMessage(4, [ref]$data)
+    return (([uint64]$state -band 1) -eq 1)
+}
+
+function Set-WinmarchyTaskbarAutoHide {
+    param([Parameter(Mandatory = $true)][bool]$Enabled)
+    Assert-WinmarchyWindows -Operation 'Taskbar state change'
+    Initialize-WinmarchyNativeMethods
+    $data = New-Object Winmarchy.AppBarData
+    $data.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($data)
+    $current = [uint64][Winmarchy.NativeMethods]::SHAppBarMessage(4, [ref]$data)
+    $newState = $current
+    if ($Enabled) {
+        $newState = $current -bor 1
+    } else {
+        $newState = $current -band (-bnot [uint64]1)
+    }
+    $data2 = New-Object Winmarchy.AppBarData
+    $data2.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($data2)
+    $data2.lParam = [IntPtr]$newState
+    # ABM_SETSTATE = 0xA.
+    $null = [Winmarchy.NativeMethods]::SHAppBarMessage(10, [ref]$data2)
+    Write-WinmarchyLog -Message ('taskbar auto-hide set to ' + $Enabled)
+}
+
+function Get-WinmarchyDesktopIconsVisible {
+    Assert-WinmarchyWindows -Operation 'Desktop icon state query'
+    # HideIcons DWORD under the Explorer Advanced key; 0 or absent = visible.
+    $advancedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+    $value = Get-ItemProperty -Path $advancedKey -Name 'HideIcons' -ErrorAction SilentlyContinue
+    if ($null -eq $value) { return $true }
+    return ($value.HideIcons -eq 0)
+}
+
+function Set-WinmarchyDesktopIcons {
+    param([Parameter(Mandatory = $true)][bool]$Visible)
+    Assert-WinmarchyWindows -Operation 'Desktop icon toggle'
+    Initialize-WinmarchyNativeMethods
+    $currentlyVisible = Get-WinmarchyDesktopIconsVisible
+    if ($currentlyVisible -eq $Visible) { return }
+
+    # Live toggle: WM_COMMAND (0x111) with id 0x7402 to SHELLDLL_DefView.
+    # This is a blind toggle, which is why the registry state is read first.
+    $defView = [IntPtr]::Zero
+    $progman = [Winmarchy.NativeMethods]::FindWindow('Progman', $null)
+    if ($progman -ne [IntPtr]::Zero) {
+        $defView = [Winmarchy.NativeMethods]::FindWindowEx($progman, [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
+    }
+    if ($defView -eq [IntPtr]::Zero) {
+        # Wallpaper-slideshow arrangement: the DefView lives under a WorkerW.
+        $worker = [IntPtr]::Zero
+        do {
+            $worker = [Winmarchy.NativeMethods]::FindWindowEx([IntPtr]::Zero, $worker, 'WorkerW', $null)
+            if ($worker -ne [IntPtr]::Zero) {
+                $defView = [Winmarchy.NativeMethods]::FindWindowEx($worker, [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
+            }
+        } while ($defView -eq [IntPtr]::Zero -and $worker -ne [IntPtr]::Zero)
+    }
+
+    $advancedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+    $hideValue = 1
+    if ($Visible) { $hideValue = 0 }
+
+    if ($defView -ne [IntPtr]::Zero) {
+        $null = [Winmarchy.NativeMethods]::SendMessage($defView, 0x111, [IntPtr]0x7402, [IntPtr]::Zero)
+        # Persist the state so a later Explorer restart agrees with reality.
+        Set-ItemProperty -Path $advancedKey -Name 'HideIcons' -Value $hideValue -Type DWord
+        Write-WinmarchyLog -Message ('desktop icons toggled live, visible=' + $Visible)
+    } else {
+        # Fallback from the brief Section 3: registry plus Explorer restart.
+        Set-ItemProperty -Path $advancedKey -Name 'HideIcons' -Value $hideValue -Type DWord
+        Restart-WinmarchyExplorer
+        Write-WinmarchyLog -Message ('desktop icons set via registry fallback, visible=' + $Visible) -Level 'WARN'
+    }
+}
+
+function Restart-WinmarchyExplorer {
+    Assert-WinmarchyWindows -Operation 'Explorer restart'
+    Write-WinmarchyLog -Message 'restarting explorer' -Level 'WARN'
+    Stop-Process -Name 'explorer' -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    if (-not (Get-Process -Name 'explorer' -ErrorAction SilentlyContinue)) {
+        Start-Process 'explorer.exe'
+    }
+}
+
+function Get-WinmarchyCurrentWallpaper {
+    Assert-WinmarchyWindows -Operation 'Wallpaper query'
+    $value = Get-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'WallPaper' -ErrorAction SilentlyContinue
+    if ($null -eq $value) { return $null }
+    return $value.WallPaper
+}
+
+function Set-WinmarchyWallpaper {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    Assert-WinmarchyWindows -Operation 'Wallpaper change'
+    Initialize-WinmarchyNativeMethods
+    # SPI_SETDESKWALLPAPER = 0x14; SPIF_UPDATEINIFILE 0x1 + SPIF_SENDCHANGE 0x2.
+    $ok = [Winmarchy.NativeMethods]::SystemParametersInfo(0x14, 0, $Path, 3)
+    if (-not $ok) {
+        throw ('SystemParametersInfo failed setting wallpaper to ' + $Path)
+    }
+    Write-WinmarchyLog -Message ('wallpaper set to ' + $Path)
+}
+
+function Get-WinmarchyAppsTheme {
+    Assert-WinmarchyWindows -Operation 'App theme query'
+    $personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+    $apps = 1
+    $system = 1
+    $appsValue = Get-ItemProperty -Path $personalize -Name 'AppsUseLightTheme' -ErrorAction SilentlyContinue
+    if ($null -ne $appsValue) { $apps = $appsValue.AppsUseLightTheme }
+    $systemValue = Get-ItemProperty -Path $personalize -Name 'SystemUsesLightTheme' -ErrorAction SilentlyContinue
+    if ($null -ne $systemValue) { $system = $systemValue.SystemUsesLightTheme }
+    return [pscustomobject]@{ AppsUseLightTheme = $apps; SystemUsesLightTheme = $system }
+}
+
+function Set-WinmarchyAppsTheme {
+    param(
+        [Parameter(Mandatory = $true)][int]$AppsUseLightTheme,
+        [Parameter(Mandatory = $true)][int]$SystemUsesLightTheme
+    )
+    Assert-WinmarchyWindows -Operation 'App theme change'
+    $personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+    if (-not (Test-Path $personalize)) {
+        $null = New-Item -Path $personalize -Force
+    }
+    Set-ItemProperty -Path $personalize -Name 'AppsUseLightTheme' -Value $AppsUseLightTheme -Type DWord
+    Set-ItemProperty -Path $personalize -Name 'SystemUsesLightTheme' -Value $SystemUsesLightTheme -Type DWord
+    Write-WinmarchyLog -Message ('app theme set: apps=' + $AppsUseLightTheme + ' system=' + $SystemUsesLightTheme)
+}
+
+function New-WinmarchyWallpaperImage {
+    # Generates the themed wallpaper: 2560x1440, vertical three-stop gradient
+    # (darker_background to background to lighter_background) with a soft
+    # accent glow ellipse at roughly 12 percent alpha in the lower right.
+    # System.Drawing (GDI+) ships with .NET Framework on Windows.
+    param(
+        [Parameter(Mandatory = $true)]$Theme,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    Assert-WinmarchyWindows -Operation 'Wallpaper generation'
+    Add-Type -AssemblyName System.Drawing
+
+    $width = 2560
+    $height = 1440
+    $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $rect = New-Object System.Drawing.Rectangle(0, 0, $width, $height)
+        $top = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.darker_background)
+        $mid = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.background)
+        $bottom = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.lighter_background)
+
+        $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $top, $bottom, [System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
+        $blend = New-Object System.Drawing.Drawing2D.ColorBlend(3)
+        $blend.Colors = @($top, $mid, $bottom)
+        $blend.Positions = [single[]]@(0.0, 0.55, 1.0)
+        $brush.InterpolationColors = $blend
+        $graphics.FillRectangle($brush, $rect)
+        $brush.Dispose()
+
+        # Accent glow, centred in the lower right.
+        $glowWidth = 1700
+        $glowHeight = 1200
+        $glowX = [int]($width * 0.72) - [int]($glowWidth / 2)
+        $glowY = [int]($height * 0.88) - [int]($glowHeight / 2)
+        $glowPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $glowPath.AddEllipse($glowX, $glowY, $glowWidth, $glowHeight)
+        $glowBrush = New-Object System.Drawing.Drawing2D.PathGradientBrush($glowPath)
+        $accent = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.accent)
+        # 12 percent alpha of 255 is 31.
+        $glowBrush.CenterColor = [System.Drawing.Color]::FromArgb(31, $accent)
+        $glowBrush.SurroundColors = @([System.Drawing.Color]::FromArgb(0, $accent))
+        $graphics.FillPath($glowBrush, $glowPath)
+        $glowBrush.Dispose()
+        $glowPath.Dispose()
+
+        $parent = Split-Path -Parent $Path
+        if ($parent -and -not (Test-Path $parent)) {
+            $null = New-Item -ItemType Directory -Path $parent -Force
+        }
+        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+        Write-WinmarchyLog -Message ('wallpaper generated at ' + $Path)
+    } finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Process and executable helpers
+# ---------------------------------------------------------------------------
+
+function Test-WinmarchyProcessRunning {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    return ($null -ne (Get-Process -Name $Name -ErrorAction SilentlyContinue))
+}
+
+function Find-WinmarchyExecutable {
+    # PATH first via Get-Command (winget puts both tools on PATH), then a
+    # best-effort search of standard install directories.
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [string[]]$FallbackPaths = @()
+    )
+    $command = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    $candidates = @($FallbackPaths)
+    if ($env:ProgramFiles) {
+        $candidates = $candidates + (Join-Path $env:ProgramFiles (Join-Path 'glzr.io' (Join-Path 'GlazeWM' ($Name + '.exe'))))
+        $candidates = $candidates + (Join-Path $env:ProgramFiles (Join-Path 'Yasb' ($Name + '.exe')))
+    }
+    if ($env:LOCALAPPDATA) {
+        $candidates = $candidates + (Join-Path $env:LOCALAPPDATA (Join-Path 'Programs' (Join-Path 'glzr.io' (Join-Path 'GlazeWM' ($Name + '.exe')))))
+        $candidates = $candidates + (Join-Path $env:LOCALAPPDATA (Join-Path 'Yasb' ($Name + '.exe')))
+    }
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
+
+function Invoke-WinmarchyGlazewmCommand {
+    # Runs "glazewm command <cmd>", the documented CLI for driving a running
+    # GlazeWM instance (verified against the GlazeWM AppCommand surface in
+    # ref/glazewm/packages/wm-common/src/app_command.rs).
+    param([Parameter(Mandatory = $true)][string]$Command)
+    $exe = Find-WinmarchyExecutable -Name 'glazewm'
+    if (-not $exe) { throw 'glazewm executable not found' }
+    $savedPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $exe command $Command 2>&1 | Out-Null
+    } finally {
+        $ErrorActionPreference = $savedPreference
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw ('glazewm command ' + $Command + ' exited with ' + $LASTEXITCODE)
+    }
+}
+
+function Start-WinmarchyGlazewm {
+    $exe = Find-WinmarchyExecutable -Name 'glazewm'
+    if (-not $exe) { throw 'glazewm executable not found; is GlazeWM installed?' }
+    Start-Process -FilePath $exe
+}
+
+function Stop-WinmarchyGlazewm {
+    # Graceful wm-exit first, then force after five seconds (brief 7.2).
+    try {
+        Invoke-WinmarchyGlazewmCommand -Command 'wm-exit'
+    } catch {
+        Write-WinmarchyLog -Message ('glazewm wm-exit failed: ' + $_.Exception.Message) -Level 'WARN'
+    }
+    $deadline = (Get-Date).AddSeconds(5)
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Test-WinmarchyProcessRunning -Name 'glazewm')) { return }
+        Start-Sleep -Milliseconds 250
+    }
+    if (Test-WinmarchyProcessRunning -Name 'glazewm') {
+        Stop-Process -Name 'glazewm' -Force -ErrorAction SilentlyContinue
+        Write-WinmarchyLog -Message 'glazewm force-stopped' -Level 'WARN'
+    }
+}
+
+function Start-WinmarchyYasb {
+    $yasbc = Find-WinmarchyExecutable -Name 'yasbc'
+    if (-not $yasbc) { throw 'yasbc executable not found; is yasb installed?' }
+    $savedPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $yasbc start 2>&1 | Out-Null
+    } finally {
+        $ErrorActionPreference = $savedPreference
+    }
+}
+
+function Stop-WinmarchyYasb {
+    $yasbc = Find-WinmarchyExecutable -Name 'yasbc'
+    if ($yasbc) {
+        $savedPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & $yasbc stop 2>&1 | Out-Null
+        } finally {
+            $ErrorActionPreference = $savedPreference
+        }
+    }
+    $deadline = (Get-Date).AddSeconds(5)
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Test-WinmarchyProcessRunning -Name 'yasb')) { return }
+        Start-Sleep -Milliseconds 250
+    }
+    if (Test-WinmarchyProcessRunning -Name 'yasb') {
+        Stop-Process -Name 'yasb' -Force -ErrorAction SilentlyContinue
+        Write-WinmarchyLog -Message 'yasb force-stopped' -Level 'WARN'
+    }
+}
+
+function Start-WinmarchyFlowLauncher {
+    $candidates = @()
+    if ($env:LOCALAPPDATA) {
+        $candidates = $candidates + (Join-Path $env:LOCALAPPDATA (Join-Path 'FlowLauncher' 'Flow.Launcher.exe'))
+    }
+    $exe = Find-WinmarchyExecutable -Name 'Flow.Launcher' -FallbackPaths $candidates
+    if ($exe) {
+        Start-Process -FilePath $exe
+    } else {
+        Write-WinmarchyLog -Message 'Flow Launcher not found; skipped' -Level 'WARN'
+    }
+}
+
+function Test-WinmarchyTcpPortOpen {
+    # One-second connect probe used for the GlazeWM IPC health check
+    # (ws://localhost:6123, brief Section 4.2).
+    param(
+        [string]$TargetHost = 'localhost',
+        [Parameter(Mandatory = $true)][int]$Port
+    )
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        $async = $client.BeginConnect($TargetHost, $Port, $null, $null)
+        $completed = $async.AsyncWaitHandle.WaitOne(1000)
+        if ($completed -and $client.Connected) {
+            $client.EndConnect($async)
+            return $true
+        }
+        return $false
+    } catch {
+        return $false
+    } finally {
+        $client.Close()
+    }
+}
+
+function Wait-WinmarchyOmarchyHealthy {
+    # Healthy means: GlazeWM process alive AND IPC port 6123 connectable AND
+    # yasb process alive (brief 7.2). Polls once a second.
+    param([int]$TimeoutSeconds = 20)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $glazeAlive = Test-WinmarchyProcessRunning -Name 'glazewm'
+        $ipcAlive = Test-WinmarchyTcpPortOpen -Port 6123
+        $yasbAlive = Test-WinmarchyProcessRunning -Name 'yasb'
+        if ($glazeAlive -and $ipcAlive -and $yasbAlive) { return $true }
+        Start-Sleep -Seconds 1
+    }
+    return $false
+}
+
+# ---------------------------------------------------------------------------
+# Autostart Run key
+# ---------------------------------------------------------------------------
+
+function Test-WinmarchyRunKeyPresent {
+    if (-not (Test-WinmarchyIsWindows)) { return $false }
+    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    $value = Get-ItemProperty -Path $runKey -Name 'Winmarchy' -ErrorAction SilentlyContinue
+    return ($null -ne $value)
+}
+
+function Set-WinmarchyRunKey {
+    param([Parameter(Mandatory = $true)][string]$Command)
+    Assert-WinmarchyWindows -Operation 'Run key registration'
+    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    Set-ItemProperty -Path $runKey -Name 'Winmarchy' -Value $Command
+    Write-WinmarchyLog -Message ('run key set to ' + $Command)
+}
+
+function Remove-WinmarchyRunKey {
+    if (-not (Test-WinmarchyIsWindows)) { return }
+    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    Remove-ItemProperty -Path $runKey -Name 'Winmarchy' -ErrorAction SilentlyContinue
+    Write-WinmarchyLog -Message 'run key removed'
+}
