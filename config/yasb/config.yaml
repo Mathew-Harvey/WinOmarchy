@@ -1,0 +1,162 @@
+# Winmarchy yasb configuration.
+# Bar schema and widget option shapes copied from the yasb reference:
+# bar keys from ref/yasb/src/core/validation/bar.py, widget options from
+# ref/yasb/docs/widgets/*.md and ref/yasb/src/core/setup/widgets_config.py.
+# Icon escape sequences are copied verbatim from those docs (Nerd Font
+# codepoints). watch_stylesheet stays true so rewriting styles.css
+# hot-reloads the bar on every theme change with no restart.
+
+watch_stylesheet: true
+watch_config: true
+debug: false
+update_check: false
+
+bars:
+  winmarchy-bar:
+    enabled: true
+    screens: ['*']
+    class_name: "yasb-bar"
+    alignment:
+      position: "top"
+      align: "center"
+    blur_effect:
+      enabled: false
+    window_flags:
+      always_on_top: false
+      # Keep windows_app_bar true so the bar reserves screen space and
+      # GlazeWM tiles below it.
+      windows_app_bar: true
+      hide_on_fullscreen: true
+    dimensions:
+      width: "100%"
+      height: 36
+    padding:
+      top: 0
+      left: 4
+      bottom: 0
+      right: 4
+    animation:
+      enabled: true
+      duration: 300
+    widgets:
+      left: ["glazewm_workspaces", "active_window"]
+      center: ["clock"]
+      right: ["cpu", "memory", "volume", "systray", "power_menu"]
+
+widgets:
+  # Shape from ref/yasb/docs/widgets/(Widget)-GlazeWM-Workspaces.md.
+  glazewm_workspaces:
+    type: "glazewm.workspaces.GlazewmWorkspacesWidget"
+    options:
+      offline_label: "GlazeWM offline"
+      hide_if_offline: false
+      monitor_exclusive: true
+      enable_scroll_switching: true
+
+  # Shape from ref/yasb/docs/widgets/(Widget)-Active-Windows-Title.md.
+  active_window:
+    type: "yasb.active_window.ActiveWindowWidget"
+    options:
+      label: "{win[title]}"
+      label_alt: "[class_name='{win[class_name]}' exe='{win[process][name]}' hwnd={win[hwnd]}]"
+      label_no_window: ""
+      label_icon: true
+      label_icon_size: 16
+      max_length: 48
+      max_length_ellipsis: "..."
+      monitor_exclusive: true
+
+  # Shape from ref/yasb/docs/widgets/(Widget)-Clock.md. The label supports
+  # strftime tokens inside {% ... %}.
+  clock:
+    type: "yasb.clock.ClockWidget"
+    options:
+      label: "{%a %d %b %H:%M}"
+      label_alt: "{%A %d %B %Y %H:%M:%S}"
+      timezones: []
+      calendar:
+        blur: false
+        round_corners: true
+        alignment: "center"
+        direction: "down"
+      callbacks:
+        on_left: "toggle_calendar"
+        on_middle: "do_nothing"
+        on_right: "toggle_label"
+
+  # Shape from ref/yasb/docs/widgets/(Widget)-CPU.md.
+  cpu:
+    type: "yasb.cpu.CpuWidget"
+    options:
+      label: "<span></span> {info[percent][total]}%"
+      label_alt: "<span></span> {info[freq][current]} MHz"
+      update_interval: 2000
+      callbacks:
+        on_left: "toggle_label"
+
+  # Shape from ref/yasb/docs/widgets/(Widget)-Memory.md; icons from the
+  # setup wizard defaults in ref/yasb/src/core/setup/widgets_config.py.
+  memory:
+    type: "yasb.memory.MemoryWidget"
+    options:
+      label: "<span></span> {virtual_mem_percent}%"
+      label_alt: "<span></span> {virtual_mem_free}/{virtual_mem_total}"
+      update_interval: 5000
+      callbacks:
+        on_left: "toggle_label"
+
+  # Shape from ref/yasb/docs/widgets/(Widget)-Volume.md.
+  volume:
+    type: "yasb.volume.VolumeWidget"
+    options:
+      label: "<span>{icon}</span> {level}"
+      label_alt: "{level}"
+      icons:
+        "muted": ""
+        "10": ""
+        "30": ""
+        "60": ""
+        "100": ""
+      callbacks:
+        on_left: "toggle_volume_menu"
+        on_right: "toggle_mute"
+
+  # Shape from ref/yasb/docs/widgets/(Widget)-Systray.md.
+  systray:
+    type: "yasb.systray.SystrayWidget"
+    options:
+      class_name: "systray"
+      label_collapsed: "▼"
+      label_expanded: "▶"
+      label_position: "left"
+      icon_size: 16
+      pin_click_modifier: "alt"
+      show_unpinned: true
+      show_unpinned_button: true
+      show_battery: false
+      show_volume: false
+      show_network: false
+
+  # Shape from ref/yasb/docs/widgets/(Widget)-Power-Menu.md (compact popup
+  # example); button icons copied from that example verbatim.
+  power_menu:
+    type: "yasb.power_menu.PowerMenuWidget"
+    options:
+      label: ""
+      uptime: true
+      show_user: false
+      menu_style: "popup"
+      popup:
+        blur: false
+        round_corners: true
+        alignment: "right"
+        direction: "down"
+        offset_top: 6
+        offset_left: 0
+      buttons:
+        lock: ["", "Lock"]
+        sleep: ["⏾", "Sleep"]
+        restart: ["", "Restart"]
+        shutdown: ["", "Shut Down"]
+        signout: ["󰍃", "Sign out"]
+        cancel: ["󰜺", "Cancel"]
