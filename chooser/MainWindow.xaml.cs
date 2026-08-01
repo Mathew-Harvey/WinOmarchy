@@ -100,6 +100,13 @@ public partial class MainWindow : Window
 
             WebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+            // A browser or renderer crash after load must never leave a dead
+            // topmost fullscreen window: fall back and get out of the way.
+            WebView.CoreWebView2.ProcessFailed += (_, args) =>
+            {
+                Program.Fallback("webview process failed: " + args.ProcessFailedKind);
+                Dispatcher.Invoke(Close);
+            };
             WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             WebView.CoreWebView2.Settings.IsZoomControlEnabled = false;
 
@@ -122,6 +129,9 @@ public partial class MainWindow : Window
         }
         _healthy = true;
         _healthTimer.Stop();
+        // Make sure arrows, Enter and Escape reach the page immediately;
+        // WPF gives no child keyboard focus on its own.
+        WebView.Focus();
         SendInitMessage();
 
         if (_renderTest)

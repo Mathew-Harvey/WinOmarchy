@@ -335,7 +335,8 @@ if (Test-WinmarchyIsWindows) {
 }
 
 Invoke-WinmarchyInstallStep -Description ('apply the ' + $Theme + ' theme') -Action {
-    Set-WinmarchyTheme -Name $Theme
+    # -SetTerminalFont: the brief sets the terminal font face on install only.
+    Set-WinmarchyTheme -Name $Theme -SetTerminalFont
 }
 
 # ---------------------------------------------------------------------------

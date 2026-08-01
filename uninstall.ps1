@@ -71,17 +71,41 @@ Invoke-WinmarchyUninstallStep -Description 'remove the bin directory from the us
     }
 }
 
-# 5. Windows Terminal: restore the pre-Winmarchy settings from the bak.
+# 5. Windows Terminal: surgically remove only what Winmarchy added (the
+# Winmarchy schemes and the defaults.colorScheme pointing at one), so any
+# customisation the user made since install survives. The one-time
+# settings.json.winmarchy-bak is left beside the file as a by-hand recovery
+# option (FLAGS.md FLAG-13).
 if ($KeepTerminalTheme) {
     Write-Output 'uninstall: Windows Terminal theme kept (-KeepTerminalTheme)'
 } else {
-    Invoke-WinmarchyUninstallStep -Description 'restore Windows Terminal settings from the backup' -Action {
+    Invoke-WinmarchyUninstallStep -Description 'remove the Winmarchy schemes from Windows Terminal settings' -Action {
         $wtPath = Get-WtSettingsPath
-        if ($wtPath) {
-            $bakPath = $wtPath + '.winmarchy-bak'
-            if (Test-Path $bakPath) {
-                Copy-Item -Path $bakPath -Destination $wtPath -Force
-                Remove-Item -Path $bakPath -Force
+        if ($wtPath -and (Test-Path $wtPath)) {
+            $settings = ConvertFrom-WtSettingsJson -RawText ([System.IO.File]::ReadAllText($wtPath))
+            $changed = $false
+            if ((Test-PsObjectProperty $settings 'schemes') -and ($null -ne $settings.schemes)) {
+                $kept = @()
+                foreach ($scheme in @($settings.schemes)) {
+                    if ($null -ne $scheme -and $scheme.name -like 'Winmarchy *') {
+                        $changed = $true
+                    } else {
+                        $kept = $kept + @(, $scheme)
+                    }
+                }
+                if ($changed) { Set-PsObjectProperty $settings 'schemes' $kept }
+            }
+            if ((Test-PsObjectProperty $settings 'profiles') -and ($null -ne $settings.profiles)) {
+                if ((Test-PsObjectProperty $settings.profiles 'defaults') -and ($null -ne $settings.profiles.defaults)) {
+                    $defaults = $settings.profiles.defaults
+                    if ((Test-PsObjectProperty $defaults 'colorScheme') -and ($defaults.colorScheme -like 'Winmarchy *')) {
+                        $defaults.PSObject.Properties.Remove('colorScheme')
+                        $changed = $true
+                    }
+                }
+            }
+            if ($changed) {
+                Write-WinmarchyTextFile -Path $wtPath -Content ($settings | ConvertTo-Json -Depth 64)
             }
         }
     }
