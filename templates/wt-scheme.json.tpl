@@ -1,0 +1,23 @@
+{
+  "name": "{{wt_scheme}}",
+  "background": "{{background}}",
+  "foreground": "{{foreground}}",
+  "cursorColor": "{{bright_foreground}}",
+  "selectionBackground": "{{selection}}",
+  "black": "{{background}}",
+  "red": "{{red}}",
+  "green": "{{green}}",
+  "yellow": "{{yellow}}",
+  "blue": "{{blue}}",
+  "purple": "{{magenta}}",
+  "cyan": "{{cyan}}",
+  "white": "{{foreground}}",
+  "brightBlack": "{{muted}}",
+  "brightRed": "{{bright_red}}",
+  "brightGreen": "{{bright_green}}",
+  "brightYellow": "{{bright_yellow}}",
+  "brightBlue": "{{bright_blue}}",
+  "brightPurple": "{{bright_magenta}}",
+  "brightCyan": "{{bright_cyan}}",
+  "brightWhite": "{{bright_foreground}}"
+}

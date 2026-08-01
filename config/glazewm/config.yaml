@@ -1,0 +1,282 @@
+# Winmarchy GlazeWM configuration.
+# Implements the Omarchy-style keymap on the left Super key (lwin).
+# Section shapes and command strings follow the shipped GlazeWM sample config
+# (ref/glazewm/resources/assets/sample-config.yaml); key tokens follow
+# ref/glazewm/packages/wm-platform/src/models/key.rs.
+#
+# Notes:
+# - Win+L is reserved by Windows for locking and cannot be bound.
+# - Alt+Tab stays native.
+# - Omarchy's Super+G window grouping has no GlazeWM equivalent and is omitted.
+# - The Winmarchy mode manager owns the lifecycle of yasb and Flow Launcher,
+#   so startup_commands stays empty.
+
+general:
+  startup_commands: []
+  shutdown_commands: []
+  config_reload_commands: []
+  focus_follows_cursor: false
+  toggle_workspace_on_refocus: false
+  cursor_jump:
+    enabled: true
+    trigger: 'monitor_focus'
+  hide_method: 'cloak'
+  show_all_in_taskbar: false
+
+gaps:
+  scale_with_dpi: true
+  # The yasb bar registers as a Windows app bar and reserves its own space,
+  # so the outer gap is uniform.
+  inner_gap: '8px'
+  outer_gap:
+    top: '8px'
+    right: '8px'
+    bottom: '8px'
+    left: '8px'
+
+window_effects:
+  focused_window:
+    border:
+      enabled: true
+      color: '#7aa2f7' # winmarchy:focused-border
+  other_windows:
+    border:
+      enabled: true
+      color: '#414868' # winmarchy:other-border
+
+window_behavior:
+  initial_state: 'tiling'
+  state_defaults:
+    floating:
+      centered: true
+      shown_on_top: false
+    fullscreen:
+      maximized: false
+      shown_on_top: false
+
+workspaces:
+  - name: '1'
+  - name: '2'
+  - name: '3'
+  - name: '4'
+  - name: '5'
+  - name: '6'
+  - name: '7'
+  - name: '8'
+  - name: '9'
+
+window_rules:
+  - commands: ['ignore']
+    match:
+      # Ignore the yasb bar.
+      - window_process: { equals: 'yasb' }
+
+      # Ignore picture-in-picture windows for browsers.
+      - window_title: { regex: '[Pp]icture.in.[Pp]icture' }
+        window_class: { regex: 'Chrome_WidgetWin_1|MozillaDialogClass' }
+
+      # PowerToys guards from the GlazeWM sample config.
+      - window_process: { equals: 'PowerToys' }
+        window_class: { regex: 'HwndWrapper\[PowerToys\.PowerAccent.*?\]' }
+      - window_process: { equals: 'PowerToys' }
+        window_title: { regex: '.*? - Peek' }
+
+      # Office guards from the GlazeWM sample config.
+      - window_process: { equals: 'EXCEL' }
+        window_class: { not_regex: 'XLMAIN' }
+      - window_process: { equals: 'WINWORD' }
+        window_class: { not_regex: 'OpusApp' }
+      - window_process: { equals: 'POWERPNT' }
+        window_class: { not_regex: 'PPTFrameClass' }
+
+  # Winmarchy popup terminals (menu, keybinding overlay) float centred. They
+  # are launched with wt --title "Winmarchy ..." so this rule catches them.
+  - commands: ['toggle-floating --centered']
+    match:
+      - window_title: { regex: '^Winmarchy' }
+
+binding_modes:
+  # Resize mode: arrows or HJKL resize, escape or enter (or lwin+r again)
+  # returns to normal. Shape from the GlazeWM sample config.
+  - name: 'resize'
+    keybindings:
+      - commands: ['resize --width -2%']
+        bindings: ['h', 'left']
+      - commands: ['resize --width +2%']
+        bindings: ['l', 'right']
+      - commands: ['resize --height +2%']
+        bindings: ['k', 'up']
+      - commands: ['resize --height -2%']
+        bindings: ['j', 'down']
+      - commands: ['wm-disable-binding-mode --name resize']
+        bindings: ['escape', 'enter', 'lwin+r']
+
+keybindings:
+  # Terminal.
+  - commands: ['shell-exec wt']
+    bindings: ['lwin+enter']
+
+  # Browser. Change the URL to taste; explorer.exe with a URL opens the
+  # default browser.
+  - commands: ['shell-exec explorer.exe "https://www.google.com"']
+    bindings: ['lwin+shift+enter']
+
+  # Neovim in a new terminal window. wt -w new forces a new window; verify on
+  # the machine (FLAGS.md FLAG-6).
+  - commands: ['shell-exec wt -w new nvim']
+    bindings: ['lwin+shift+n']
+
+  # File manager.
+  - commands: ['shell-exec explorer.exe']
+    bindings: ['lwin+shift+f']
+
+  # Launcher. Invoking the exe again raises the running instance. The path is
+  # resolved and patched by install.ps1 (winmarchy:launcher-path marker).
+  - commands: ['shell-exec %LOCALAPPDATA%\FlowLauncher\Flow.Launcher.exe'] # winmarchy:launcher-path
+    bindings: ['lwin+space']
+
+  # Close window.
+  - commands: ['close']
+    bindings: ['lwin+w']
+
+  # Focus in a direction.
+  - commands: ['focus --direction left']
+    bindings: ['lwin+left']
+  - commands: ['focus --direction right']
+    bindings: ['lwin+right']
+  - commands: ['focus --direction up']
+    bindings: ['lwin+up']
+  - commands: ['focus --direction down']
+    bindings: ['lwin+down']
+
+  # Move focused window in a direction.
+  - commands: ['move --direction left']
+    bindings: ['lwin+shift+left']
+  - commands: ['move --direction right']
+    bindings: ['lwin+shift+right']
+  - commands: ['move --direction up']
+    bindings: ['lwin+shift+up']
+  - commands: ['move --direction down']
+    bindings: ['lwin+shift+down']
+
+  # Go to workspace.
+  - commands: ['focus --workspace 1']
+    bindings: ['lwin+1']
+  - commands: ['focus --workspace 2']
+    bindings: ['lwin+2']
+  - commands: ['focus --workspace 3']
+    bindings: ['lwin+3']
+  - commands: ['focus --workspace 4']
+    bindings: ['lwin+4']
+  - commands: ['focus --workspace 5']
+    bindings: ['lwin+5']
+  - commands: ['focus --workspace 6']
+    bindings: ['lwin+6']
+  - commands: ['focus --workspace 7']
+    bindings: ['lwin+7']
+  - commands: ['focus --workspace 8']
+    bindings: ['lwin+8']
+  - commands: ['focus --workspace 9']
+    bindings: ['lwin+9']
+
+  # Move window to workspace and follow it.
+  - commands: ['move --workspace 1', 'focus --workspace 1']
+    bindings: ['lwin+shift+1']
+  - commands: ['move --workspace 2', 'focus --workspace 2']
+    bindings: ['lwin+shift+2']
+  - commands: ['move --workspace 3', 'focus --workspace 3']
+    bindings: ['lwin+shift+3']
+  - commands: ['move --workspace 4', 'focus --workspace 4']
+    bindings: ['lwin+shift+4']
+  - commands: ['move --workspace 5', 'focus --workspace 5']
+    bindings: ['lwin+shift+5']
+  - commands: ['move --workspace 6', 'focus --workspace 6']
+    bindings: ['lwin+shift+6']
+  - commands: ['move --workspace 7', 'focus --workspace 7']
+    bindings: ['lwin+shift+7']
+  - commands: ['move --workspace 8', 'focus --workspace 8']
+    bindings: ['lwin+shift+8']
+  - commands: ['move --workspace 9', 'focus --workspace 9']
+    bindings: ['lwin+shift+9']
+
+  # Next and previous active workspace.
+  - commands: ['focus --next-active-workspace']
+    bindings: ['lwin+tab']
+  - commands: ['focus --prev-active-workspace']
+    bindings: ['lwin+shift+tab']
+
+  # Workspace that last had focus.
+  - commands: ['focus --recent-workspace']
+    bindings: ['lwin+ctrl+tab']
+
+  # Fullscreen.
+  - commands: ['toggle-fullscreen']
+    bindings: ['lwin+f']
+
+  # Float toggle.
+  - commands: ['toggle-floating --centered']
+    bindings: ['lwin+t']
+
+  # Tiling direction.
+  - commands: ['toggle-tiling-direction']
+    bindings: ['lwin+j']
+
+  # Pause tiling.
+  - commands: ['wm-toggle-pause']
+    bindings: ['lwin+p']
+
+  # Resize by five percent steps.
+  - commands: ['resize --width -5%']
+    bindings: ['lwin+oem_minus']
+  - commands: ['resize --width +5%']
+    bindings: ['lwin+oem_plus']
+  - commands: ['resize --height -5%']
+    bindings: ['lwin+shift+oem_minus']
+  - commands: ['resize --height +5%']
+    bindings: ['lwin+shift+oem_plus']
+
+  # Resize mode (arrows resize, escape or enter exits).
+  - commands: ['wm-enable-binding-mode --name resize']
+    bindings: ['lwin+r']
+
+  # Reload this config.
+  - commands: ['wm-reload-config']
+    bindings: ['lwin+shift+r']
+
+  # Move workspace between monitors.
+  - commands: ['move-workspace --direction left']
+    bindings: ['lwin+shift+alt+left']
+  - commands: ['move-workspace --direction right']
+    bindings: ['lwin+shift+alt+right']
+  - commands: ['move-workspace --direction up']
+    bindings: ['lwin+shift+alt+up']
+  - commands: ['move-workspace --direction down']
+    bindings: ['lwin+shift+alt+down']
+
+  # Keybinding overlay in a floating terminal.
+  - commands: ['shell-exec wt -w new --title "Winmarchy Keys" powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\keybindings.ps1']
+    bindings: ['lwin+k']
+
+  # System menu.
+  - commands: ['shell-exec wt -w new --title "Winmarchy Menu" powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\menu.ps1 system']
+    bindings: ['lwin+escape']
+
+  # Theme menu.
+  - commands: ['shell-exec wt -w new --title "Winmarchy Menu" powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\menu.ps1 theme']
+    bindings: ['lwin+ctrl+shift+space']
+
+  # Next theme.
+  - commands: ['shell-exec winmarchy theme next']
+    bindings: ['lwin+ctrl+space']
+
+  # Toggle the bar.
+  - commands: ['shell-exec yasbc toggle-bar']
+    bindings: ['lwin+shift+space']
+
+  # PANIC: return to Windows 11 mode.
+  - commands: ['shell-exec winmarchy mode win11']
+    bindings: ['lwin+shift+x']
+
+  # Exit GlazeWM only.
+  - commands: ['wm-exit']
+    bindings: ['lwin+shift+e']

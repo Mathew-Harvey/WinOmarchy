@@ -1,0 +1,12 @@
+# Reference clones, never committed
+ref/
+
+# Build and test artefacts
+artifacts/
+chooser/bin/
+chooser/obj/
+*.user
+
+# Local editor noise
+.vs/
+.vscode/

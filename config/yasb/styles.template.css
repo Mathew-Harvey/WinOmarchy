@@ -1,0 +1,183 @@
+/* Winmarchy yasb stylesheet template. Rendered by the theme engine: every
+   token is replaced with a palette value and the result is written to
+   ~/.config/yasb/styles.css, which yasb hot-reloads via its watcher.
+   Styling is the Qt stylesheet subset. Selector names verified against
+   ref/yasb/docs/widgets/*.md and ref/yasb/src/core/widgets/. */
+
+* {
+    font-family: 'JetBrainsMono NFP', 'JetBrainsMono Nerd Font';
+    font-size: 13px;
+    font-weight: 500;
+    color: {{foreground}};
+    margin: 0;
+    padding: 0;
+}
+
+.yasb-bar {
+    background-color: {{dark_background}};
+    padding: 0px 8px;
+}
+
+/* Base widget styles. */
+.widget {
+    padding: 0px 8px;
+    margin: 3px 1px;
+    border-radius: 4px;
+}
+
+.widget .label {
+    color: {{foreground}};
+    padding: 0px 2px;
+}
+
+.widget .icon {
+    color: {{accent}};
+    font-size: 14px;
+}
+
+/* GlazeWM workspaces. Class names from
+   ref/yasb/docs/widgets/(Widget)-GlazeWM-Workspaces.md. The focused_* rules
+   MUST come after the active_* rules or active_* wins on shared properties. */
+.glazewm-workspaces {
+    padding: 0px 4px;
+}
+
+.glazewm-workspaces .ws-btn {
+    color: {{dark_foreground}};
+    background-color: transparent;
+    border: none;
+    margin: 0px 2px;
+    padding: 2px 8px;
+    font-weight: 600;
+    border-radius: 3px;
+}
+
+.glazewm-workspaces .ws-btn.empty {
+    color: {{muted}};
+}
+
+.glazewm-workspaces .ws-btn.populated {
+    color: {{foreground}};
+    background-color: {{lighter_background}};
+}
+
+.glazewm-workspaces .ws-btn.active_empty {
+    color: {{light_foreground}};
+    background-color: {{selection}};
+}
+
+.glazewm-workspaces .ws-btn.active_populated {
+    color: {{bright_foreground}};
+    background-color: {{selection}};
+}
+
+.glazewm-workspaces .ws-btn.focused_empty {
+    color: {{background}};
+    background-color: {{accent}};
+}
+
+.glazewm-workspaces .ws-btn.focused_populated {
+    color: {{background}};
+    background-color: {{accent}};
+}
+
+.glazewm-workspaces .offline-status {
+    color: {{muted}};
+}
+
+/* Active window title. */
+.active-window-widget .label {
+    color: {{light_foreground}};
+}
+
+/* Clock. */
+.clock-widget .label {
+    color: {{bright_foreground}};
+    font-weight: 600;
+}
+
+.clock-popup.calendar {
+    background-color: {{dark_background}};
+}
+
+.clock-popup.calendar .calendar-table,
+.clock-popup.calendar .calendar-table::item {
+    background-color: transparent;
+    color: {{foreground}};
+    border: none;
+    outline: none;
+}
+
+.clock-popup.calendar .calendar-table::item:selected {
+    color: {{background}};
+    background-color: {{accent}};
+    border-radius: 10px;
+}
+
+/* CPU and memory. */
+.cpu-widget .label,
+.memory-widget .label {
+    color: {{foreground}};
+}
+
+.cpu-widget:hover,
+.memory-widget:hover,
+.volume-widget:hover {
+    background-color: {{lighter_background}};
+}
+
+.cpu-popup,
+.memory-popup {
+    background-color: {{dark_background}};
+}
+
+/* Volume. */
+.volume-widget .label {
+    color: {{foreground}};
+}
+
+.audio-menu {
+    background-color: {{dark_background}};
+}
+
+/* System tray. */
+.systray {
+    padding: 0px 2px;
+}
+
+.systray:hover {
+    background-color: {{lighter_background}};
+}
+
+/* Power menu. */
+.power-menu-widget .label {
+    color: {{red}};
+    font-size: 14px;
+}
+
+.power-menu-compact {
+    background-color: {{dark_background}};
+}
+
+.power-menu-compact .button {
+    background-color: transparent;
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+.power-menu-compact .button:hover,
+.power-menu-compact .button.hover {
+    background-color: {{lighter_background}};
+}
+
+.power-menu-compact .button .icon {
+    color: {{orange}};
+}
+
+.power-menu-compact .button .label {
+    color: {{foreground}};
+}
+
+.uptime {
+    color: {{dark_foreground}};
+}

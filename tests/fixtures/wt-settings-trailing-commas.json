@@ -1,0 +1,24 @@
+{
+  "$help": "https://aka.ms/terminal-documentation",
+  "defaultProfile": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+  "launchMode": "default",
+  "profiles": {
+    "defaults": {
+      "padding": "4",
+    },
+    "list": [
+      {
+        "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+        "name": "Windows PowerShell",
+        "commandline": "powershell.exe",
+      },
+    ],
+  },
+  "schemes": [],
+  "actions": [
+    {
+      "command": "find",
+      "keys": "ctrl+shift+f",
+    },
+  ],
+}
