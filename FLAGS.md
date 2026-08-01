@@ -55,3 +55,58 @@ detects Pester older than 5 and fails with the install instruction
 (Install-Module Pester -Force -SkipPublisherCheck).
 
 Status: closed.
+
+## FLAG-5: catppuccin nvim colorscheme deviates from Omarchy deliberately
+
+Context: Omarchy ships the colorscheme name catppuccin-nvim for its catppuccin
+theme. The brief directs Winmarchy to use the long-documented catppuccin-mocha
+instead and to note the deviation. Theme JSON cannot carry comments, so the
+note lives here.
+
+Decision: themes/catppuccin.json sets nvim.colorscheme to catppuccin-mocha.
+
+Status: closed.
+
+## FLAG-6: wt -w new must be verified on the machine
+
+Context: the keymap launches Neovim and the popup menu terminals with
+"wt -w new" to force a new Windows Terminal window. It is the documented flag
+for that purpose, but the brief (Section 6) requires verifying it on the
+machine in Phase 2, and this container has no Windows Terminal.
+
+Open question for Mat: run "wt -w new nvim" and
+"wt -w new --title \"Winmarchy Menu\" powershell -NoProfile -Command exit"
+once; confirm each opens a new window and the title sticks.
+
+Status: deferred-to-machine.
+
+## FLAG-7: yasb font family name needs an on-machine render check
+
+Context: the brief (Section 4.3) says the GDI engine wants
+'JetBrainsMono NFP' or 'JetBrainsMono Nerd Font' and to test which renders
+icons correctly on the machine. styles.template.css lists both, NFP first.
+
+Open question for Mat: after install, check the bar icons render as glyphs,
+not boxes. If boxes, swap the order of the two families in
+config/yasb/styles.template.css and run winmarchy theme set again.
+
+Status: deferred-to-machine.
+
+## FLAG-8: adversarial review findings applied after Phase 1
+
+Context: a three-reviewer adversarial pass over the Phase 1 code confirmed
+three real defects, all fixed with regression tests: (1) redirected native
+stderr under ErrorActionPreference Stop crashes on Windows PowerShell 5.1
+(check.ps1 now relaxes the preference around native calls); (2) the JSONC
+comment and trailing-comma strippers were plain regexes that could corrupt
+string values such as "cmd.exe /c echo {a,}" inside Windows Terminal
+settings.json (now a string-aware character walk); (3) PowerShell pipeline
+unrolling collapsed one-element and empty arrays in state round-trips (fixed
+with comma-prefixed returns). Hardening from the same review: torn journal
+lines are skipped with a warning, an unparseable state file falls back to
+defaults, state writes go through a temp file and rename, null profiles or
+defaults or schemes in settings.json are normalised, check.ps1 scans dotfiles
+with -Force and survives unreadable files, and theme cycling compares names
+case-insensitively.
+
+Status: closed.

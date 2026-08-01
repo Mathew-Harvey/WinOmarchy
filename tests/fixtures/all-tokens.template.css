@@ -1,0 +1,29 @@
+/* Test fixture exercising every token in the theme vocabulary. Used by the
+   Phase 1 renderer tests; the real yasb template arrives in Phase 2. */
+/* name: {{name}} label: {{label}} mode: {{mode}} wt_scheme: {{wt_scheme}} */
+/* nvim: {{nvim_plugin}} {{nvim_colorscheme}} spec: {{nvim_plugin_spec}} */
+.accent { color: {{accent}}; }
+.selection { color: {{selection}}; }
+.muted { color: {{muted}}; }
+.background { color: {{background}}; }
+.dark-background { color: {{dark_background}}; }
+.darker-background { color: {{darker_background}}; }
+.lighter-background { color: {{lighter_background}}; }
+.foreground { color: {{foreground}}; }
+.dark-foreground { color: {{dark_foreground}}; }
+.light-foreground { color: {{light_foreground}}; }
+.bright-foreground { color: {{bright_foreground}}; }
+.red { color: {{red}}; }
+.yellow { color: {{yellow}}; }
+.orange { color: {{orange}}; }
+.green { color: {{green}}; }
+.cyan { color: {{cyan}}; }
+.blue { color: {{blue}}; }
+.magenta { color: {{magenta}}; }
+.brown { color: {{brown}}; }
+.bright-red { color: {{bright_red}}; }
+.bright-yellow { color: {{bright_yellow}}; }
+.bright-green { color: {{bright_green}}; }
+.bright-cyan { color: {{bright_cyan}}; }
+.bright-blue { color: {{bright_blue}}; }
+.bright-magenta { color: {{bright_magenta}}; }

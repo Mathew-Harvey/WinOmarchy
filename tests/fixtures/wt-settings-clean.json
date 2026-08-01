@@ -1,0 +1,64 @@
+{
+  "$help": "https://aka.ms/terminal-documentation",
+  "defaultProfile": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+  "copyOnSelect": false,
+  "copyFormatting": "none",
+  "profiles": {
+    "defaults": {
+      "padding": "8"
+    },
+    "list": [
+      {
+        "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+        "name": "Windows PowerShell",
+        "commandline": "powershell.exe",
+        "hidden": false
+      },
+      {
+        "guid": "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}",
+        "name": "Command Prompt",
+        "commandline": "cmd.exe",
+        "hidden": false
+      }
+    ]
+  },
+  "schemes": [
+    {
+      "name": "Campbell",
+      "background": "#0C0C0C",
+      "foreground": "#CCCCCC",
+      "cursorColor": "#FFFFFF",
+      "selectionBackground": "#FFFFFF",
+      "black": "#0C0C0C",
+      "red": "#C50F1F",
+      "green": "#13A10E",
+      "yellow": "#C19C00",
+      "blue": "#0037DA",
+      "purple": "#881798",
+      "cyan": "#3A96DD",
+      "white": "#CCCCCC",
+      "brightBlack": "#767676",
+      "brightRed": "#E74856",
+      "brightGreen": "#16C60C",
+      "brightYellow": "#F9F1A5",
+      "brightBlue": "#3B78FF",
+      "brightPurple": "#B4009E",
+      "brightCyan": "#61D6D6",
+      "brightWhite": "#F2F2F2"
+    }
+  ],
+  "actions": [
+    {
+      "command": {
+        "action": "copy",
+        "singleLine": false
+      },
+      "keys": "ctrl+c"
+    },
+    {
+      "command": "paste",
+      "keys": "ctrl+v"
+    }
+  ],
+  "theme": "dark"
+}

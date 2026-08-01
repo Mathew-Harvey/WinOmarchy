@@ -1,0 +1,6 @@
+{
+  "$help": "https://aka.ms/terminal-documentation",
+  "defaultProfile": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+  "profiles": {
+    "defaults": {
+      "colorScheme":

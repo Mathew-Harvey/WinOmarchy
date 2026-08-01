@@ -1,0 +1,23 @@
+{
+  "name": "Winmarchy Tokyo Night",
+  "background": "#1a1b26",
+  "foreground": "#a9b1d6",
+  "cursorColor": "#c0caf5",
+  "selectionBackground": "#292e42",
+  "black": "#1a1b26",
+  "red": "#f7768e",
+  "green": "#9ece6a",
+  "yellow": "#e0af68",
+  "blue": "#7aa2f7",
+  "purple": "#ad8ee6",
+  "cyan": "#449dab",
+  "white": "#a9b1d6",
+  "brightBlack": "#414868",
+  "brightRed": "#ff7a93",
+  "brightGreen": "#b9f27c",
+  "brightYellow": "#ff9e64",
+  "brightBlue": "#7da6ff",
+  "brightPurple": "#bb9af7",
+  "brightCyan": "#0db9d7",
+  "brightWhite": "#c0caf5"
+}

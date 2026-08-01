@@ -35,9 +35,22 @@ function Write-Pass {
     Write-Host ('PASS: ' + $Message) -ForegroundColor Green
 }
 
+# ReadAllLines wrapped so one unreadable file (dangling symlink, lock) counts
+# as a failure without aborting the remaining checks.
+function Read-FileLinesSafe {
+    param([string]$Path)
+    try {
+        return [System.IO.File]::ReadAllLines($Path)
+    } catch {
+        Write-Failure ('unreadable file: ' + $Path + ' (' + $_.Exception.Message + ')')
+        return $null
+    }
+}
+
 # Repo files with ref/, .git/, artifacts/ and chooser build output excluded.
+# -Force so dot-prefixed files are scanned on Linux exactly as on Windows.
 function Get-RepoFile {
-    Get-ChildItem -Path $repoRoot -Recurse -File | Where-Object {
+    Get-ChildItem -Path $repoRoot -Recurse -File -Force | Where-Object {
         $rel = $_.FullName.Substring($repoRoot.Length + 1) -replace '\\', '/'
         $excluded = $false
         if ($rel -like 'ref/*') { $excluded = $true }
@@ -62,7 +75,8 @@ $dashHits = 0
 foreach ($file in Get-RepoFile) {
     if ($binaryExtensions -contains $file.Extension.ToLower()) { continue }
     # ReadAllLines auto-detects BOMs and defaults to UTF-8, on both 5.1 and 7.
-    $lines = [System.IO.File]::ReadAllLines($file.FullName)
+    $lines = Read-FileLinesSafe $file.FullName
+    if ($null -eq $lines) { continue }
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $hasEm = $lines[$i].IndexOf($emDash) -ge 0
         $hasEn = $lines[$i].IndexOf($enDash) -ge 0
@@ -179,8 +193,17 @@ if ($yamlFiles.Count -gt 0) {
         $pythonCmd = Get-Command python3 -ErrorAction SilentlyContinue
         if (-not $pythonCmd) { $pythonCmd = Get-Command python -ErrorAction SilentlyContinue }
         if ($pythonCmd) {
-            & $pythonCmd.Source -c 'import yaml' 2>$null
-            if ($LASTEXITCODE -eq 0) { $yamlParser = $pythonCmd.Source }
+            # On Windows PowerShell 5.1, redirected native stderr under
+            # ErrorActionPreference Stop raises NativeCommandError, so the
+            # preference is relaxed around native calls.
+            $savedPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                & $pythonCmd.Source -c 'import yaml' 2>$null
+                if ($LASTEXITCODE -eq 0) { $yamlParser = $pythonCmd.Source }
+            } finally {
+                $ErrorActionPreference = $savedPreference
+            }
         }
     }
     if ($yamlParser -eq '') {
@@ -196,7 +219,13 @@ if ($yamlFiles.Count -gt 0) {
                     $parseFailures = $parseFailures + 1
                 }
             } else {
-                & $yamlParser -c ('import yaml,sys; yaml.safe_load(open(sys.argv[1]))') $yamlFile.FullName 2>&1 | Out-Null
+                $savedPreference = $ErrorActionPreference
+                $ErrorActionPreference = 'Continue'
+                try {
+                    & $yamlParser -c ('import yaml,sys; yaml.safe_load(open(sys.argv[1]))') $yamlFile.FullName 2>&1 | Out-Null
+                } finally {
+                    $ErrorActionPreference = $savedPreference
+                }
                 if ($LASTEXITCODE -ne 0) {
                     Write-Failure ('YAML parse failed for ' + $yamlFile.FullName)
                     $parseFailures = $parseFailures + 1
@@ -228,7 +257,8 @@ $parallelPattern = ('ForEach-' + 'Object\s+-Parallel')
 
 $compatHits = 0
 foreach ($psFile in $psFiles) {
-    $lines = [System.IO.File]::ReadAllLines($psFile.FullName)
+    $lines = Read-FileLinesSafe $psFile.FullName
+    if ($null -eq $lines) { continue }
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $line = $lines[$i]
         $problems = @()
@@ -257,7 +287,8 @@ $tokenHits = 0
 if (Test-Path $renderedDir) {
     $renderedFiles = @(Get-ChildItem -Path $renderedDir -Recurse -File | Where-Object { $binaryExtensions -notcontains $_.Extension.ToLower() })
     foreach ($rendered in $renderedFiles) {
-        $lines = [System.IO.File]::ReadAllLines($rendered.FullName)
+        $lines = Read-FileLinesSafe $rendered.FullName
+        if ($null -eq $lines) { continue }
         for ($i = 0; $i -lt $lines.Count; $i++) {
             if ($lines[$i].Contains($openBraces)) {
                 Write-Failure ('unresolved template token in ' + $rendered.FullName + ' line ' + ($i + 1))
@@ -284,7 +315,8 @@ $todoHits = 0
 foreach ($file in Get-RepoFile) {
     if ($binaryExtensions -contains $file.Extension.ToLower()) { continue }
     if ($file.FullName -eq $flagsPath) { continue }
-    $lines = [System.IO.File]::ReadAllLines($file.FullName)
+    $lines = Read-FileLinesSafe $file.FullName
+    if ($null -eq $lines) { continue }
     for ($i = 0; $i -lt $lines.Count; $i++) {
         if ($lines[$i] -match $todoPattern) {
             $allowed = $false
