@@ -139,3 +139,18 @@ keeping one path shape (root/config/yasb/styles.template.css) valid in both
 the repo and the deployed layout.
 
 Status: closed.
+
+## FLAG-11: chooser render test and crash-fallback drill need the machine
+
+Context: dotnet build of the chooser is clean (0 warnings, 0 errors, built
+from the container with EnableWindowsTargeting), but the Phase 5 gate also
+wants the --render-test screenshot reviewed, the mid-swap kill fallback
+demonstrated, and the countdown and keyboard paths exercised. Those need
+Windows with the WebView2 runtime. A stand-in preview of the page rendered
+in headless Chromium was produced and shared for the visual eyeball.
+
+Open question for Mat: after install, run
+"%LOCALAPPDATA%\winmarchy\chooser\Winmarchy.Chooser.exe --render-test" and
+review artifacts\chooser.png, then run checklist section D.
+
+Status: deferred-to-machine.
