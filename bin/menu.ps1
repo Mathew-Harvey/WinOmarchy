@@ -26,12 +26,14 @@ function Select-WinmarchyMenuEntry {
         if ($LASTEXITCODE -ne 0) { return $null }
         return $selection
     }
-    # Plain numbered fallback.
-    Write-Output ''
+    # Plain numbered fallback. Write-Host, not Write-Output: this function's
+    # output stream IS its return value, so display lines must go straight
+    # to the console or they pollute the selection.
+    Write-Host ''
     for ($i = 0; $i -lt $Labels.Count; $i++) {
-        Write-Output ('  ' + ($i + 1).ToString().PadLeft(2) + '. ' + $Labels[$i])
+        Write-Host ('  ' + ($i + 1).ToString().PadLeft(2) + '. ' + $Labels[$i])
     }
-    Write-Output ''
+    Write-Host ''
     $answer = Read-Host 'number (blank cancels)'
     if ($answer -match '^\d+$') {
         $index = [int]$answer - 1

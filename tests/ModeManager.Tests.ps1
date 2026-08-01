@@ -61,7 +61,9 @@ Describe 'enter-omarchy' {
         Should -Invoke Start-WinmarchyFlowLauncher -Times 1 -Exactly
         Should -Invoke Set-WinmarchyTaskbarAutoHide -Times 1 -Exactly -ParameterFilter { $Enabled -eq $true }
         Should -Invoke Set-WinmarchyDesktopIcons -Times 1 -Exactly -ParameterFilter { $Visible -eq $false }
-        Should -Invoke Set-WinmarchyTheme -Times 1 -Exactly
+        # The theme must be applied with the Omarchy-only surfaces forced,
+        # because state.mode still reads win11 until the commit.
+        Should -Invoke Set-WinmarchyTheme -Times 1 -Exactly -ParameterFilter { [bool]$AsOmarchy }
     }
 
     It 'skips steps whose target state already holds' {
@@ -154,6 +156,10 @@ Describe 'enter-win11' {
         Should -Invoke Set-WinmarchyAppsTheme -Times 1 -Exactly -ParameterFilter { $AppsUseLightTheme -eq 1 }
         (Get-WinmarchyState).mode | Should -Be 'win11'
         Test-WinmarchyJournalPending | Should -BeFalse
+        # The captured baseline is cleared on restore so the next omarchy
+        # entry recaptures the user's then-current settings.
+        $null -eq (Get-WinmarchyState).savedWallpaper | Should -BeTrue
+        $null -eq (Get-WinmarchyState).savedAppsUseLightTheme | Should -BeTrue
     }
 
     It 'continues past a failing step and still restores the rest' {
@@ -268,6 +274,15 @@ Describe 'theme application to real files' {
         Should -Invoke New-WinmarchyWallpaperImage -Times 1 -Exactly
         Should -Invoke Set-WinmarchyWallpaper -Times 1 -Exactly
         Should -Invoke Set-WinmarchyAppsTheme -Times 1 -Exactly -ParameterFilter { $AppsUseLightTheme -eq 1 }
+    }
+
+    It 'forces the omarchy surfaces with -AsOmarchy while state still reads win11' {
+        (Get-WinmarchyState).mode | Should -Be 'win11'
+
+        Set-WinmarchyTheme -Name 'tokyo-night' -AsOmarchy
+
+        Should -Invoke Set-WinmarchyWallpaper -Times 1 -Exactly
+        Should -Invoke Set-WinmarchyAppsTheme -Times 1 -Exactly -ParameterFilter { $AppsUseLightTheme -eq 0 }
     }
 
     It 'updates the borders for every theme and stays idempotent' {

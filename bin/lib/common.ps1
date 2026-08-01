@@ -76,7 +76,9 @@ function Test-PsObjectProperty {
         [Parameter(Mandatory = $true)]$InputObject,
         [Parameter(Mandatory = $true)][string]$Name
     )
-    return (@($InputObject.PSObject.Properties.Name) -contains $Name)
+    # Match, not member enumeration over .Name: enumerating a property across
+    # an EMPTY collection throws under strict mode.
+    return ($InputObject.PSObject.Properties.Match($Name).Count -gt 0)
 }
 
 function Set-PsObjectProperty {

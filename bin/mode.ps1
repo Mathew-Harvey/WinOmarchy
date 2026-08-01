@@ -67,8 +67,14 @@ function Enter-WinmarchyOmarchyMode {
             Write-WinmarchyLog -Message 'enter-omarchy: started Flow Launcher'
         }
 
-        # Step: apply the current theme across every surface.
-        Set-WinmarchyTheme -Name (Get-WinmarchyState).theme
+        # Step: apply the current theme across every surface, including the
+        # Omarchy-only ones (wallpaper, app mode). Both of those mutations
+        # get journal entries first; their undo values were captured into
+        # state before anything changed.
+        $freshState = Get-WinmarchyState
+        Add-WinmarchyJournalEntry -Action 'wallpaper-set' -Data @{ previous = $freshState.savedWallpaper }
+        Add-WinmarchyJournalEntry -Action 'apps-theme-set' -Data @{ previousApps = $freshState.savedAppsUseLightTheme; previousSystem = $freshState.savedSystemUsesLightTheme }
+        Set-WinmarchyTheme -Name $freshState.theme -AsOmarchy
 
         # Health check: GlazeWM process alive AND its IPC socket connectable
         # AND yasb process alive, within 20 seconds.
@@ -166,10 +172,15 @@ function Enter-WinmarchyWin11Mode {
     }
 
     # Commit. The journal is cleared because the baseline has been re-asserted
-    # wholesale; there is nothing left to undo.
+    # wholesale; there is nothing left to undo. The captured baseline values
+    # are cleared too, so the NEXT enter-omarchy recaptures whatever the user
+    # has set in the meantime instead of reverting to a stale snapshot.
     Clear-WinmarchyJournal
     Set-WinmarchyStateValue -Name 'mode' -Value 'win11'
     Set-WinmarchyStateValue -Name 'lastMode' -Value 'win11'
+    Set-WinmarchyStateValue -Name 'savedWallpaper' -Value $null
+    Set-WinmarchyStateValue -Name 'savedAppsUseLightTheme' -Value $null
+    Set-WinmarchyStateValue -Name 'savedSystemUsesLightTheme' -Value $null
     if ($failures.Count -eq 0) {
         Write-WinmarchyLog -Message 'enter-win11: committed clean'
         Write-Output 'Windows 11 mode restored.'

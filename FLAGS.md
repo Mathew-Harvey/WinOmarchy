@@ -154,3 +154,46 @@ Open question for Mat: after install, run
 review artifacts\chooser.png, then run checklist section D.
 
 Status: deferred-to-machine.
+
+## FLAG-12: the Phase 7 end-to-end run is Mat's sign-off
+
+Context: the definition of done is the Section 1 vision statement being
+demonstrably true on the machine: chooser at login, both halves beautiful,
+clean swaps both ways surviving reboots and a mid-swap kill, panic hotkey,
+uninstall to baseline. None of that can run in the build container.
+
+Open question for Mat: run docs/manual-test-checklist.md end to end
+(sections A through D plus three B cycles), record the run in its log
+table, and file anything that misbehaves as a new FLAG entry.
+
+The full deferred-to-machine set at handover: FLAG-1 (environment), FLAG-6
+(wt -w new), FLAG-7 (bar font rendering), FLAG-9 (taskbar and icon
+techniques), FLAG-11 (chooser render test and fallback drill), and this
+entry.
+
+Status: deferred-to-machine.
+
+## FLAG-13: final adversarial review findings applied at wrap-up
+
+Context: a four-reviewer pass (5.1 compatibility, safety audit, brief
+conformance, chooser C#) with two adversarial skeptics per finding confirmed
+four real defects, all fixed with tests: (1) the captured win11 baseline
+(wallpaper, light/dark) was never cleared after restore, so changes the user
+made later in Windows 11 mode were silently reverted on every subsequent
+swap-back; enter-win11 now clears the saved values so the next Omarchy entry
+recaptures the current baseline. (2) Uninstall restored the install-day
+Windows Terminal settings wholesale, destroying customisations made since;
+it now surgically removes only the Winmarchy schemes and the
+defaults.colorScheme reference, and leaves settings.json.winmarchy-bak in
+place as a by-hand recovery option. This deliberately deviates from the
+brief's "restore from the bak" wording in favour of its intent (baseline
+restoration without collateral loss). (3) The numbered menu fallback wrote
+its display lines into the function's return stream; they now go to the
+console directly. (4) The chooser never subscribed to WebView2 ProcessFailed
+and relied on implicit focus; it now falls back on a process failure and
+focuses the WebView after navigation. A separate mid-build fix: the first
+enter-omarchy now applies wallpaper and app mode via an explicit -AsOmarchy
+switch (state.mode still reads win11 until commit) with both mutations
+journalled.
+
+Status: closed.

@@ -149,17 +149,27 @@ Describe 'uninstall.ps1' {
         Test-Path $env:WINMARCHY_HOME | Should -BeFalse
     }
 
-    It 'restores Windows Terminal settings from the winmarchy bak' {
+    It 'surgically removes the Winmarchy additions from Windows Terminal settings' {
         $wtPath = Join-Path $env:LOCALAPPDATA (Join-Path 'Microsoft' (Join-Path 'Windows Terminal' 'settings.json'))
-        $originalWt = [System.IO.File]::ReadAllText($wtPath)
 
         $null = & (Join-Path $script:repoRoot 'install.ps1') -SkipApps 2>&1 | Out-String
-        [System.IO.File]::ReadAllText($wtPath) | Should -Not -Be $originalWt
+        $patched = [System.IO.File]::ReadAllText($wtPath) | ConvertFrom-Json
+        $patched.profiles.defaults.colorScheme | Should -Be 'Winmarchy Tokyo Night'
+
+        # A customisation made after install must survive the uninstall.
+        Set-PsObjectProperty $patched 'copyOnSelect' $true
+        [System.IO.File]::WriteAllText($wtPath, ($patched | ConvertTo-Json -Depth 64), (New-Object System.Text.UTF8Encoding($false)))
 
         $null = & (Join-Path $script:repoRoot 'uninstall.ps1') 3>$null 2>&1 | Out-String
 
-        [System.IO.File]::ReadAllText($wtPath) | Should -Be $originalWt
-        Test-Path ($wtPath + '.winmarchy-bak') | Should -BeFalse
+        $cleaned = [System.IO.File]::ReadAllText($wtPath) | ConvertFrom-Json
+        $cleaned.copyOnSelect | Should -BeTrue
+        foreach ($scheme in @($cleaned.schemes)) {
+            if ($null -ne $scheme) { $scheme.name | Should -Not -Match '^Winmarchy ' }
+        }
+        Test-PsObjectProperty $cleaned.profiles.defaults 'colorScheme' | Should -BeFalse
+        # The one-time bak stays beside the file for by-hand recovery.
+        Test-Path ($wtPath + '.winmarchy-bak') | Should -BeTrue
     }
 
     It 'works from a simulated half-failed install' {

@@ -4,15 +4,26 @@
 # a failure is logged and the remaining surfaces still apply.
 
 function Set-WinmarchyTheme {
+    # -AsOmarchy forces the Omarchy-only surfaces (wallpaper, app mode) even
+    # though state.mode still reads win11; enter-omarchy needs that because
+    # mode is only committed after the health check passes.
+    # -SetTerminalFont additionally sets profiles.defaults.font.face; the
+    # installer passes it (the brief sets the font on install only).
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][string]$Name
+        [Parameter(Mandatory = $true)][string]$Name,
+        [switch]$AsOmarchy,
+        [switch]$SetTerminalFont
     )
 
     $theme = Get-WinmarchyTheme -Name $Name
     $tokens = Get-WinmarchyThemeTokens -Theme $theme
     Write-WinmarchyLog -Message ('theme-set: applying ' + $Name)
     $stepFailures = @()
+    $omarchyActive = $AsOmarchy
+    if (-not $omarchyActive) {
+        $omarchyActive = ((Get-WinmarchyState).mode -eq 'omarchy')
+    }
 
     # 1. yasb: render the stylesheet template; the watcher hot-reloads it.
     try {
@@ -52,7 +63,7 @@ function Set-WinmarchyTheme {
     try {
         $wtPath = Get-WtSettingsPath
         if ($wtPath) {
-            $null = Update-WtSettingsFile -Path $wtPath -Theme $theme
+            $null = Update-WtSettingsFile -Path $wtPath -Theme $theme -SetFontFace:$SetTerminalFont
             Write-WinmarchyLog -Message 'theme-set: windows terminal patched'
         } else {
             Write-WinmarchyLog -Message 'theme-set: windows terminal has never run; skipped' -Level 'WARN'
@@ -81,7 +92,7 @@ function Set-WinmarchyTheme {
     # 5. Wallpaper: generate once per theme, then apply. Only meaningful in
     # Omarchy mode; in win11 mode the user's wallpaper stays untouched.
     try {
-        if ((Get-WinmarchyState).mode -eq 'omarchy') {
+        if ($omarchyActive) {
             $wallpaperPath = Join-Path (Get-WinmarchyWallpaperDir) ($Name + '.png')
             if (-not (Test-Path $wallpaperPath)) {
                 New-WinmarchyWallpaperImage -Theme $theme -Path $wallpaperPath
@@ -97,7 +108,7 @@ function Set-WinmarchyTheme {
     # 6. Windows app mode: dark for dark themes, light for rose-pine. Only in
     # Omarchy mode; win11 mode keeps the user's own setting.
     try {
-        if ((Get-WinmarchyState).mode -eq 'omarchy') {
+        if ($omarchyActive) {
             $light = 0
             if ($theme.mode -eq 'light') { $light = 1 }
             Set-WinmarchyAppsTheme -AppsUseLightTheme $light -SystemUsesLightTheme $light
