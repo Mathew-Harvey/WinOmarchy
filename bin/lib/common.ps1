@@ -1059,3 +1059,81 @@ function Remove-WinmarchyRunKey {
     Remove-ItemProperty -Path $runKey -Name 'Winmarchy' -ErrorAction SilentlyContinue
     Write-WinmarchyLog -Message 'run key removed'
 }
+
+# ---------------------------------------------------------------------------
+# Preflight
+# ---------------------------------------------------------------------------
+
+function Get-WinmarchyPreflight {
+    # One source of truth for "can this machine take an install", used by both
+    # install.ps1 (which refuses to run past a blocking failure) and the setup
+    # wizard (which renders the same rows as a checklist). Read-only.
+    # Rows: Name, Pass, Blocking, Detail.
+    param(
+        [switch]$SkipApps
+    )
+
+    function New-WinmarchyPreflightRow {
+        param([string]$Name, [bool]$Pass, [bool]$Blocking, [string]$Detail)
+        return [pscustomobject]@{ Name = $Name; Pass = $Pass; Blocking = $Blocking; Detail = $Detail }
+    }
+
+    $rows = @()
+    $onWindows = Test-WinmarchyIsWindows
+
+    # Windows 11 is build 22000 or later. Off Windows the row is informational
+    # so the wizard and tests still run in a build container.
+    if ($onWindows) {
+        $build = [System.Environment]::OSVersion.Version.Build
+        $detail = 'build ' + $build
+        if ($build -lt 22000) { $detail = $detail + '; Windows 11 (22000 or later) is required, Windows 10 is out of scope' }
+        $rows = $rows + (New-WinmarchyPreflightRow 'Windows 11' ($build -ge 22000) $true $detail)
+    } else {
+        $rows = $rows + (New-WinmarchyPreflightRow 'Windows 11' $true $false 'not running on Windows; Windows-only steps will be skipped')
+    }
+
+    # winget: only blocking when the app installs are actually wanted.
+    $hasWinget = $null -ne (Get-Command winget -ErrorAction SilentlyContinue)
+    $wingetDetail = 'found'
+    if (-not $hasWinget) {
+        $wingetDetail = 'not found; install App Installer from https://apps.microsoft.com/detail/9NBLGGH4NNS1 or clear the app-install option'
+    }
+    $wingetBlocking = ((-not $SkipApps) -and $onWindows)
+    $rows = $rows + (New-WinmarchyPreflightRow 'winget' $hasWinget $wingetBlocking $wingetDetail)
+
+    # dotnet SDK: only needed to build the login chooser, never blocking.
+    $hasDotnet = $null -ne (Get-Command dotnet -ErrorAction SilentlyContinue)
+    $dotnetDetail = 'found; the login chooser can be built'
+    if (-not $hasDotnet) {
+        $dotnetDetail = 'not found; skip the chooser or install the .NET 8 SDK, everything else still works'
+    }
+    $rows = $rows + (New-WinmarchyPreflightRow '.NET 8 SDK' $hasDotnet $false $dotnetDetail)
+
+    # Disk space on the install drive.
+    try {
+        $root = [System.IO.Path]::GetPathRoot((Get-WinmarchyHome))
+        $driveInfo = New-Object System.IO.DriveInfo($root)
+        $freeGb = [math]::Round($driveInfo.AvailableFreeSpace / 1GB, 1)
+        $rows = $rows + (New-WinmarchyPreflightRow 'Disk space' ($freeGb -ge 2) $true ($freeGb.ToString() + ' GB free on ' + $root + '; 2 GB needed'))
+    } catch {
+        $rows = $rows + (New-WinmarchyPreflightRow 'Disk space' $true $false 'could not be determined; continuing')
+    }
+
+    # Informational rows: what is already on the machine.
+    $installed = Test-Path (Join-Path (Get-WinmarchyHome) 'bin')
+    $installedDetail = 'no existing install; this will be a fresh setup'
+    if ($installed) { $installedDetail = 'Winmarchy is already installed; this run will update it, taking fresh backups first' }
+    $rows = $rows + (New-WinmarchyPreflightRow 'Existing install' $true $false $installedDetail)
+
+    $hasNvim = Test-Path (Get-WinmarchyNvimConfigDir)
+    $nvimDetail = 'no Neovim config; the LazyVim starter can be set up for you'
+    if ($hasNvim) { $nvimDetail = 'your Neovim config exists and will be left completely untouched' }
+    $rows = $rows + (New-WinmarchyPreflightRow 'Neovim config' $true $false $nvimDetail)
+
+    $wtPath = Get-WtSettingsPath
+    $wtDetail = 'Windows Terminal has never run; terminal theming will be skipped'
+    if ($wtPath) { $wtDetail = 'found; the original settings are backed up before the first patch' }
+    $rows = $rows + (New-WinmarchyPreflightRow 'Windows Terminal' $true $false $wtDetail)
+
+    return $rows
+}
