@@ -30,24 +30,54 @@ winget by the installer itself; nothing needs admin rights.
 
 ## Install
 
-Clone this repo on the Windows 11 machine and run:
+Download or clone this repository onto the Windows 11 machine, open the
+folder, and double-click **install-ui.cmd**. That opens the setup wizard,
+which walks you through it in seven steps:
+
+1. **Welcome** explains what you are about to get and how to get back.
+2. **System check** looks at the machine and tells you what it found:
+   Windows version, whether winget and the .NET SDK are there, free space,
+   whether you already have a Neovim config or a previous install. Anything
+   genuinely missing stops the wizard here rather than failing halfway.
+3. **Theme** lets you pick a palette from the eight that ship, with a live
+   preview of the bar, the window borders and the tiling layout in that
+   palette.
+4. **Components** is where you choose what to set up: the apps, Neovim, the
+   login chooser, and whether the chooser appears at login. Options whose
+   prerequisites are missing switch themselves off and say why, so you
+   cannot pick something that will fail later.
+5. **Review** shows the decisions in plain language, the equivalent command
+   line if you would rather run it yourself, and the complete step-by-step
+   plan. Nothing has been changed at this point.
+6. **Install** runs it with a live log.
+7. **Finish** hands over the ten keybindings worth knowing and offers to
+   start Omarchy mode straight away.
+
+If you prefer a text prompt, `install-ui.ps1 -Console` asks the same
+questions in the terminal. That is also the automatic fallback if the
+graphical wizard cannot open.
+
+To skip the questions entirely and install with defaults:
 
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
 ```
 
-Add `-WhatIf` first if you want to read the full action list before
-anything happens. `-Theme <name>` picks the starting theme and `-SkipApps`
-skips the winget installs. The installer backs up everything it is about to
+Add `-WhatIf` to print the full action list without touching anything.
+`-Theme <name>` picks the palette; `-SkipApps`, `-SkipNeovim`,
+`-SkipChooser` and `-NoAutostart` correspond to the wizard's component
+choices. The wizard passes these same switches, so there is only one
+install path either way.
+
+However you start it, the installer backs up everything it is about to
 touch into `%LOCALAPPDATA%\winmarchy\backup\<timestamp>\` before its first
 mutation and refuses to continue if that backup fails. Apps are installed
-per-user through winget; no admin prompt is expected. Log out and back in
-to meet the chooser, or run `winmarchy mode omarchy` straight away.
+per-user through winget; no admin prompt is expected.
 
 One note on Windows Terminal: its settings.json may contain comments, and
 the first time Winmarchy patches it those comments are lost. The original
-file is preserved beside it as `settings.json.winmarchy-bak` and restored
-on uninstall.
+file is preserved beside it as `settings.json.winmarchy-bak`, and uninstall
+removes only what Winmarchy added rather than reverting the whole file.
 
 ## Daily use
 
@@ -96,11 +126,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
 ```
 
 returns the machine to baseline: Windows 11 mode re-asserted, autostart and
-shortcuts and PATH entry removed, Windows Terminal settings restored from
-the bak, your pre-install GlazeWM and yasb configs put back from the oldest
-backup set, and `%LOCALAPPDATA%\winmarchy` removed. `-KeepTerminalTheme`,
-`-KeepState` and `-RemoveApps` adjust the edges. It works even when an
-install half-failed.
+shortcuts and PATH entry removed, the Winmarchy colour schemes taken out of
+Windows Terminal while your own settings stay put, your pre-install GlazeWM
+and yasb configs restored from the oldest backup set, and
+`%LOCALAPPDATA%\winmarchy` removed. `-KeepTerminalTheme`, `-KeepState` and
+`-RemoveApps` adjust the edges. It works even when an install half-failed.
 
 ## Development
 

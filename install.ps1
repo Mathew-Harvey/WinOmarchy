@@ -4,13 +4,20 @@
 #   ... -WhatIf        print every action without doing anything
 #   ... -Theme nord    choose the initial theme (default tokyo-night)
 #   ... -SkipApps      skip winget installs, deploy configs only
+#   ... -SkipNeovim    never set up the LazyVim starter
+#   ... -SkipChooser   do not build the login chooser
+#   ... -NoAutostart   do not register the chooser to run at login
+# For a guided setup with the same options, run install-ui.ps1 instead.
 # Compatible with Windows PowerShell 5.1. The backup pass runs before any
 # mutation and the installer refuses to continue if it fails.
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$Theme = 'tokyo-night',
-    [switch]$SkipApps
+    [switch]$SkipApps,
+    [switch]$SkipNeovim,
+    [switch]$SkipChooser,
+    [switch]$NoAutostart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,32 +59,25 @@ if ($script:whatIfMode) { Write-Output '  mode: WhatIf (no changes will be made)
 
 $null = Get-WinmarchyTheme -Name $Theme
 
-if (Test-WinmarchyIsWindows) {
-    # Windows 11 is build 22000 or later.
-    $build = [System.Environment]::OSVersion.Version.Build
-    if ($build -lt 22000) {
-        throw ('Windows 11 is required (build 22000 or later); this is build ' + $build + '. Windows 10 is out of scope.')
+# Shared with the setup wizard so both agree on what a healthy machine is.
+$blockers = @()
+foreach ($row in (Get-WinmarchyPreflight -SkipApps:$SkipApps)) {
+    # A failed check that is not blocking is a note, not a failure: it only
+    # limits what can be set up, and the user has already chosen to skip it.
+    $mark = 'ok  '
+    if (-not $row.Pass) {
+        $mark = 'note'
+        if ($row.Blocking) { $mark = 'FAIL' }
     }
-    if (-not $SkipApps) {
-        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Output 'winget is required to install the apps. Install "App Installer" from the Microsoft Store:'
-            Write-Output '  https://apps.microsoft.com/detail/9NBLGGH4NNS1'
-            Write-Output 'Then run this installer again (or re-run with -SkipApps).'
-            exit 1
-        }
-    }
-    $drive = (Get-PSDrive -Name ((Get-WinmarchyHome).Substring(0, 1)) -ErrorAction SilentlyContinue)
-    if ($drive -and $drive.Free -lt 2GB) {
-        throw 'Less than 2 GB free on the install drive; aborting.'
-    }
-} else {
-    Write-Output '  note: not on Windows; Windows-only steps will be skipped (build container run)'
+    Write-Output ('  ' + $mark + ' ' + $row.Name.PadRight(18) + ' ' + $row.Detail)
+    if ((-not $row.Pass) -and $row.Blocking) { $blockers = $blockers + ($row.Name + ': ' + $row.Detail) }
+}
+if ($blockers.Count -gt 0) {
+    Write-Output ''
+    throw ('Cannot install: ' + ($blockers -join '; '))
 }
 
 $installRoot = Get-WinmarchyHome
-if (Test-Path (Join-Path $installRoot 'bin')) {
-    Write-Output '  existing install detected: this run acts as an update; fresh backups are still taken first'
-}
 
 # ---------------------------------------------------------------------------
 # 2. Backup pass FIRST. Nothing is touched until this has succeeded.
@@ -246,7 +246,9 @@ if (Test-WinmarchyIsWindows) {
 # ---------------------------------------------------------------------------
 
 $nvimDir = Get-WinmarchyNvimConfigDir
-if (Test-Path $nvimDir) {
+if ($SkipNeovim) {
+    Write-Output 'install: Neovim setup skipped (-SkipNeovim); theming still applies if a LazyVim config appears later'
+} elseif (Test-Path $nvimDir) {
     Write-Output ('install: existing Neovim config at ' + $nvimDir + ' left completely untouched')
 } else {
     Invoke-WinmarchyInstallStep -Description ('clone the LazyVim starter into ' + $nvimDir) -Action {
@@ -273,7 +275,10 @@ if (Test-Path $nvimDir) {
 # 6. Chooser build, autostart, shortcuts, wallpapers, default theme
 # ---------------------------------------------------------------------------
 
-if (Test-WinmarchyIsWindows) {
+if ((Test-WinmarchyIsWindows) -and $SkipChooser) {
+    Write-Output 'install: chooser build and login registration skipped (-SkipChooser); swap from the Start menu or the command line'
+}
+if ((Test-WinmarchyIsWindows) -and (-not $SkipChooser)) {
     Invoke-WinmarchyInstallStep -Description ('build the chooser into ' + (Join-Path $installRoot 'chooser')) -Action {
         if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
             Add-WinmarchyInstallWarning 'dotnet SDK not found; chooser not built. Install .NET 8 SDK and re-run install.ps1, or use the Start menu shortcuts and "winmarchy mode" instead.'
@@ -293,15 +298,23 @@ if (Test-WinmarchyIsWindows) {
         }
     }
 
-    Invoke-WinmarchyInstallStep -Description 'register the chooser in the HKCU Run key' -Action {
-        $chooserExe = Join-Path (Join-Path $installRoot 'chooser') 'Winmarchy.Chooser.exe'
-        if (Test-Path $chooserExe) {
-            Set-WinmarchyRunKey -Command ('"' + $chooserExe + '"')
-        } else {
-            Add-WinmarchyInstallWarning 'chooser exe not present; Run key not registered.'
+    if ($NoAutostart) {
+        Write-Output 'install: login autostart skipped (-NoAutostart); run the chooser by hand or swap from the Start menu'
+    } else {
+        Invoke-WinmarchyInstallStep -Description 'register the chooser in the HKCU Run key' -Action {
+            $chooserExe = Join-Path (Join-Path $installRoot 'chooser') 'Winmarchy.Chooser.exe'
+            if (Test-Path $chooserExe) {
+                Set-WinmarchyRunKey -Command ('"' + $chooserExe + '"')
+            } else {
+                Add-WinmarchyInstallWarning 'chooser exe not present; Run key not registered.'
+            }
         }
     }
+}
 
+# Shortcuts and wallpapers are wanted whether or not the chooser was built:
+# the Start menu entries are the swap path when there is no login chooser.
+if (Test-WinmarchyIsWindows) {
     Invoke-WinmarchyInstallStep -Description 'create the Start menu shortcuts' -Action {
         $startDir = Join-Path $env:APPDATA (Join-Path 'Microsoft' (Join-Path 'Windows' (Join-Path 'Start Menu' (Join-Path 'Programs' 'Winmarchy'))))
         $null = New-Item -ItemType Directory -Path $startDir -Force
@@ -332,6 +345,13 @@ if (Test-WinmarchyIsWindows) {
     }
 } else {
     Write-Output 'install: chooser build, Run key, shortcuts and wallpapers skipped (not on Windows)'
+}
+
+if ($NoAutostart -and (Test-WinmarchyIsWindows)) {
+    # An earlier install may have registered it; honour the choice made now.
+    Invoke-WinmarchyInstallStep -Description 'remove any existing login autostart entry' -Action {
+        Remove-WinmarchyRunKey
+    }
 }
 
 Invoke-WinmarchyInstallStep -Description ('apply the ' + $Theme + ' theme') -Action {

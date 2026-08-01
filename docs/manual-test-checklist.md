@@ -85,3 +85,27 @@ Each cycle, note anything slow, flickery or out of place.
 | Date | Sections run | Result | Notes |
 |---|---|---|---|
 |  |  |  |  |
+
+## E. Setup wizard (run before section B, on a machine with no install)
+
+- [ ] E1. Double-click install-ui.cmd from a fresh clone: the wizard window
+      opens centred, dark, with the step rail on the left.
+- [ ] E2. System check page lists all seven checks with sensible values for
+      this machine; amber rows do not block Next.
+- [ ] E3. Theme page: clicking each of the eight themes updates the preview
+      panel (bar, workspace dots, focused border, tile lines) to that
+      palette, and rose-pine visibly reads as a light theme.
+- [ ] E4. Components page: with a Neovim config present, that option is
+      greyed and explains why. Unticking "Build the login chooser" greys and
+      clears "Show the chooser when I log in".
+- [ ] E5. Review page shows the plain-language summary, an accurate
+      equivalent command line, and a step list matching what install.ps1
+      -WhatIf prints in a terminal.
+- [ ] E6. Install page streams the log live, scrolls to the bottom, and the
+      Cancel and Back buttons are disabled while it runs.
+- [ ] E7. Finish page appears on completion; ticking "Start Omarchy mode
+      when I close this" and pressing Close enters Omarchy mode.
+- [ ] E8. Re-run the wizard on the now-installed machine: the system check
+      reports the existing install and describes the run as an update.
+- [ ] E9. install-ui.ps1 -Console asks the same questions in text and
+      produces the same result.

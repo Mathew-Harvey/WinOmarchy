@@ -197,3 +197,32 @@ switch (state.mode still reads win11 until commit) with both mutations
 journalled.
 
 Status: closed.
+
+## FLAG-14: setup wizard is WPF hosted in PowerShell, untestable headlessly
+
+Context: the guided installer needs to run on a machine where nothing is
+installed yet, so it cannot depend on the .NET SDK (which would be a
+chicken-and-egg problem, since the SDK is only needed to build the chooser
+and may be absent). It is therefore a WPF window hosted directly in Windows
+PowerShell 5.1 via XamlReader: no build step, no dependency, runs from a
+fresh clone. The XAML carries no x:Class and no event attributes because
+XamlReader cannot bind them; every handler is wired in PowerShell, and a
+test asserts the file stays that way.
+
+Decision: all decision logic lives in installer/wizard-lib.ps1 with no UI,
+so preflight rules, option interlocks, the answers-to-parameters mapping and
+the review text are all covered by tests (including one asserting the wizard
+only ever names parameters install.ps1 actually has). The wizard never
+reimplements the install: every choice becomes a switch passed to
+install.ps1, and the review page's step list is real install.ps1 -WhatIf
+output. A text-mode wizard (install-ui.ps1 -Console) asks the same questions
+and is the automatic fallback when WPF cannot start; that path was smoke-run
+end to end in the container.
+
+Open question for Mat: the WPF window itself cannot run here, so the visual
+result, the STA launch through install-ui.cmd, the runspace log streaming
+and the theme preview all need a run on the machine. A rendered mock of the
+four main pages was produced and shared for the design eyeball. Checklist
+section E covers the run.
+
+Status: deferred-to-machine.
