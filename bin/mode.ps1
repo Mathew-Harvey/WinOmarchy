@@ -403,10 +403,25 @@ function Invoke-WinmarchyDoctor {
     $yasbStyles = Join-Path (Get-WinmarchyYasbConfigDir) 'styles.css'
     $rows = $rows + (New-DoctorRow 'yasb styles present' (Test-Path $yasbStyles) $yasbStyles)
 
-    $glazewmOnPath = $null -ne (Find-WinmarchyExecutable -Name 'glazewm')
-    $rows = $rows + (New-DoctorRow 'glazewm resolvable' $glazewmOnPath 'Get-Command glazewm plus standard install dirs')
-    $yasbcOnPath = $null -ne (Find-WinmarchyExecutable -Name 'yasbc')
-    $rows = $rows + (New-DoctorRow 'yasbc resolvable' $yasbcOnPath 'Get-Command yasbc plus standard install dirs')
+    # Every program a keybinding depends on, from the one shared table. A
+    # failed winget install used to leave doctor reporting a clean bill of
+    # health while lwin+enter did nothing (FLAGS.md FLAG-24), so a FAIL here
+    # names the keys that die and the command that fixes it.
+    foreach ($app in (Get-WinmarchyBindingCriticalApps)) {
+        $resolvedPath = Resolve-WinmarchyBindingCriticalApp -App $app
+        $appDetail = $resolvedPath
+        if (-not $resolvedPath) {
+            $appDetail = 'not found; ' + $app.Consequence + '. Fix with: winget install -e --id ' + $app.PackageId
+        }
+        $rows = $rows + (New-DoctorRow ($app.Name + ' resolvable') ($null -ne $resolvedPath) $appDetail)
+    }
+
+    $hasNerdFont = Test-WinmarchyNerdFontInstalled
+    $fontDetail = 'JetBrains Mono Nerd Font found'
+    if (-not $hasNerdFont) {
+        $fontDetail = 'not found; the bar draws its glyphs as empty boxes. Fix with: winget install -e --id DEVCOM.JetBrainsMonoNerdFont'
+    }
+    $rows = $rows + (New-DoctorRow 'nerd font installed' $hasNerdFont $fontDetail)
 
     $expectedProcesses = ($state.mode -eq 'omarchy')
     $rows = $rows + (New-DoctorRow ('glazewm ' + $(if ($expectedProcesses) { 'running' } else { 'stopped' })) ((Test-WinmarchyProcessRunning -Name 'glazewm') -eq $expectedProcesses) ('mode is ' + $state.mode))

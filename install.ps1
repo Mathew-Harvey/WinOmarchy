@@ -1,4 +1,7 @@
-# install.ps1: installs Winmarchy. No admin required; everything is per-user.
+# install.ps1: installs Winmarchy itself entirely per-user, no admin. Some of
+# the apps it installs through winget are machine-wide packages, and Windows
+# will raise its own approval prompt for those; a dismissed prompt is how a
+# package ends up missing (FLAGS.md FLAG-24).
 # Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
 #   ... -WhatIf        print every action without doing anything
@@ -152,6 +155,8 @@ $wingetPackages = @(
 )
 
 $wingetResults = @()
+$script:failedPackages = @()
+$script:rebootPackages = @()
 if ($SkipApps) {
     Write-Output 'install: winget installs skipped (-SkipApps)'
 } elseif (-not (Test-WinmarchyIsWindows)) {
@@ -159,25 +164,38 @@ if ($SkipApps) {
 } else {
     foreach ($package in $wingetPackages) {
         $packageId = $package.id
-        Invoke-WinmarchyInstallStep -Description ('winget install ' + $packageId + ' (' + $package.purpose + ')') -Action {
+        $packagePurpose = $package.purpose
+        Invoke-WinmarchyInstallStep -Description ('winget install ' + $packageId + ' (' + $packagePurpose + ')') -Action {
             $savedPreference = $ErrorActionPreference
             $ErrorActionPreference = 'Continue'
+            $output = @()
             try {
-                & winget install -e --id $packageId --accept-source-agreements --accept-package-agreements 2>&1 | Out-Null
+                # winget's own output is captured rather than discarded: when a
+                # package fails, the sentence winget printed is the fastest
+                # route to the cause, and throwing it away once cost a real
+                # diagnosis (FLAGS.md FLAG-24).
+                $output = @(& winget install -e --id $packageId --accept-source-agreements --accept-package-agreements 2>&1)
             } finally {
                 $ErrorActionPreference = $savedPreference
             }
             $code = $LASTEXITCODE
-            # Benign outcomes treated as success: 0, "already installed"
-            # (0x8A150061 = -1978335135) and "no applicable upgrade"
-            # (0x8A15002B = -1978335189), from the winget-cli error list
-            # (github.com/microsoft/winget-cli, doc/windows/package-manager/winget/returnCodes).
-            $outcome = 'installed'
-            if ($code -eq -1978335135) { $outcome = 'already installed' }
-            elseif ($code -eq -1978335189) { $outcome = 'up to date' }
-            elseif ($code -ne 0) {
-                $outcome = 'FAILED with exit code ' + $code
-                Add-WinmarchyInstallWarning ('winget install ' + $packageId + ' ' + $outcome + '; continuing')
+            $result = Get-WinmarchyWingetOutcome -ExitCode $code
+            $outcome = $result.Text
+            if ($result.Kind -eq 'failed') {
+                # On stdout as well as through the warning stream, so the
+                # failure appears in the live log at the moment it happens
+                # rather than after the closing summary.
+                Write-Output ('install: ' + $packageId + ' ' + $outcome)
+                foreach ($line in @($output | Select-Object -Last 6)) {
+                    $trimmed = ([string]$line).Trim()
+                    if ($trimmed) { Write-Output ('install:   winget said: ' + $trimmed) }
+                }
+                Write-Output ('install:   retry with: winget install -e --id ' + $packageId)
+                Add-WinmarchyInstallWarning ('winget install ' + $packageId + ' (' + $packagePurpose + ') ' + $outcome + '. Retry with: winget install -e --id ' + $packageId)
+                $script:failedPackages = $script:failedPackages + @(, @{ id = $packageId; purpose = $packagePurpose; outcome = $outcome })
+            } elseif ($result.Kind -eq 'reboot') {
+                Write-Output ('install: ' + $packageId + ' ' + $outcome)
+                $script:rebootPackages = $script:rebootPackages + $packageId
             }
             $script:wingetResults = $script:wingetResults + @(, @{ id = $packageId; outcome = $outcome })
         }
@@ -205,39 +223,21 @@ Invoke-WinmarchyInstallStep -Description ('deploy bin/, themes/, templates/ and 
 
 Invoke-WinmarchyInstallStep -Description ('write GlazeWM config to ' + (Get-WinmarchyGlazewmConfigPath)) -Action {
     $configText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot (Join-Path 'config' (Join-Path 'glazewm' 'config.yaml'))))
-    # Resolve the Flow Launcher path and patch the launcher-path marker line.
-    $flowCandidates = @()
-    if ($env:LOCALAPPDATA) {
-        $flowCandidates = $flowCandidates + (Join-Path $env:LOCALAPPDATA (Join-Path 'FlowLauncher' 'Flow.Launcher.exe'))
+
+    $resolved = @{}
+    foreach ($app in (Get-WinmarchyBindingCriticalApps)) {
+        $exePath = Resolve-WinmarchyBindingCriticalApp -App $app
+        $resolved[$app.Name] = $exePath
+        if ($exePath) { continue }
+        # glazewm and yasbc are started by the mode manager, not from the
+        # config, so their absence is doctor's business rather than this step's.
+        if ($app.Name -eq 'glazewm' -or $app.Name -eq 'yasbc') { continue }
+        if (-not (Test-WinmarchyIsWindows)) { continue }
+        # Silence here used to mean the config kept a bare program name that
+        # only works if the program happens to be on PATH, with nothing said.
+        Add-WinmarchyInstallWarning ($app.Name + ' was not found, so the GlazeWM config keeps the bare program name and will only work if it is on PATH. Until it is installed, ' + $app.Consequence + '. Fix with: winget install -e --id ' + $app.PackageId)
     }
-    $flowExe = Find-WinmarchyExecutable -Name 'Flow.Launcher' -FallbackPaths $flowCandidates
-    if ($flowExe) {
-        # Backslash is not special in .NET regex replacement text, only $ is,
-        # and Windows paths never contain $, so the path drops in literally.
-        $replacement = "commands: ['shell-exec " + $flowExe + "'] # winmarchy:launcher-path"
-        $configText = [regex]::Replace($configText, "commands: \['shell-exec [^']*'\] # winmarchy:launcher-path", $replacement)
-    }
-    $alacrittyCandidates = @()
-    if ($env:ProgramFiles) {
-        $alacrittyCandidates = $alacrittyCandidates + (Join-Path $env:ProgramFiles (Join-Path 'Alacritty' 'alacritty.exe'))
-    }
-    $alacrittyExe = Find-WinmarchyExecutable -Name 'alacritty' -FallbackPaths $alacrittyCandidates
-    if ($alacrittyExe) {
-        $terminalReplacement = "commands: ['shell-exec " + $alacrittyExe + "'] # winmarchy:terminal-path"
-        $configText = [regex]::Replace($configText, "commands: \['shell-exec [^']*'\] # winmarchy:terminal-path", $terminalReplacement)
-    }
-    $cursorCandidates = @()
-    if ($env:LOCALAPPDATA) {
-        $cursorCandidates = $cursorCandidates + (Join-Path $env:LOCALAPPDATA (Join-Path 'Programs' (Join-Path 'cursor' 'Cursor.exe')))
-    }
-    if ($env:ProgramFiles) {
-        $cursorCandidates = $cursorCandidates + (Join-Path $env:ProgramFiles (Join-Path 'cursor' 'Cursor.exe'))
-    }
-    $cursorExe = Find-WinmarchyExecutable -Name 'Cursor' -FallbackPaths $cursorCandidates
-    if ($cursorExe) {
-        $editorReplacement = "commands: ['shell-exec " + $cursorExe + "'] # winmarchy:editor-path"
-        $configText = [regex]::Replace($configText, "commands: \['shell-exec [^']*'\] # winmarchy:editor-path", $editorReplacement)
-    }
+    $configText = Update-WinmarchyGlazewmAppPaths -ConfigText $configText -ResolvedPaths $resolved
     Write-WinmarchyTextFile -Path (Get-WinmarchyGlazewmConfigPath) -Content $configText
 }
 
@@ -419,20 +419,58 @@ if ($wingetResults.Count -gt 0) {
     }
 }
 if ($script:stepWarnings.Count -gt 0) {
-    Write-Output ('  warnings: ' + $script:stepWarnings.Count + ' (see above)')
+    # The count alone was not enough: it sat above a confident keybinding list
+    # that advertised the very keys a failed package had just broken.
+    Write-Output ('  warnings (' + $script:stepWarnings.Count + '):')
+    foreach ($warning in $script:stepWarnings) {
+        Write-Output ('    ' + $warning)
+    }
+}
+if ($script:rebootPackages.Count -gt 0) {
+    Write-Output ''
+    Write-Output ('  RESTART NEEDED to finish installing: ' + ($script:rebootPackages -join ', '))
+}
+if ($script:failedPackages.Count -gt 0) {
+    Write-Output ''
+    Write-Output ('  ' + $script:failedPackages.Count + ' app(s) did NOT install:')
+    foreach ($failure in $script:failedPackages) {
+        Write-Output ('    ' + $failure.id + ' (' + $failure.purpose + ')')
+        Write-Output ('      ' + $failure.outcome)
+        foreach ($app in (Get-WinmarchyBindingCriticalApps)) {
+            if ($app.PackageId -eq $failure.id) {
+                Write-Output ('      until it is installed, ' + $app.Consequence)
+            }
+        }
+        Write-Output ('      retry with: winget install -e --id ' + $failure.id)
+    }
+    Write-Output '  Then re-run this installer so the config picks up the new paths.'
 }
 Write-Output ''
+# The top ten is filtered: advertising lwin+enter as "terminal" on a machine
+# where the terminal failed to install is how a failed package turns into a
+# user who thinks Winmarchy is broken.
+$missingPackageIds = @()
+foreach ($failure in $script:failedPackages) { $missingPackageIds = $missingPackageIds + $failure.id }
+$topKeys = @(
+    @{ key = 'lwin+enter'; what = 'terminal'; needs = 'Alacritty.Alacritty' },
+    @{ key = 'lwin+space'; what = 'launcher'; needs = 'Flow-Launcher.Flow-Launcher' },
+    @{ key = 'lwin+1 .. lwin+9'; what = 'go to workspace'; needs = $null },
+    @{ key = 'lwin+left/right'; what = 'focus window'; needs = $null },
+    @{ key = 'lwin+shift+arrows'; what = 'move window'; needs = $null },
+    @{ key = 'lwin+w'; what = 'close window'; needs = $null },
+    @{ key = 'lwin+f'; what = 'fullscreen'; needs = $null },
+    @{ key = 'lwin+ctrl+space'; what = 'next theme'; needs = $null },
+    @{ key = 'lwin+escape'; what = 'system menu'; needs = 'Alacritty.Alacritty' },
+    @{ key = 'lwin+shift+x'; what = 'PANIC: back to Windows 11'; needs = $null }
+)
 Write-Output '  keybindings, the top ten (full list: winmarchy keys):'
-Write-Output '    lwin+enter          terminal'
-Write-Output '    lwin+space          launcher'
-Write-Output '    lwin+1 .. lwin+9    go to workspace'
-Write-Output '    lwin+left/right     focus window'
-Write-Output '    lwin+shift+arrows   move window'
-Write-Output '    lwin+w              close window'
-Write-Output '    lwin+f              fullscreen'
-Write-Output '    lwin+ctrl+space     next theme'
-Write-Output '    lwin+escape         system menu'
-Write-Output '    lwin+shift+x        PANIC: back to Windows 11'
+foreach ($entry in $topKeys) {
+    $suffix = ''
+    if ($entry.needs -and ($missingPackageIds -contains $entry.needs)) {
+        $suffix = '   (NOT WORKING: ' + $entry.needs + ' did not install)'
+    }
+    Write-Output ('    ' + $entry.key.PadRight(20) + $entry.what + $suffix)
+}
 Write-Output ''
 Write-Output '  three ways to swap, right now, without signing out:'
 Write-Output '    the Winmarchy icon by the clock (left or right click it)'
