@@ -215,6 +215,15 @@ Describe 'Wizard XAML' {
         }
     }
 
+    It 'binds colours as strings, never as Brush objects' {
+        # A PowerShell-wrapped Brush cannot be converted by WPF, so the binding
+        # fails silently and the element renders in its default colour (black).
+        $raw = [System.IO.File]::ReadAllText($script:xamlPath)
+        $raw | Should -Not -Match '\{Binding \w*Brush\}'
+        $raw | Should -Match '\{Binding MarkColour\}'
+        $raw | Should -Match '\{Binding AccentColour\}'
+    }
+
     It 'has no event handler attributes, which XamlReader cannot bind' {
         $raw = [System.IO.File]::ReadAllText($script:xamlPath)
         $raw | Should -Not -Match '\sClick="'
@@ -328,6 +337,61 @@ Describe 'Install run and log tail' {
         $second = @(Read-WinmarchyInstallRun -Run $fake)
         $second[0].Text | Should -Be 'second half'
         $second[1].Text | Should -Be 'third'
+    }
+
+    It 'exits zero on success so the wizard can trust the exit code' {
+        $run = Invoke-RunToCompletion -Arguments @{ Theme = 'nord'; SkipApps = $true; SkipNeovim = $true; SkipChooser = $true; NoAutostart = $true }
+        $run.Result.ExitCode | Should -Be 0
+        $run.Result.Failed | Should -BeFalse
+    }
+
+    It 'does not call an install failed just because the exit code cannot be read' {
+        # Start-Process -PassThru can hand back a Process whose ExitCode throws
+        # even after a clean run; that must never read as a failed install.
+        $logPath = Join-Path $script:runRoot 'unreadable.log'
+        $errPath = Join-Path $script:runRoot 'unreadable.err'
+        $encoding = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($logPath, "winmarchy installer`ninstall: done`n", $encoding)
+        [System.IO.File]::WriteAllText($errPath, '', $encoding)
+        $stub = New-Object psobject
+        $stub | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { }
+        $stub | Add-Member -MemberType ScriptProperty -Name ExitCode -Value { throw 'no handle' }
+        $fake = [pscustomobject]@{ Process = $stub; LogPath = $logPath; ErrPath = $errPath; Offset = [long]0; Partial = '' }
+
+        $result = Complete-WinmarchyInstallRun -Run $fake
+        $result.Failed | Should -BeFalse
+        $null -eq $result.ExitCode | Should -BeTrue
+    }
+
+    It 'still reports failure from the error stream when the exit code is unreadable' {
+        $logPath = Join-Path $script:runRoot 'stderr.log'
+        $errPath = Join-Path $script:runRoot 'stderr.err'
+        $encoding = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($logPath, "winmarchy installer`n", $encoding)
+        [System.IO.File]::WriteAllText($errPath, "something exploded`n", $encoding)
+        $stub = New-Object psobject
+        $stub | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { }
+        $stub | Add-Member -MemberType ScriptProperty -Name ExitCode -Value { throw 'no handle' }
+        $fake = [pscustomobject]@{ Process = $stub; LogPath = $logPath; ErrPath = $errPath; Offset = [long]0; Partial = '' }
+
+        (Complete-WinmarchyInstallRun -Run $fake).Failed | Should -BeTrue
+    }
+
+    It 'treats a child warning as a warning, not an error' {
+        $logPath = Join-Path $script:runRoot 'warn.log'
+        $errPath = Join-Path $script:runRoot 'warn.err'
+        $encoding = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($logPath, "winmarchy installer`n", $encoding)
+        [System.IO.File]::WriteAllText($errPath, "WARNING: dotnet SDK not found; chooser not built`n", $encoding)
+        $stub = New-Object psobject
+        $stub | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { }
+        $stub | Add-Member -MemberType ScriptProperty -Name ExitCode -Value { 0 }
+        $fake = [pscustomobject]@{ Process = $stub; LogPath = $logPath; ErrPath = $errPath; Offset = [long]0; Partial = '' }
+
+        $result = Complete-WinmarchyInstallRun -Run $fake
+        $result.Failed | Should -BeFalse
+        @($result.Warnings).Count | Should -Be 1
+        $result.Warnings[0] | Should -Match 'chooser not built'
     }
 }
 }
