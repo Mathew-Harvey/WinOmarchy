@@ -251,6 +251,9 @@
 
         <CheckBox x:Name="OptAutostart" Style="{StaticResource Check}" Content="Show the chooser when I log in" />
         <TextBlock x:Name="OptAutostartNote" Foreground="#565f89" FontSize="12.5" TextWrapping="Wrap" Margin="26,0,0,16" />
+
+        <CheckBox x:Name="OptTray" Style="{StaticResource Check}" Content="Put a Winmarchy icon by the clock" />
+        <TextBlock x:Name="OptTrayNote" Foreground="#565f89" FontSize="12.5" TextWrapping="Wrap" Margin="26,0,0,16" />
       </StackPanel>
 
       <!-- 4: Review -->

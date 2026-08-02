@@ -29,7 +29,7 @@ function Get-WinmarchyTutorialLessons {
             Binding = 'lwin+shift+x'
             Title = 'The way out, before anything else'
             What = 'Puts you straight back to normal Windows: taskbar, icons, wallpaper, terminal and editor all restored. Learn this one first and the rest is safe to experiment with.'
-            Windows = 'There is also a "Restore Windows 11 (repair)" shortcut in the Start menu, and winmarchy mode win11 from any shell.'
+            Windows = 'There is also the Winmarchy icon by the clock, a "Restore Windows 11 (repair)" shortcut in the Start menu, and winmarchy mode win11 from any shell.'
         },
         [pscustomobject]@{
             Group = 'Opening things'

@@ -48,9 +48,10 @@ which walks you through it in seven steps:
    preview of the bar, the window borders and the tiling layout in that
    palette.
 4. **Components** is where you choose what to set up: the apps, the login
-   chooser, and whether the chooser appears at login. Options whose
-   prerequisites are missing switch themselves off and say why, so you
-   cannot pick something that will fail later.
+   chooser, whether the chooser appears at login, and whether to put a
+   Winmarchy icon by the clock. Options whose prerequisites are missing
+   switch themselves off and say why, so you cannot pick something that
+   will fail later.
 5. **Review** shows the decisions in plain language, the equivalent command
    line if you would rather run it yourself, and the complete step-by-step
    plan. Nothing has been changed at this point.
@@ -58,12 +59,19 @@ which walks you through it in seven steps:
 7. **Finish** hands over the ten keybindings worth knowing and offers to
    start Omarchy mode straight away.
 
-You do not need to reboot. Nothing here installs a service or a driver. To
-see the login chooser you need a new logon session, so sign out and back in
-(a reboot works too, but is not required). To try Omarchy mode right now
-without signing out, tick the box on the last page of the wizard, or run
-`winmarchy mode omarchy`. To see the chooser itself immediately, run
-`%LOCALAPPDATA%\winmarchy\chooser\Winmarchy.Chooser.exe`.
+You do not need to reboot. Nothing here installs a service or a driver.
+
+Three ways to swap, available the moment setup finishes:
+
+- the **Winmarchy icon by the clock**, left click or right click
+- the **Swap to Omarchy mode** shortcut setup puts on your desktop
+- `winmarchy mode omarchy` from any shell
+
+The login chooser needs a new logon session, so sign out and back in to meet
+it (a reboot works too, but is not required). To see it straight away without
+signing out, run `winmarchy chooser`. If it does not appear at login, run
+`winmarchy doctor`: it checks the whole chain, from whether the chooser was
+built to whether Windows has its startup entry switched off.
 
 If you prefer a text prompt, `install-ui.ps1 -Console` asks the same
 questions in the terminal. That is also the automatic fallback if the
@@ -76,9 +84,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
 ```
 
 Add `-WhatIf` to print the full action list without touching anything.
-`-Theme <name>` picks the palette; `-SkipApps`, `-SkipChooser` and
-`-NoAutostart` correspond to the wizard's component choices. The wizard
-passes these same switches, so there is only one install path either way.
+`-Theme <name>` picks the palette; `-SkipApps`, `-SkipChooser`,
+`-NoAutostart` and `-NoTray` correspond to the wizard's component choices.
+The wizard passes these same switches, so there is only one install path
+either way.
 
 However you start it, the installer backs up everything it is about to
 touch into `%LOCALAPPDATA%\winmarchy\backup\<timestamp>\` before its first
@@ -116,8 +125,17 @@ the wallpaper and the Windows light or dark app mode in one pass; the bar
 picks up its new stylesheet without restarting.
 
 Swapping back and forth is `winmarchy mode win11` and
-`winmarchy mode omarchy`, from the menu, from the Start menu shortcuts, or
-from any shell.
+`winmarchy mode omarchy`, from the tray icon, the desktop shortcuts, the
+Start menu, the in-mode menu on `lwin+escape`, or any shell.
+
+`winmarchy lockscreen on` themes the lock screen from the active palette,
+which also themes the sign-in background, since Windows draws sign-in over
+the lock screen picture. It is off by default and it refuses to switch on
+unless it can first capture a plain picture to put back afterwards: Windows
+Spotlight and slideshows cannot be restored once replaced, and this project
+does not change things it cannot undo. `winmarchy lockscreen off` puts your
+picture back. Putting the mode chooser *on* the sign-in screen itself is a
+different matter, and Winmarchy does not do it; see Honest limitations.
 
 The swap is symmetric, and that is the point. Windows 11 mode is defined as
 the total absence of Winmarchy: no GlazeWM, no yasb, taskbar and desktop
@@ -141,9 +159,19 @@ UWP dialogs) fight external placement; GlazeWM window rules cover the known
 offenders and more rules can be added over time in
 `~/.glzr/glazewm/config.yaml`.
 
-The chooser needs the WebView2 runtime, which ships with Windows 11. Cursor
-theming only activates once Cursor has been run at least once, because that
-is when it first writes the settings file Winmarchy edits.
+Choosing your desktop *on the Windows sign-in screen* would mean writing a
+credential provider: a COM DLL registered under HKLM and loaded by LogonUI
+into the secure desktop. That needs administrator rights, and a faulty one
+leaves a machine nobody can sign into, on the one screen none of the panic
+paths can reach. Recoverability beats beauty, so Winmarchy themes the
+sign-in backdrop and leaves the sign-in box to Windows; you choose your
+desktop a second later, at the chooser.
+
+The chooser draws with the WebView2 runtime, which ships with Windows 11. If
+it is missing or fails, the chooser falls back to a plain window with the
+same two options rather than showing nothing. Cursor theming only activates
+once Cursor has been run at least once, because that is when it first writes
+the settings file Winmarchy edits.
 
 ## Uninstall
 
@@ -151,8 +179,8 @@ is when it first writes the settings file Winmarchy edits.
 powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
 ```
 
-returns the machine to baseline: Windows 11 mode re-asserted, autostart and
-shortcuts and PATH entry removed, the Winmarchy colour schemes taken out of
+returns the machine to baseline: Windows 11 mode re-asserted, both autostart
+entries and the tray icon and every shortcut and the PATH entry removed, the Winmarchy colour schemes taken out of
 Windows Terminal while your own settings stay put, your pre-install GlazeWM
 and yasb configs restored from the oldest backup set, and
 `%LOCALAPPDATA%\winmarchy` removed. `-KeepTerminalTheme`, `-KeepState` and

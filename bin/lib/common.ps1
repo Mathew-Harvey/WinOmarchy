@@ -21,6 +21,20 @@ function Get-WinmarchyStateDir { return (Join-Path (Get-WinmarchyHome) 'state') 
 function Get-WinmarchyLogDir { return (Join-Path (Get-WinmarchyHome) 'log') }
 function Get-WinmarchyBackupDir { return (Join-Path (Get-WinmarchyHome) 'backup') }
 function Get-WinmarchyWallpaperDir { return (Join-Path (Get-WinmarchyHome) 'wallpapers') }
+function Get-WinmarchyChooserDir { return (Join-Path (Get-WinmarchyHome) 'chooser') }
+
+function Get-WinmarchyPowerShellExe {
+    # Windows PowerShell 5.1, which is what every Winmarchy script targets.
+    # Resolved by path rather than through Get-Command so a PATH that puts
+    # pwsh first cannot send a 5.1 script to PowerShell 7.
+    if ($env:WINDIR) {
+        $candidate = Join-Path $env:WINDIR (Join-Path 'System32' (Join-Path 'WindowsPowerShell' (Join-Path 'v1.0' 'powershell.exe')))
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return 'powershell.exe'
+}
+
+function Get-WinmarchyChooserExePath { return (Join-Path (Get-WinmarchyChooserDir) 'Winmarchy.Chooser.exe') }
 
 function Get-WinmarchyRepoRoot {
     # This file lives at <root>/bin/lib/common.ps1 both in the repo and in the
@@ -528,6 +542,8 @@ function Get-WinmarchyDefaultState {
         savedCursorColours        = $null
         savedCursorHadColours     = $false
         savedCursorCaptured       = $false
+        savedLockScreen           = $null
+        lockScreenEnabled         = $false
         tutorialSeen              = $false
     }
 }
@@ -1004,6 +1020,177 @@ function New-WinmarchyWallpaperImage {
 }
 
 # ---------------------------------------------------------------------------
+# Lock screen (which is also the sign-in screen background)
+# ---------------------------------------------------------------------------
+#
+# Windows draws the sign-in screen over the lock screen image by default, so
+# setting the lock screen image is how far a per-user, no-admin program can go
+# towards theming the login experience. Putting a mode chooser ON the sign-in
+# screen itself would take a credential provider: an in-process COM DLL
+# registered under HKLM and loaded by LogonUI on the secure desktop. That needs
+# administrator rights, and a faulty one can leave a machine nobody can log
+# into, which is exactly what this project's first constraint forbids. So
+# Winmarchy themes the backdrop and leaves the sign-in box to Windows.
+
+function Get-WinmarchyLockScreenImagePath {
+    param([Parameter(Mandatory = $true)][string]$ThemeName)
+    return (Join-Path (Get-WinmarchyWallpaperDir) ('lockscreen-' + $ThemeName + '.png'))
+}
+
+function New-WinmarchyLockScreenImage {
+    # The riced sign-in backdrop: the themed wallpaper gradient, a brighter
+    # accent glow behind where the sign-in box sits, and the wordmark low on
+    # the left where Windows leaves the canvas empty.
+    param(
+        [Parameter(Mandatory = $true)]$Theme,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    Assert-WinmarchyWindows -Operation 'Lock screen image generation'
+    Add-Type -AssemblyName System.Drawing
+
+    $width = 2560
+    $height = 1440
+    $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
+        $rect = New-Object System.Drawing.Rectangle(0, 0, $width, $height)
+        $top = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.darker_background)
+        $mid = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.background)
+        $bottom = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.lighter_background)
+
+        $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $top, $bottom, [System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
+        $blend = New-Object System.Drawing.Drawing2D.ColorBlend(3)
+        $blend.Colors = @($top, $mid, $bottom)
+        $blend.Positions = [single[]]@(0.0, 0.6, 1.0)
+        $brush.InterpolationColors = $blend
+        $graphics.FillRectangle($brush, $rect)
+        $brush.Dispose()
+
+        # Accent glow behind the centre, where the sign-in box lands.
+        $accent = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.accent)
+        $glowWidth = 2200
+        $glowHeight = 1600
+        $glowPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $glowPath.AddEllipse([int]($width / 2) - [int]($glowWidth / 2), [int]($height * 0.42) - [int]($glowHeight / 2), $glowWidth, $glowHeight)
+        $glowBrush = New-Object System.Drawing.Drawing2D.PathGradientBrush($glowPath)
+        # 18 percent alpha of 255 is 46.
+        $glowBrush.CenterColor = [System.Drawing.Color]::FromArgb(46, $accent)
+        $glowBrush.SurroundColors = @([System.Drawing.Color]::FromArgb(0, $accent))
+        $graphics.FillPath($glowBrush, $glowPath)
+        $glowBrush.Dispose()
+        $glowPath.Dispose()
+
+        # A thin accent rule and the wordmark, low left. Segoe UI ships with
+        # Windows 11, so no font install is implied.
+        $foreground = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.foreground)
+        $muted = [System.Drawing.ColorTranslator]::FromHtml($Theme.colors.muted)
+        $markX = 190
+        $markY = [int]($height * 0.74)
+        $rulePen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(200, $accent)), 4
+        $graphics.DrawLine($rulePen, $markX, $markY, $markX + 96, $markY)
+        $rulePen.Dispose()
+
+        $titleFont = New-Object System.Drawing.Font('Segoe UI Light', 74, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+        $subFont = New-Object System.Drawing.Font('Segoe UI', 27, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+        $titleBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(235, $foreground))
+        $subBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(220, $muted))
+        try {
+            $graphics.DrawString('winmarchy', $titleFont, $titleBrush, $markX, $markY + 26)
+            $graphics.DrawString(($Theme.label + '  .  sign in, then choose your desktop'), $subFont, $subBrush, ($markX + 6), $markY + 132)
+        } finally {
+            $titleFont.Dispose()
+            $subFont.Dispose()
+            $titleBrush.Dispose()
+            $subBrush.Dispose()
+        }
+
+        $parent = Split-Path -Parent $Path
+        if ($parent -and -not (Test-Path $parent)) {
+            $null = New-Item -ItemType Directory -Path $parent -Force
+        }
+        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+        Write-WinmarchyLog -Message ('lock screen image generated at ' + $Path)
+    } finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
+
+function Wait-WinmarchyWinRtResult {
+    # Windows Runtime methods return IAsyncOperation and IAsyncAction, not
+    # Task, and Windows PowerShell 5.1 cannot await them directly. The
+    # AsTask extension methods on WindowsRuntimeSystemExtensions bridge the
+    # two; System.Runtime.WindowsRuntime ships with .NET Framework 4.5 and
+    # later, which is what Windows PowerShell 5.1 runs on.
+    # learn.microsoft.com/dotnet/api/system.windowsruntimesystemextensions
+    param(
+        [Parameter(Mandatory = $true)]$Operation,
+        [Type]$ResultType,
+        [int]$TimeoutSeconds = 30
+    )
+    Add-Type -AssemblyName System.Runtime.WindowsRuntime
+    $interfaceName = 'IAsyncAction'
+    if ($ResultType) { $interfaceName = 'IAsyncOperation`1' }
+    $method = $null
+    foreach ($candidate in [System.WindowsRuntimeSystemExtensions].GetMethods()) {
+        if ($candidate.Name -ne 'AsTask') { continue }
+        $parameters = $candidate.GetParameters()
+        if ($parameters.Count -ne 1) { continue }
+        if ($parameters[0].ParameterType.Name -eq $interfaceName) { $method = $candidate; break }
+    }
+    if ($null -eq $method) {
+        throw ('Could not find the AsTask overload for ' + $interfaceName + '; WinRT interop is unavailable on this host.')
+    }
+    if ($ResultType) { $method = $method.MakeGenericMethod($ResultType) }
+    $task = $method.Invoke($null, @($Operation))
+    if (-not $task.Wait($TimeoutSeconds * 1000)) {
+        throw ('The Windows Runtime call did not finish within ' + $TimeoutSeconds + ' seconds.')
+    }
+    if ($ResultType) { return $task.Result }
+    return $null
+}
+
+function Get-WinmarchyCurrentLockScreenImage {
+    # The image Windows currently shows, as a local file path, or $null when it
+    # is not a plain file (Spotlight and slideshow modes among others). Read
+    # only: LockScreen.OriginalImageFile is documented as the image used to set
+    # the lock screen.
+    # learn.microsoft.com/uwp/api/windows.system.userprofile.lockscreen
+    if (-not (Test-WinmarchyIsWindows)) { return $null }
+    try {
+        $lockScreen = [Windows.System.UserProfile.LockScreen, Windows.System.UserProfile, ContentType = WindowsRuntime]
+        $uri = $lockScreen::OriginalImageFile
+        if ($null -eq $uri) { return $null }
+        if (-not $uri.IsFile) { return $null }
+        $path = $uri.LocalPath
+        if (-not (Test-Path $path)) { return $null }
+        return $path
+    } catch {
+        Write-WinmarchyLog -Message ('lock screen query failed: ' + $_.Exception.Message) -Level 'WARN'
+        return $null
+    }
+}
+
+function Set-WinmarchyLockScreenImage {
+    # Sets the lock screen (and therefore the sign-in backdrop) to a local PNG
+    # or JPEG. Per-user, no admin. Throws with a plain message when Windows
+    # refuses, which some managed and non-Pro configurations do.
+    param([Parameter(Mandatory = $true)][string]$Path)
+    Assert-WinmarchyWindows -Operation 'Lock screen change'
+    if (-not (Test-Path $Path)) {
+        throw ('Lock screen image not found: ' + $Path)
+    }
+    $fullPath = (Resolve-Path -LiteralPath $Path).ProviderPath
+    $storageFileType = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
+    $file = Wait-WinmarchyWinRtResult -Operation ($storageFileType::GetFileFromPathAsync($fullPath)) -ResultType ([Windows.Storage.StorageFile])
+    $lockScreen = [Windows.System.UserProfile.LockScreen, Windows.System.UserProfile, ContentType = WindowsRuntime]
+    $null = Wait-WinmarchyWinRtResult -Operation ($lockScreen::SetImageFileAsync($file))
+    Write-WinmarchyLog -Message ('lock screen set to ' + $fullPath)
+}
+
+# ---------------------------------------------------------------------------
 # Process and executable helpers
 # ---------------------------------------------------------------------------
 
@@ -1168,26 +1355,125 @@ function Wait-WinmarchyOmarchyHealthy {
 # Autostart Run key
 # ---------------------------------------------------------------------------
 
-function Test-WinmarchyRunKeyPresent {
-    if (-not (Test-WinmarchyIsWindows)) { return $false }
-    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-    $value = Get-ItemProperty -Path $runKey -Name 'Winmarchy' -ErrorAction SilentlyContinue
-    return ($null -ne $value)
-}
-
 function Set-WinmarchyRunKey {
-    param([Parameter(Mandatory = $true)][string]$Command)
+    param(
+        [Parameter(Mandatory = $true)][string]$Command,
+        [string]$Name = 'Winmarchy'
+    )
     Assert-WinmarchyWindows -Operation 'Run key registration'
     $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-    Set-ItemProperty -Path $runKey -Name 'Winmarchy' -Value $Command
-    Write-WinmarchyLog -Message ('run key set to ' + $Command)
+    Set-ItemProperty -Path $runKey -Name $Name -Value $Command
+    Write-WinmarchyLog -Message ('run key ' + $Name + ' set to ' + $Command)
+}
+
+function Get-WinmarchyRunKeyValue {
+    # The command the Run key holds, or $null. Used by doctor, which needs the
+    # value and not just its presence: a Run entry pointing at a deleted exe
+    # looks registered and does nothing at login.
+    param([string]$Name = 'Winmarchy')
+    if (-not (Test-WinmarchyIsWindows)) { return $null }
+    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    $entry = Get-ItemProperty -Path $runKey -Name $Name -ErrorAction SilentlyContinue
+    if ($null -eq $entry) { return $null }
+    return [string]$entry.$Name
 }
 
 function Remove-WinmarchyRunKey {
+    param([string]$Name = 'Winmarchy')
     if (-not (Test-WinmarchyIsWindows)) { return }
     $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-    Remove-ItemProperty -Path $runKey -Name 'Winmarchy' -ErrorAction SilentlyContinue
-    Write-WinmarchyLog -Message 'run key removed'
+    Remove-ItemProperty -Path $runKey -Name $Name -ErrorAction SilentlyContinue
+    Write-WinmarchyLog -Message ('run key removed: ' + $Name)
+}
+
+function Test-WinmarchyStartupDisabledByWindows {
+    # Windows keeps its own on/off switch for each Run entry, the one behind
+    # Settings > Apps > Startup and Task Manager's Startup apps tab. A user who
+    # turns Winmarchy off there leaves the Run key in place but nothing starts
+    # at login, which is indistinguishable from a broken install unless it is
+    # checked. The StartupApproved location is not documented by Microsoft, so
+    # this is read-only, best effort, and reports "not disabled" whenever it
+    # cannot tell (see FLAGS.md).
+    param([string]$Name = 'Winmarchy')
+    if (-not (Test-WinmarchyIsWindows)) { return $false }
+    $approvedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+    $entry = Get-ItemProperty -Path $approvedKey -Name $Name -ErrorAction SilentlyContinue
+    if ($null -eq $entry) { return $false }
+    $bytes = @($entry.$Name)
+    if ($bytes.Count -lt 1) { return $false }
+    # Byte 0 is even for enabled and odd for disabled in every sample observed.
+    return (([int]$bytes[0] % 2) -eq 1)
+}
+
+# ---------------------------------------------------------------------------
+# Chooser health and launch
+# ---------------------------------------------------------------------------
+
+function Test-WinmarchyWebView2Runtime {
+    # Whether the WebView2 Evergreen Runtime is present. Microsoft documents
+    # this exact detection: read the pv value under the WebView2 client GUID
+    # {F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}, per-machine under
+    # HKLM EdgeUpdate\Clients (WOW6432Node on 64-bit Windows) or per-user under
+    # HKCU, and treat a missing or 0.0.0.0 value as not installed.
+    # learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
+    # ("Detect if a WebView2 Runtime is already installed").
+    if (-not (Test-WinmarchyIsWindows)) { return $false }
+    $clientGuid = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+    $candidates = @(
+        ('HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\' + $clientGuid),
+        ('HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\' + $clientGuid),
+        ('HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\' + $clientGuid)
+    )
+    foreach ($path in $candidates) {
+        $entry = Get-ItemProperty -Path $path -Name 'pv' -ErrorAction SilentlyContinue
+        if ($null -eq $entry) { continue }
+        $version = [string]$entry.pv
+        if ($version -and $version -ne '0.0.0.0') { return $true }
+    }
+    return $false
+}
+
+function Test-WinmarchyChooserPayload {
+    # Everything the chooser exe needs beside it. A publish that dropped the ui
+    # folder produces an exe that starts, fails to navigate, and (before the
+    # plain chooser existed) showed nothing at all, so this is checked
+    # explicitly at install time and by doctor.
+    $exePath = Get-WinmarchyChooserExePath
+    $indexPath = Join-Path (Join-Path (Get-WinmarchyChooserDir) 'ui') 'index.html'
+    $missing = @()
+    if (-not (Test-Path $exePath)) { $missing = $missing + 'Winmarchy.Chooser.exe' }
+    if (-not (Test-Path $indexPath)) { $missing = $missing + 'ui\index.html' }
+    return [pscustomobject]@{
+        Ok      = ($missing.Count -eq 0)
+        Missing = $missing
+        ExePath = $exePath
+    }
+}
+
+function Start-WinmarchyChooser {
+    # Runs the chooser now, in this logon session. This is what "winmarchy
+    # chooser" calls, and it is the way to see a chooser failure with your own
+    # eyes rather than inferring it from a login where nothing happened.
+    [CmdletBinding()]
+    param(
+        [switch]$Plain,
+        [switch]$Wait
+    )
+    Assert-WinmarchyWindows -Operation 'Chooser launch'
+    $payload = Test-WinmarchyChooserPayload
+    if (-not $payload.Ok) {
+        throw ('The chooser is not installed properly (missing: ' + ($payload.Missing -join ', ') + '). Re-run install.ps1 with the .NET 8 SDK present, or swap with "winmarchy mode omarchy".')
+    }
+    $argumentList = @()
+    if ($Plain) { $argumentList = $argumentList + '--plain' }
+    Write-WinmarchyLog -Message ('launching the chooser: ' + $payload.ExePath)
+    if ($argumentList.Count -gt 0) {
+        $process = Start-Process -FilePath $payload.ExePath -ArgumentList $argumentList -PassThru
+    } else {
+        $process = Start-Process -FilePath $payload.ExePath -PassThru
+    }
+    if ($Wait) { $process.WaitForExit() }
+    return $process
 }
 
 # ---------------------------------------------------------------------------

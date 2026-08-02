@@ -14,6 +14,14 @@
     <!-- Allows building this Windows-targeted project from the Linux build
          container; the produced binaries still run on Windows only. -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- The chooser is built on the user's own machine with whatever .NET SDK
+         they have. Without this, a net8.0 app refuses to start when only a
+         newer Desktop Runtime is installed (the default rollForward is Minor,
+         which will not cross a major version), and a WinExe failing that way
+         shows nothing useful at login. LatestMajor lets it run on 8 or later.
+         Documented MSBuild property: learn.microsoft.com/dotnet/core/project-sdk
+         /msbuild-props (RollForward) and /dotnet/core/versions/selection. -->
+    <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
 
   <ItemGroup>

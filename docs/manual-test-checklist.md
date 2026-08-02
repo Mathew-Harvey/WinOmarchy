@@ -112,3 +112,44 @@ Each cycle, note anything slow, flickery or out of place.
       reports the existing install and describes the run as an update.
 - [ ] E9. install-ui.ps1 -Console asks the same questions in text and
       produces the same result.
+
+## F. Login chooser, tray icon and lock screen
+
+Run F1 first: it is the fastest way to find out why nothing appeared at
+login, and it either passes or tells you exactly which link is broken.
+
+- [ ] F1. `winmarchy doctor` on the installed machine. Every row in the
+      chooser chain passes: chooser installed, run key autostart, startup
+      entry enabled, webview2 runtime, tray autostart. Record any FAIL row
+      verbatim.
+- [ ] F2. `winmarchy chooser` shows the chooser in the current session,
+      within a couple of seconds. Choosing either mode does what it says.
+- [ ] F3. `winmarchy chooser plain` shows the plain window instead: two
+      cards, arrow keys move the selection, Enter chooses, Escape gives
+      Windows 11, the countdown stops on the first key or mouse move, and
+      the colours match the active theme.
+- [ ] F4. Sign out and back in: the chooser appears by itself.
+- [ ] F5. Tick "Do not ask at login" in the chooser, sign out and back in:
+      no chooser, and the machine goes straight to the last mode. Undo it
+      with the "Chooser at login" toggle in the system menu.
+- [ ] F6. The Winmarchy icon is by the clock (check under the caret; Windows
+      hides new icons there until they are dragged out). Left click and
+      right click both open the menu.
+- [ ] F7. The tray menu header shows the current mode and theme, and the
+      swap entry follows the mode. Swap from the tray both ways.
+- [ ] F8. Tray: Show the chooser, Theme menu, Next theme, Keybindings,
+      Tutorial and Restore Windows 11 (repair) all do what they say. The
+      icon recolours after Next theme.
+- [ ] F9. "Hide this icon" removes it; `winmarchy tray` brings it back; two
+      copies of `winmarchy tray` still leave exactly one icon.
+- [ ] F10. Desktop: "Swap to Omarchy mode" and "Swap to Windows 11 mode"
+      shortcuts are there and work, with no console window flashing up.
+- [ ] F11. `winmarchy lockscreen on` while Windows is set to Spotlight:
+      refuses, and names Settings > Personalisation > Lock screen.
+- [ ] F12. Set a picture in Settings, then `winmarchy lockscreen on`, enter
+      Omarchy mode, press Win+L: the lock and sign-in screens show the
+      themed image. Return to Windows 11 mode: your own picture is back.
+- [ ] F13. `winmarchy lockscreen off` puts the picture back and stops
+      Winmarchy touching it again.
+- [ ] F14. uninstall.ps1: the tray icon disappears, both Run key values are
+      gone, and the desktop shortcuts are removed.

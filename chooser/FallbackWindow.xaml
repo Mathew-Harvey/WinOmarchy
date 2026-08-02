@@ -1,0 +1,154 @@
+<Window x:Class="Winmarchy.Chooser.FallbackWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Winmarchy"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowState="Maximized"
+        Background="#1a1b26">
+    <!-- The chooser without WebView2. Plain WPF shapes only: no images, no
+         web engine, no external assets, so this window can render whenever
+         WPF itself can. Every colour is set from code-behind out of the
+         active palette; the literals here are only what shows if that fails. -->
+    <Grid x:Name="Root" Focusable="True">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,64,0,0">
+            <TextBlock x:Name="TitleText"
+                       Text="Choose your desktop"
+                       FontSize="42"
+                       FontWeight="Light"
+                       Foreground="#c0caf5"
+                       HorizontalAlignment="Center" />
+            <TextBlock x:Name="SubtitleText"
+                       Text="Arrow keys to move, Enter to choose, Escape for Windows 11"
+                       FontSize="15"
+                       Margin="0,14,0,0"
+                       Foreground="#565f89"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="56" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Windows 11 card -->
+            <Border x:Name="Win11Card" Grid.Column="0"
+                    Width="420" Height="330"
+                    CornerRadius="14" BorderThickness="3"
+                    BorderBrush="#414868" Background="#16161e"
+                    Cursor="Hand">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <!-- A sketch of the stock desktop: free-floating windows
+                         over a wallpaper, with the taskbar along the bottom. -->
+                    <Border x:Name="Win11Preview" Grid.Row="0" Margin="18,18,18,0" CornerRadius="8"
+                            Background="#24283b" ClipToBounds="True">
+                        <Canvas>
+                            <Border Canvas.Left="30" Canvas.Top="26" Width="180" Height="104"
+                                    CornerRadius="5" Background="#1a1b26"
+                                    BorderBrush="#414868" BorderThickness="1" />
+                            <Border Canvas.Left="120" Canvas.Top="66" Width="180" Height="104"
+                                    CornerRadius="5" Background="#16161e"
+                                    BorderBrush="#414868" BorderThickness="1" />
+                            <Border x:Name="Win11Taskbar" Canvas.Left="0" Canvas.Top="176"
+                                    Width="384" Height="26" Background="#16161e" />
+                        </Canvas>
+                    </Border>
+                    <StackPanel Grid.Row="1" Margin="22,16,22,20">
+                        <TextBlock x:Name="Win11Title" Text="Windows 11"
+                                   FontSize="24" Foreground="#c0caf5" />
+                        <TextBlock x:Name="Win11Body"
+                                   Text="Exactly as it has always been. Taskbar, icons, your wallpaper."
+                                   FontSize="13" Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Foreground="#565f89" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Omarchy card -->
+            <Border x:Name="OmarchyCard" Grid.Column="2"
+                    Width="420" Height="330"
+                    CornerRadius="14" BorderThickness="3"
+                    BorderBrush="#414868" Background="#16161e"
+                    Cursor="Hand">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <!-- A sketch of Omarchy mode: the bar on top, then three
+                         gapped tiles with the focused one accented. -->
+                    <Border x:Name="OmarchyPreview" Grid.Row="0" Margin="18,18,18,0" CornerRadius="8"
+                            Background="#24283b" ClipToBounds="True">
+                        <Grid Margin="0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="22" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border x:Name="OmarchyBar" Grid.Row="0" Background="#16161e" />
+                            <Grid Grid.Row="1" Margin="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="8" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Border x:Name="OmarchyTileFocused" Grid.Column="0" Grid.Row="0" Grid.RowSpan="3"
+                                        CornerRadius="4" Background="#1a1b26"
+                                        BorderBrush="#7aa2f7" BorderThickness="2" />
+                                <Border x:Name="OmarchyTileB" Grid.Column="2" Grid.Row="0"
+                                        CornerRadius="4" Background="#1a1b26"
+                                        BorderBrush="#414868" BorderThickness="1" />
+                                <Border x:Name="OmarchyTileC" Grid.Column="2" Grid.Row="2"
+                                        CornerRadius="4" Background="#1a1b26"
+                                        BorderBrush="#414868" BorderThickness="1" />
+                            </Grid>
+                        </Grid>
+                    </Border>
+                    <StackPanel Grid.Row="1" Margin="22,16,22,20">
+                        <TextBlock x:Name="OmarchyTitle" Text="Omarchy"
+                                   FontSize="24" Foreground="#c0caf5" />
+                        <TextBlock x:Name="OmarchyBody"
+                                   Text="Tiling on the Super key, themed bar, launcher on Super+Space."
+                                   FontSize="13" Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Foreground="#565f89" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <StackPanel Grid.Row="2" HorizontalAlignment="Center" Margin="0,0,0,56">
+            <TextBlock x:Name="CountdownText"
+                       FontSize="14" Foreground="#565f89"
+                       HorizontalAlignment="Center" />
+            <CheckBox x:Name="DontAskBox"
+                      Content="Do not ask at login; go straight to the last mode"
+                      Margin="0,18,0,0" FontSize="13"
+                      Foreground="#565f89"
+                      HorizontalAlignment="Center" />
+            <TextBlock x:Name="ReasonText"
+                       FontSize="11" Margin="0,20,0,0"
+                       Foreground="#565f89" Opacity="0.7"
+                       TextWrapping="Wrap" MaxWidth="820"
+                       TextAlignment="Center"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</Window>

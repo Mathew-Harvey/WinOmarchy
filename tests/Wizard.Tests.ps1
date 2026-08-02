@@ -72,6 +72,10 @@ Describe 'Default choices' {
         $choices.Autostart | Should -BeFalse
     }
 
+    It 'leaves the notification area icon on, since it needs nothing but Windows' {
+        $choices = New-WinmarchyWizardChoices -Preflight @((New-Row 'winget' $false $true), (New-Row '.NET 8 SDK' $false $false))
+        $choices.Tray | Should -BeTrue
+    }
 }
 
 Describe 'Option interlocks' {
@@ -91,43 +95,45 @@ Describe 'Option interlocks' {
 
 Describe 'Mapping answers to install.ps1' {
     It 'passes only the theme when everything is wanted' {
-        $choices = @{ Theme = 'kanagawa'; InstallApps = $true; BuildChooser = $true; Autostart = $true }
+        $choices = @{ Theme = 'kanagawa'; InstallApps = $true; BuildChooser = $true; Autostart = $true; Tray = $true }
         $arguments = New-WinmarchyInstallArguments -Choices $choices
         $arguments.Theme | Should -Be 'kanagawa'
         $arguments.Keys.Count | Should -Be 1
     }
 
     It 'adds a skip switch for each declined component' {
-        $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $false; Autostart = $false }
+        $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $false; Autostart = $false; Tray = $false }
         $arguments = New-WinmarchyInstallArguments -Choices $choices
         $arguments.ContainsKey('SkipApps') | Should -BeTrue
         $arguments.ContainsKey('SkipChooser') | Should -BeTrue
         $arguments.ContainsKey('NoAutostart') | Should -BeTrue
+        $arguments.ContainsKey('NoTray') | Should -BeTrue
     }
 
     It 'only ever names parameters install.ps1 actually has' {
         $installParams = @((Get-Command (Join-Path $script:repoRoot 'install.ps1')).Parameters.Keys)
-        $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $false; Autostart = $false }
+        $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $false; Autostart = $false; Tray = $false }
         foreach ($key in (New-WinmarchyInstallArguments -Choices $choices).Keys) {
             $installParams | Should -Contain $key
         }
     }
 
     It 'shows an equivalent command line the user could type' {
-        $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $true; Autostart = $true }
+        $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $true; Autostart = $true; Tray = $true }
         Get-WinmarchyInstallCommandLine -Choices $choices | Should -Be '.\install.ps1 -Theme nord -SkipApps'
     }
 }
 
 Describe 'Review summary' {
     It 'describes each decision in plain language and always promises the backup' {
-        $choices = @{ Theme = 'everforest'; InstallApps = $true; BuildChooser = $true; Autostart = $false }
+        $choices = @{ Theme = 'everforest'; InstallApps = $true; BuildChooser = $true; Autostart = $false; Tray = $true }
         $lines = @(Get-WinmarchyWizardSummary -Choices $choices)
         ($lines -join ' ') | Should -Match 'everforest'
         ($lines -join ' ') | Should -Match 'install all 16 packages'
         ($lines -join ' ') | Should -Match 'Cursor is themed to match'
         ($lines -join ' ') | Should -Match 'build the login chooser'
         ($lines -join ' ') | Should -Match 'Windows starts as it always has'
+        ($lines -join ' ') | Should -Match 'icon by the clock'
         ($lines -join ' ') | Should -Match 'never proceed if that backup fails'
     }
 }
@@ -179,7 +185,7 @@ Describe 'Wizard XAML' {
         }
         $driver = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot 'install-ui.ps1'))
         # The lookup list in install-ui.ps1 is the contract between the two files.
-        foreach ($required in @('BtnNext', 'BtnBack', 'BtnCancel', 'ThemeList', 'ChecksList', 'InstallLog', 'ReviewPlan', 'OptApps', 'OptChooser', 'OptAutostart', 'PageWelcome', 'PageDone')) {
+        foreach ($required in @('BtnNext', 'BtnBack', 'BtnCancel', 'ThemeList', 'ChecksList', 'InstallLog', 'ReviewPlan', 'OptApps', 'OptChooser', 'OptAutostart', 'OptTray', 'PageWelcome', 'PageDone')) {
             $names | Should -Contain $required
             $driver | Should -Match ("'" + $required + "'")
         }

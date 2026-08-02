@@ -18,6 +18,10 @@ public static class Program
     public static int Main(string[] args)
     {
         bool renderTest = Array.IndexOf(args, "--render-test") >= 0;
+        // --plain forces the WebView2-free chooser. Useful for checking that
+        // the standby face renders on a machine where the rich one works.
+        bool forcePlain = Array.IndexOf(args, "--plain") >= 0;
+        Paths.Log("chooser: starting, base " + Paths.BaseDir);
         try
         {
             // Safety rule from the build brief Section 10: a non-empty undo
@@ -30,8 +34,9 @@ public static class Program
             // The "don't ask at login" flag: honour it and go straight to the
             // last chosen mode without showing any UI.
             var state = WinmarchyState.Load();
-            if (state.ChooserDisabled && !renderTest)
+            if (state.ChooserDisabled && !renderTest && !forcePlain)
             {
+                Paths.Log("chooser: chooserDisabled is set, going straight to " + state.LastMode);
                 if (state.LastMode == "omarchy")
                 {
                     RunWinmarchy("mode omarchy", waitForExit: true);
@@ -40,13 +45,40 @@ public static class Program
             }
 
             var app = new System.Windows.Application();
+            // Explicit, because the rich chooser hands over to the plain one by
+            // showing it and then closing itself: shutting down on the main
+            // window closing would take the standby chooser with it.
+            app.ShutdownMode = ShutdownMode.OnLastWindowClose;
             app.DispatcherUnhandledException += (_, e) =>
             {
                 e.Handled = true;
                 Fallback("dispatcher exception: " + e.Exception.Message);
                 app.Shutdown(0);
             };
-            var window = new MainWindow(renderTest, state);
+
+            Window window;
+            if (forcePlain)
+            {
+                window = new FallbackWindow(state, "--plain was passed");
+            }
+            else
+            {
+                try
+                {
+                    window = new MainWindow(renderTest, state);
+                }
+                catch (Exception ex)
+                {
+                    // Typically a missing WebView2 assembly, which used to take
+                    // the whole chooser down before it drew a single pixel.
+                    Paths.Log("chooser: the WebView2 window could not be created: " + ex.Message);
+                    if (renderTest)
+                    {
+                        throw;
+                    }
+                    window = new FallbackWindow(state, "WebView2 window creation failed: " + ex.Message);
+                }
+            }
             app.Run(window);
             return 0;
         }

@@ -182,8 +182,8 @@ footer code {
      key list is <code>winmarchy keys</code>, or Super and K. Both are generated
      from your actual configuration, so they always match the keys that work.</p>
   <p style="margin-top:10px">To go back to Windows: Super and Shift and X, the
-     "Restore Windows 11 (repair)" shortcut in the Start menu, or
-     <code>winmarchy mode win11</code>.</p>
+     Winmarchy icon by the clock, the "Restore Windows 11 (repair)" shortcut in
+     the Start menu, or <code>winmarchy mode win11</code>.</p>
 </footer>
 
 </div>

@@ -417,3 +417,145 @@ everything else is themed would look broken. It is mode-scoped and restored
 exactly as before.
 
 Status: closed.
+
+## FLAG-21: the chooser did not appear at login, and could not say why
+
+Context: Mat installed, signed out, signed back in, and nothing appeared. The
+install log showed the chooser built and the Run key registered, with no
+warnings, so every check the installer had said the install was fine.
+
+Root cause analysis: the chooser had four ways to fail after starting, and all
+four ended the same way. A missing WebView2 assembly threw out of the MainWindow
+constructor into Main's catch; a WebView2 environment that would not create, a
+navigation that would not complete, and a renderer crash each called
+Program.Fallback and then Close(). Fallback writes a log line and runs
+"mode win11 -Repair", which on an already-stock desktop does nothing visible. So
+every failure looked identical from the user's chair: a login where nothing
+happened. The exact trigger on Mat's machine is still unknown, and with the
+process exiting silently there was no way to find out from the outside.
+
+Decisions, in order of how much they matter:
+
+1. The chooser now has a second face. chooser/FallbackWindow.xaml is a plain WPF
+   chooser with no WebView2 in it: the same two options, keyboard and mouse
+   driven, coloured from the active palette. Every one of the four failure paths
+   now hands over to it instead of closing, and it shows the reason it is
+   standing in. The rule this encodes is that a failure of the pretty path must
+   degrade to the plain path, never to silence. Chooser.Tests.ps1 asserts the
+   hand-over count so a future edit cannot quietly restore the old behaviour.
+2. RollForward is set to LatestMajor in the csproj. The chooser is built on the
+   user's own machine with whatever SDK they have; a net8.0 app will not start
+   on a machine that has only a newer Desktop Runtime, because the default
+   rollForward policy does not cross a major version. A WinExe failing that way
+   shows nothing useful at login. This is a plausible cause of Mat's symptom and
+   is cheap to rule out for good.
+3. install.ps1 now verifies what actually landed rather than trusting the
+   publish exit code: the exe and ui\index.html both have to be there, and a
+   missing WebView2 runtime and a Windows-disabled startup entry are both called
+   out as warnings.
+4. doctor checks the whole chain end to end: chooser installed, Run key present
+   AND pointing at a file that exists, the Windows startup toggle, the WebView2
+   runtime, and the tray entry.
+5. "winmarchy chooser" runs the chooser now, in the current session, so a
+   failure can be seen rather than inferred. "winmarchy chooser plain" forces
+   the plain face.
+
+Unverified: which of these was Mat's actual failure. That can only be settled on
+his machine, by running "winmarchy doctor" and then "winmarchy chooser".
+
+Status: closed (the silent-failure class is fixed); the specific trigger is
+deferred-to-machine.
+
+## FLAG-22: no way into Omarchy from a stock Windows desktop
+
+Context: Mat's report, verbatim: "while im in windows, there is no ui element in
+the windows menu to change to omarchy". The Start menu shortcuts existed, but
+Windows filed them under Recommended and Recently added, where they are easy to
+miss and eventually scroll away.
+
+Decision: bin/tray.ps1, a notification area icon built on WinForms NotifyIcon.
+No build step, no service: the script is the process, and every action shells out
+to the dispatcher in a separate process so a failed swap cannot take the icon
+down. It carries the swap, the chooser, the theme menu, the keybindings, the
+tutorial and the panic path. The menu is rebuilt on every open, so it always
+shows the current mode and theme, and the icon is redrawn from the palette when
+the theme changes.
+
+Two rules keep it from drifting: every label it shows that it does not own
+itself must exist in Get-WinmarchySystemMenuEntries, which is what executes it
+(asserted in Tray.Tests.ps1), and the labels come from one pure function that
+takes state in and returns labels out, so the menu shape is testable without a
+desktop.
+
+install.ps1 registers it under a second Run key value, WinmarchyTray, starts it
+immediately so the swap is reachable without signing out, and also puts "Swap to
+Omarchy mode" and "Swap to Windows 11 mode" on the desktop. The wizard has a
+checkbox for it and install.ps1 has -NoTray. uninstall.ps1 removes the Run key,
+stops a running copy and deletes the desktop shortcuts.
+
+Judgement call: a permanently resident PowerShell process is more parts than
+this project likes. It is justified because the alternative is the complaint
+that prompted it: shortcuts nobody can find. It is a single script, it can be
+switched off at install time or dismissed at any time from its own menu, and
+nothing else depends on it.
+
+Undocumented territory: Test-WinmarchyStartupDisabledByWindows reads
+HKCU\...\Explorer\StartupApproved\Run to tell whether Windows has the startup
+entry switched off in Settings. That location is not documented by Microsoft.
+The check is read-only, reports "not disabled" whenever it cannot tell, and is
+used only to print a diagnostic line, so being wrong costs nothing.
+
+Status: closed.
+
+## FLAG-23: a mode chooser on the Windows sign-in screen
+
+Context: Mat asked whether the selection could happen at the sign-in screen
+itself, and for that screen to be themed.
+
+Answer on the selector: no, not within this project's constraints. Putting UI on
+the sign-in screen means writing a credential provider: an in-process COM DLL
+registered under HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\
+Credential Providers, loaded by LogonUI into the secure desktop. That requires
+administrator rights, which this project has avoided everywhere else, and a
+faulty credential provider can leave a machine that nobody can sign into. Hard
+constraint 1 says the machine must never be left unable to reach a normal
+Windows desktop; a component that runs before the desktop exists, on the secure
+desktop, where none of the panic paths reach, is the one place where that
+promise cannot be kept. Not building it.
+
+What is delivered instead: Windows draws the sign-in screen over the lock screen
+picture by default, so theming the lock screen themes the sign-in backdrop.
+New-WinmarchyLockScreenImage paints the palette gradient with the accent glow
+behind where the sign-in box lands and the wordmark low left, and
+Set-WinmarchyLockScreenImage applies it through
+Windows.System.UserProfile.LockScreen.SetImageFileAsync, which is per-user and
+needs no admin. Windows PowerShell 5.1 cannot await a WinRT IAsyncOperation
+directly, so Wait-WinmarchyWinRtResult bridges through the AsTask extension
+methods on WindowsRuntimeSystemExtensions.
+
+Opt in only, by "winmarchy lockscreen on", and off by default. The reason is
+symmetry, which Mat asked for in his own words: a wallpaper can be put back
+exactly, but a lock screen cannot. Setting a picture moves Personalisation >
+Lock screen off Windows Spotlight or a slideshow, and putting the original file
+back afterwards leaves it on Picture. So Winmarchy refuses to turn the feature
+on at all unless it can first capture a plain file to restore, and says why. In
+Omarchy mode the themed image applies; entering Windows 11 mode puts the
+captured original back, and the mutation is journalled like every other.
+
+Status: closed.
+
+## FLAG-24: Alacritty failed to install on Mat's machine
+
+Context: Mat's install log shows Alacritty.Alacritty FAILED with exit code
+-1978334964 (0x8A15010C). Everything else installed. Winmarchy's terminal
+keybinding, its popup menu and its keybinding overlay all launch Alacritty, so
+those keys do nothing until it is present.
+
+Not reproducible in the build container; winget is Windows-only and the code
+path is a plain winget install call that succeeded for the other fifteen
+packages. Verifying the meaning of that specific code needs the machine.
+
+Action for Mat: run "winget install Alacritty.Alacritty" by hand and read the
+message. Nothing in Winmarchy needs changing until that message is known.
+
+Status: deferred-to-machine.

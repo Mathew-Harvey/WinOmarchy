@@ -34,13 +34,16 @@ function New-WinmarchyWizardChoices {
         InstallApps  = $hasWinget
         BuildChooser = $hasDotnet
         Autostart    = $hasDotnet
+        # The notification area icon needs nothing but Windows, and it is the
+        # only always-visible way back to Omarchy from a stock desktop, so it
+        # is on unless the user turns it off.
+        Tray         = $true
     }
 }
 
 function Resolve-WinmarchyWizardChoices {
     # Applies the rules between options, so an impossible combination can
-    # never reach install.ps1: autostart needs a chooser to start, and
-    # Neovim setup is meaningless when a config already exists.
+    # never reach install.ps1: autostart needs a chooser to start.
     param(
         [Parameter(Mandatory = $true)][hashtable]$Choices,
         [pscustomobject[]]$Preflight
@@ -61,6 +64,7 @@ function New-WinmarchyInstallArguments {
     if (-not $Choices.InstallApps) { $arguments['SkipApps'] = $true }
     if (-not $Choices.BuildChooser) { $arguments['SkipChooser'] = $true }
     if (-not $Choices.Autostart) { $arguments['NoAutostart'] = $true }
+    if (-not $Choices.Tray) { $arguments['NoTray'] = $true }
     return $arguments
 }
 
@@ -72,7 +76,7 @@ function Get-WinmarchyInstallCommandLine {
     )
     $arguments = New-WinmarchyInstallArguments -Choices $Choices
     $parts = @('.\install.ps1', '-Theme', $arguments.Theme)
-    foreach ($switchName in @('SkipApps', 'SkipChooser', 'NoAutostart')) {
+    foreach ($switchName in @('SkipApps', 'SkipChooser', 'NoAutostart', 'NoTray')) {
         if ($arguments.ContainsKey($switchName)) { $parts = $parts + ('-' + $switchName) }
     }
     return ($parts -join ' ')
@@ -100,6 +104,11 @@ function Get-WinmarchyWizardSummary {
         $lines = $lines + 'At login: show the chooser'
     } else {
         $lines = $lines + 'At login: nothing; Windows starts as it always has'
+    }
+    if ($Choices.Tray) {
+        $lines = $lines + 'In Windows: a Winmarchy icon by the clock, plus desktop shortcuts, so the swap is always one click away'
+    } else {
+        $lines = $lines + 'In Windows: no icon by the clock; swap from the desktop shortcuts, the Start menu or the command line'
     }
     $lines = $lines + 'Always: back up every touched file first, and never proceed if that backup fails'
     return $lines

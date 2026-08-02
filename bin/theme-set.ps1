@@ -148,7 +148,25 @@ function Set-WinmarchyTheme {
         Write-WinmarchyLog -Message ('theme-set: app mode step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 8. Record the theme in state.
+    # 8. Lock screen, which is also the sign-in screen backdrop. Opt in only
+    # ("winmarchy lockscreen on"), because unlike a wallpaper it cannot be put
+    # back to Windows Spotlight or a slideshow once changed; see the note in
+    # lib/common.ps1. Omarchy mode only, and enter-win11 restores it.
+    try {
+        if ($omarchyActive -and (Get-WinmarchyState).lockScreenEnabled) {
+            $lockPath = Get-WinmarchyLockScreenImagePath -ThemeName $Name
+            if (-not (Test-Path $lockPath)) {
+                New-WinmarchyLockScreenImage -Theme $theme -Path $lockPath
+            }
+            Set-WinmarchyLockScreenImage -Path $lockPath
+            Write-WinmarchyLog -Message 'theme-set: lock screen applied'
+        }
+    } catch {
+        $stepFailures = $stepFailures + 'lock-screen'
+        Write-WinmarchyLog -Message ('theme-set: lock screen step failed: ' + $_.Exception.Message) -Level 'ERROR'
+    }
+
+    # 9. Record the theme in state.
     Set-WinmarchyStateValue -Name 'theme' -Value $Name
 
     if ($stepFailures.Count -gt 0) {

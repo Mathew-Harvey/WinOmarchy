@@ -6,6 +6,7 @@
 #   ... -SkipApps      skip winget installs, deploy configs only
 #   ... -SkipChooser   do not build the login chooser
 #   ... -NoAutostart   do not register the chooser to run at login
+#   ... -NoTray        do not add the Winmarchy icon to the notification area
 # For a guided setup with the same options, run install-ui.ps1 instead.
 # Compatible with Windows PowerShell 5.1. The backup pass runs before any
 # mutation and the installer refuses to continue if it fails.
@@ -15,7 +16,8 @@ param(
     [string]$Theme = 'tokyo-night',
     [switch]$SkipApps,
     [switch]$SkipChooser,
-    [switch]$NoAutostart
+    [switch]$NoAutostart,
+    [switch]$NoTray
 )
 
 $ErrorActionPreference = 'Stop'
@@ -284,6 +286,20 @@ if ((Test-WinmarchyIsWindows) -and (-not $SkipChooser)) {
         }
         if ($LASTEXITCODE -ne 0) {
             Add-WinmarchyInstallWarning 'chooser build failed; login chooser unavailable. Swap with the Start menu shortcuts or "winmarchy mode".'
+            return
+        }
+        # A publish that returns 0 but drops the ui folder produces an exe that
+        # starts and then has nothing to show, which at login is indisting-
+        # uishable from not starting at all. Check what actually landed.
+        $payload = Test-WinmarchyChooserPayload
+        if (-not $payload.Ok) {
+            Add-WinmarchyInstallWarning ('chooser build reported success but these are missing from ' + (Join-Path $installRoot 'chooser') + ': ' + ($payload.Missing -join ', ') + '. Run "winmarchy doctor" after install.')
+        }
+    }
+
+    Invoke-WinmarchyInstallStep -Description 'check the WebView2 runtime the chooser draws with' -Action {
+        if (-not (Test-WinmarchyWebView2Runtime)) {
+            Add-WinmarchyInstallWarning 'WebView2 runtime not detected. The chooser will still appear, in its plain window rather than the rich one. Install the Evergreen runtime from https://developer.microsoft.com/microsoft-edge/webview2/ to get the full version.'
         }
     }
 
@@ -291,9 +307,12 @@ if ((Test-WinmarchyIsWindows) -and (-not $SkipChooser)) {
         Write-Output 'install: login autostart skipped (-NoAutostart); run the chooser by hand or swap from the Start menu'
     } else {
         Invoke-WinmarchyInstallStep -Description 'register the chooser in the HKCU Run key' -Action {
-            $chooserExe = Join-Path (Join-Path $installRoot 'chooser') 'Winmarchy.Chooser.exe'
+            $chooserExe = Get-WinmarchyChooserExePath
             if (Test-Path $chooserExe) {
                 Set-WinmarchyRunKey -Command ('"' + $chooserExe + '"')
+                if (Test-WinmarchyStartupDisabledByWindows) {
+                    Add-WinmarchyInstallWarning 'Windows has Winmarchy switched off under Settings > Apps > Startup, so the chooser will not appear at login until it is switched back on there.'
+                }
             } else {
                 Add-WinmarchyInstallWarning 'chooser exe not present; Run key not registered.'
             }
@@ -304,23 +323,58 @@ if ((Test-WinmarchyIsWindows) -and (-not $SkipChooser)) {
 # Shortcuts and wallpapers are wanted whether or not the chooser was built:
 # the Start menu entries are the swap path when there is no login chooser.
 if (Test-WinmarchyIsWindows) {
-    Invoke-WinmarchyInstallStep -Description 'create the Start menu shortcuts' -Action {
+    Invoke-WinmarchyInstallStep -Description 'create the Start menu and desktop shortcuts' -Action {
         $startDir = Join-Path $env:APPDATA (Join-Path 'Microsoft' (Join-Path 'Windows' (Join-Path 'Start Menu' (Join-Path 'Programs' 'Winmarchy'))))
         $null = New-Item -ItemType Directory -Path $startDir -Force
         $dispatcher = Join-Path (Join-Path $installRoot 'bin') 'winmarchy.ps1'
+        $powershellExe = Get-WinmarchyPowerShellExe
         $shell = New-Object -ComObject WScript.Shell
         $shortcuts = @(
-            @{ name = 'Swap to Omarchy mode'; args = 'mode omarchy' },
-            @{ name = 'Swap to Windows 11 mode'; args = 'mode win11' },
-            @{ name = 'Winmarchy Menu'; args = 'menu' },
-            @{ name = 'Restore Windows 11 (repair)'; args = 'mode win11 -Repair' }
+            @{ name = 'Swap to Omarchy mode'; args = 'mode omarchy'; hidden = $true; desktop = $true },
+            @{ name = 'Swap to Windows 11 mode'; args = 'mode win11'; hidden = $true; desktop = $true },
+            @{ name = 'Winmarchy Menu'; args = 'menu'; hidden = $false; desktop = $false },
+            @{ name = 'Winmarchy Chooser'; args = 'chooser'; hidden = $true; desktop = $false },
+            @{ name = 'Winmarchy Tray Icon'; args = 'tray'; hidden = $true; desktop = $false },
+            @{ name = 'Restore Windows 11 (repair)'; args = 'mode win11 -Repair'; hidden = $true; desktop = $false }
         )
+        # WScript.Shell WindowStyle: 1 is normal, 7 is minimised. A swap needs
+        # no console, so the shortcuts that do not print anything useful start
+        # minimised rather than throwing a window at the user.
         foreach ($item in $shortcuts) {
-            $link = $shell.CreateShortcut((Join-Path $startDir ($item.name + '.lnk')))
-            $link.TargetPath = 'powershell.exe'
-            $link.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $dispatcher + '" ' + $item.args
-            $link.WorkingDirectory = $installRoot
-            $link.Save()
+            $targets = @(Join-Path $startDir ($item.name + '.lnk'))
+            if ($item.desktop) {
+                $desktopDir = [System.Environment]::GetFolderPath('Desktop')
+                if ($desktopDir) { $targets = $targets + (Join-Path $desktopDir ($item.name + '.lnk')) }
+            }
+            foreach ($target in $targets) {
+                $link = $shell.CreateShortcut($target)
+                $link.TargetPath = $powershellExe
+                $link.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $dispatcher + '" ' + $item.args
+                $link.WorkingDirectory = $installRoot
+                $link.Description = 'Winmarchy: ' + $item.name
+                if ($item.hidden) { $link.WindowStyle = 7 }
+                $link.Save()
+            }
+        }
+    }
+
+    if ($NoTray) {
+        Write-Output 'install: notification area icon skipped (-NoTray)'
+        Invoke-WinmarchyInstallStep -Description 'remove any existing tray autostart entry' -Action {
+            Remove-WinmarchyRunKey -Name 'WinmarchyTray'
+        }
+    } else {
+        Invoke-WinmarchyInstallStep -Description 'add the Winmarchy icon to the notification area at login' -Action {
+            $trayScript = Join-Path (Join-Path $installRoot 'bin') 'tray.ps1'
+            $command = '"' + (Get-WinmarchyPowerShellExe) + '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $trayScript + '"'
+            Set-WinmarchyRunKey -Name 'WinmarchyTray' -Command $command
+        }
+        Invoke-WinmarchyInstallStep -Description 'start the notification area icon now' -Action {
+            # So the swap is reachable immediately, without signing out first.
+            $trayScript = Join-Path (Join-Path $installRoot 'bin') 'tray.ps1'
+            $null = Start-Process -FilePath (Get-WinmarchyPowerShellExe) -ArgumentList @(
+                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"' + $trayScript + '"')
+            ) -WindowStyle Hidden
         }
     }
 
@@ -380,7 +434,13 @@ Write-Output '    lwin+ctrl+space     next theme'
 Write-Output '    lwin+escape         system menu'
 Write-Output '    lwin+shift+x        PANIC: back to Windows 11'
 Write-Output ''
-Write-Output 'Log out and back in to meet the chooser, or run: winmarchy mode omarchy'
+Write-Output '  three ways to swap, right now, without signing out:'
+Write-Output '    the Winmarchy icon by the clock (left or right click it)'
+Write-Output '    the "Swap to Omarchy mode" shortcut on your desktop'
+Write-Output '    winmarchy mode omarchy'
+Write-Output ''
+Write-Output '  the chooser appears at your next login. To see it now: winmarchy chooser'
+Write-Output '  if anything looks wrong:                              winmarchy doctor'
 
 # Explicit success. Without this the exit code can be inherited from the last
 # native command run along the way (winget reports "already installed" and
