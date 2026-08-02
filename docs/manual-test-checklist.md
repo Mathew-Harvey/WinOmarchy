@@ -201,3 +201,26 @@ during setup, or run the installer with a bad winget source.
 - [ ] H8. After setup, the desktop carries no new icons from the app
       installers and none from Winmarchy. Anything setup could not remove
       from the shared desktop was named in a warning.
+
+## I. Wallpapers, the bar menu, the Windows key and the TUIs
+
+- [ ] I1. Setup's Components page: Browse picks a folder; the review page
+      shows it in the summary and on the command line.
+- [ ] I2. With a folder set: swapping modes, changing theme, lwin+ctrl+b and
+      the menus each deal a different random picture, in BOTH modes; the
+      tray deals one on its own within half an hour.
+- [ ] I3. `winmarchy wallpaper off` stops it; themes control the wallpaper
+      again on the next swap.
+- [ ] I4. The bar's top-left button opens the floating menu with one click;
+      every entry works, including System stats (btop) and Git TUI
+      (lazygit) in the same window.
+- [ ] I5. In Omarchy mode, tapping the Windows key opens nothing; every
+      lwin combo still fires; Win+L still locks. Swap to Windows 11 mode:
+      the key opens Start again immediately.
+- [ ] I6. Hide the tray icon while in Omarchy mode: the Windows key opens
+      Start again (the guard dies with the tray). Run winmarchy tray to
+      bring both back.
+- [ ] I7. lwin+ctrl+t opens btop floating and centred; q closes it and the
+      window goes with it. If "winmarchy stats" says btop is not installed
+      while winget shows aristocratos.btop4win installed, record the actual
+      exe name in FLAGS.md (FLAG-33).

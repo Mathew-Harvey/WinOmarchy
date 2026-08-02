@@ -254,6 +254,23 @@
 
         <CheckBox x:Name="OptTray" Style="{StaticResource Check}" Content="Put a Winmarchy icon by the clock" />
         <TextBlock x:Name="OptTrayNote" Foreground="#565f89" FontSize="12.5" TextWrapping="Wrap" Margin="26,0,0,16" />
+
+        <TextBlock Text="Wallpapers" Foreground="#c0caf5" FontSize="15" Margin="0,6,0,4" />
+        <Grid Margin="0,0,0,4">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <TextBox x:Name="OptWallpaperDir" Grid.Column="0" Height="30" VerticalContentAlignment="Center"
+                   Background="#16161e" Foreground="#c0caf5" BorderBrush="#414868" Padding="6,0" />
+          <Button x:Name="BtnBrowseWallpapers" Grid.Column="1" Content="Browse" Margin="8,0,0,0" Padding="14,4"
+                  Background="#24283b" Foreground="#c0caf5" BorderBrush="#414868" />
+          <Button x:Name="BtnClearWallpapers" Grid.Column="2" Content="Clear" Margin="8,0,0,0" Padding="14,4"
+                  Background="#24283b" Foreground="#c0caf5" BorderBrush="#414868" />
+        </Grid>
+        <TextBlock x:Name="OptWallpaperNote" Foreground="#565f89" FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,16"
+                   Text="Optional. Point at a folder of pictures and BOTH modes deal a random one from it: on every swap, on every theme change, and every half hour. Leave it empty and Omarchy mode uses its generated theme wallpapers while Windows keeps yours." />
       </StackPanel>
 
       <!-- 4: Review -->

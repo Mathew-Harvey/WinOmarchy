@@ -36,6 +36,7 @@ function Get-WinmarchyTrayMenuLabels {
         $script:WinmarchyTraySeparator,
         'Theme menu',
         'Next theme',
+        'Next wallpaper',
         'Keybindings',
         'Tutorial',
         $script:WinmarchyTraySeparator,
@@ -57,6 +58,7 @@ function Invoke-WinmarchyTrayAction {
         'Swap to Omarchy mode' { Start-WinmarchyDetached -Arguments @('mode', 'omarchy') }
         'Swap to Windows 11 mode' { Start-WinmarchyDetached -Arguments @('mode', 'win11') }
         'Next theme' { Start-WinmarchyDetached -Arguments @('theme', 'next') }
+        'Next wallpaper' { Start-WinmarchyDetached -Arguments @('wallpaper', 'next') }
         'Keybindings' { Start-WinmarchyDetached -Arguments @('keys') -Visible }
         'Theme menu' { Start-WinmarchyDetached -Arguments @('menu', 'theme') -Visible }
         default {
@@ -246,10 +248,22 @@ public static extern bool DestroyIcon(System.IntPtr hIcon);
         }
     })
 
+    # With a wallpaper folder configured, a fresh picture every half hour;
+    # the dispatcher call is a quiet no-op when cycling is off.
+    $script:wallpaperTimer = New-Object System.Windows.Forms.Timer
+    $script:wallpaperTimer.Interval = 30 * 60 * 1000
+    $script:wallpaperTimer.add_Tick({
+        if ((Get-WinmarchyState).wallpaperDir) {
+            Start-WinmarchyDetached -Arguments @('wallpaper', 'next')
+        }
+    })
+    $script:wallpaperTimer.Start()
+
     Write-WinmarchyLog -Message 'tray: icon shown'
     try {
         [System.Windows.Forms.Application]::Run()
     } finally {
+        $script:wallpaperTimer.Stop()
         $script:trayNotifyIcon.Visible = $false
         $script:trayNotifyIcon.Dispose()
         if ($script:trayIconHandle -ne [System.IntPtr]::Zero) {

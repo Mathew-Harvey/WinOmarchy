@@ -144,6 +144,42 @@ Describe 'Desktop shortcut cleanup' {
     }
 }
 
+Describe 'Wallpaper cycling' {
+    It 'is off by default, so installing changes nothing about the wallpaper' {
+        (Get-WinmarchyDefaultState).wallpaperDir | Should -BeNullOrEmpty
+        Get-WinmarchyWallpaperFolder | Should -BeNullOrEmpty
+    }
+
+    It 'finds only pictures in the folder' {
+        $folder = Join-Path $TestDrive ('walls-' + [System.IO.Path]::GetRandomFileName())
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        Write-WinmarchyTextFile -Path (Join-Path $folder 'a.jpg') -Content 'x'
+        Write-WinmarchyTextFile -Path (Join-Path $folder 'b.PNG') -Content 'x'
+        Write-WinmarchyTextFile -Path (Join-Path $folder 'c.bmp') -Content 'x'
+        Write-WinmarchyTextFile -Path (Join-Path $folder 'notes.txt') -Content 'x'
+        @(Get-WinmarchyWallpaperCandidates -Folder $folder).Count | Should -Be 3
+    }
+
+    It 'never deals the same picture twice in a row when there is a choice' {
+        $candidates = @('C:\w\a.jpg', 'C:\w\b.jpg', 'C:\w\c.jpg')
+        foreach ($i in 1..20) {
+            $next = Get-WinmarchyNextWallpaperPath -Candidates $candidates -Current 'C:\w\b.jpg'
+            $next | Should -Not -Be 'C:\w\b.jpg'
+            $candidates | Should -Contain $next
+        }
+    }
+
+    It 'copes with one picture and with none' {
+        Get-WinmarchyNextWallpaperPath -Candidates @('C:\w\only.jpg') -Current 'C:\w\only.jpg' | Should -Be 'C:\w\only.jpg'
+        Get-WinmarchyNextWallpaperPath -Candidates @() | Should -BeNullOrEmpty
+    }
+
+    It 'pauses cycling when the folder goes missing instead of failing' {
+        Set-WinmarchyStateValue -Name 'wallpaperDir' -Value (Join-Path $TestDrive 'gone-away')
+        Get-WinmarchyWallpaperFolder | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Lock screen command' {
     It 'refuses to turn on when the current lock screen cannot be put back' {
         Mock Get-WinmarchyCurrentLockScreenImage { $null }

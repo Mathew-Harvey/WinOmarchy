@@ -47,6 +47,10 @@ function Show-WinmarchyUsage {
     Write-Output '  winmarchy tray              put the Winmarchy icon in the notification area'
     Write-Output '  winmarchy lockscreen on     theme the lock and sign-in screen in Omarchy mode'
     Write-Output '  winmarchy lockscreen off    put the lock screen back and leave it alone'
+    Write-Output '  winmarchy wallpaper next    deal the next random wallpaper from your folder'
+    Write-Output '  winmarchy wallpaper dir <path>  cycle wallpapers from this folder, in both modes'
+    Write-Output '  winmarchy wallpaper off     stop cycling; themes control the wallpaper again'
+    Write-Output '  winmarchy stats             system monitor TUI (btop)'
 }
 
 # Safety rule from the build brief Section 10: a non-empty undo journal means
@@ -85,9 +89,30 @@ switch ($Command) {
         }
     }
     'menu' {
-        $menuKind = $Argument
-        if ($menuKind -eq '') { $menuKind = 'system' }
-        & (Join-Path $PSScriptRoot 'menu.ps1') $menuKind
+        if ($Argument -eq 'popup') {
+            # A floating menu window, for launchers that are not themselves a
+            # console: the bar's top-left button and anything like it. Uses
+            # the same Alacritty float the lwin+escape binding uses; without
+            # Alacritty, a plain PowerShell window stands in.
+            $menuScript = Join-Path $PSScriptRoot 'menu.ps1'
+            $alacritty = $null
+            foreach ($app in (Get-WinmarchyBindingCriticalApps)) {
+                if ($app.Name -eq 'alacritty') { $alacritty = Resolve-WinmarchyBindingCriticalApp -App $app }
+            }
+            if ($alacritty) {
+                $null = Start-Process -FilePath $alacritty -ArgumentList @(
+                    '--title', '"Winmarchy Menu"', '-e', 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $menuScript + '"'), 'system'
+                )
+            } else {
+                $null = Start-Process -FilePath (Get-WinmarchyPowerShellExe) -ArgumentList @(
+                    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $menuScript + '"'), 'system'
+                )
+            }
+        } else {
+            $menuKind = $Argument
+            if ($menuKind -eq '') { $menuKind = 'system' }
+            & (Join-Path $PSScriptRoot 'menu.ps1') $menuKind
+        }
     }
     'keys' {
         & (Join-Path $PSScriptRoot 'keybindings.ps1')
@@ -104,6 +129,47 @@ switch ($Command) {
     }
     'doctor' {
         Invoke-WinmarchyDoctor -Json:$Json
+    }
+    'wallpaper' {
+        if ($Argument -eq 'next' -or $Argument -eq '') {
+            Invoke-WinmarchyWallpaperNext
+        } elseif ($Argument -eq 'dir' -and $Argument2 -ne '') {
+            if (-not (Test-Path $Argument2)) {
+                throw ('No folder at ' + $Argument2)
+            }
+            $found = @(Get-WinmarchyWallpaperCandidates -Folder $Argument2)
+            if ($found.Count -eq 0) {
+                throw ('No pictures (jpg, png, bmp) in ' + $Argument2)
+            }
+            Set-WinmarchyStateValue -Name 'wallpaperDir' -Value ((Resolve-Path $Argument2).Path)
+            Write-Output ('Wallpaper cycling on: ' + $found.Count + ' pictures in ' + $Argument2)
+            Invoke-WinmarchyWallpaperNext
+        } elseif ($Argument -eq 'off') {
+            Set-WinmarchyStateValue -Name 'wallpaperDir' -Value $null
+            Write-Output 'Wallpaper cycling off. The current wallpaper stays; themes control it again from here.'
+        } elseif ($Argument -eq 'status') {
+            $dir = (Get-WinmarchyState).wallpaperDir
+            if ($dir) {
+                Write-Output ('wallpaper cycling: on, from ' + $dir)
+            } else {
+                Write-Output 'wallpaper cycling: off (themed wallpapers in Omarchy mode, yours in Windows 11 mode)'
+            }
+        } else {
+            Show-WinmarchyUsage
+            exit 1
+        }
+    }
+    'stats' {
+        # The Omarchy Activity TUI (SUPER+CTRL+T -> btop in Omarchy itself;
+        # ref/omarchy/default/hypr/bindings/utilities.lua). Runs btop in THIS
+        # console, so the keybinding wraps it in a floating Alacritty.
+        $btop = Find-WinmarchyExecutable -Name 'btop4win'
+        if (-not $btop) { $btop = Find-WinmarchyExecutable -Name 'btop' }
+        if (-not $btop) {
+            Write-Output 'btop is not installed. Fix with: winget install -e --id aristocratos.btop4win'
+            exit 1
+        }
+        & $btop
     }
     'chooser' {
         # Shows the chooser in this session. The point of having it as a

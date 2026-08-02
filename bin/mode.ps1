@@ -179,9 +179,13 @@ function Enter-WinmarchyWin11Mode {
         Write-WinmarchyLog -Message ('enter-win11: icon restore failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # Step: restore the captured Windows wallpaper.
+    # Step: the wallpaper. With a folder configured, both modes cycle from
+    # it, so entering win11 deals a fresh picture; without one, the wallpaper
+    # captured before Omarchy mode goes back exactly.
     try {
-        if ($state.savedWallpaper) {
+        if (Get-WinmarchyWallpaperFolder) {
+            $null = Invoke-WinmarchyWallpaperNext
+        } elseif ($state.savedWallpaper) {
             Set-WinmarchyWallpaper -Path $state.savedWallpaper
         }
     } catch {

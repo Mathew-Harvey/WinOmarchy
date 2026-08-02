@@ -134,6 +134,23 @@ focus, `lwin+shift+arrows` move, `lwin+w` close, `lwin+f` fullscreen,
 `lwin+escape` the system menu, `lwin+ctrl+space` next theme. Windows keeps
 `Win+L` for lock and `Alt+Tab` stays native.
 
+Point setup (or `winmarchy wallpaper dir <path>`) at a folder of your own
+pictures and both modes deal a random one from it: on every swap, on every
+theme change, every half hour, and on `lwin+ctrl+b`. This is the one thing
+Winmarchy will change about Windows 11 mode, and only because you asked it
+to; `winmarchy wallpaper off` stops it.
+
+The bar's top-left button opens the menu, Omarchy style: themes, wallpaper,
+keybindings, the tutorial, system TUIs, files, the swap and the power
+actions, all one click from anywhere. `lwin+escape` opens the same menu from
+the keyboard, and `lwin+ctrl+t` opens btop in a floating terminal, the same
+key Omarchy uses for its Activity view.
+
+While Omarchy mode is on, tapping the Windows key does not open the Start
+menu: the key belongs to the tiling layer, exactly like Super on Omarchy.
+Every combo still works, Windows 11 mode is untouched, and the guard dies
+with the tray icon, so killing the icon returns the key to stock instantly.
+
 Eight themes ship: tokyo-night, catppuccin, gruvbox, nord, everforest,
 rose-pine (light), matte-black and kanagawa. `winmarchy theme set <name>`
 recolours the bar, the window borders, Alacritty, Windows Terminal, Cursor,

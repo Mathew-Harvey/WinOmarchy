@@ -10,6 +10,8 @@
 #   ... -SkipChooser   do not build the login chooser
 #   ... -NoAutostart   do not register the chooser to run at login
 #   ... -NoTray        do not add the Winmarchy icon to the notification area
+#   ... -WallpaperDir <path>  cycle random wallpapers from this folder, in
+#                             both modes (leave off for themed wallpapers)
 # For a guided setup with the same options, run install-ui.ps1 instead.
 # Compatible with Windows PowerShell 5.1. The backup pass runs before any
 # mutation and the installer refuses to continue if it fails.
@@ -20,7 +22,8 @@ param(
     [switch]$SkipApps,
     [switch]$SkipChooser,
     [switch]$NoAutostart,
-    [switch]$NoTray
+    [switch]$NoTray,
+    [string]$WallpaperDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -420,6 +423,25 @@ if ($NoAutostart -and (Test-WinmarchyIsWindows)) {
     # An earlier install may have registered it; honour the choice made now.
     Invoke-WinmarchyInstallStep -Description 'remove any existing login autostart entry' -Action {
         Remove-WinmarchyRunKey
+    }
+}
+
+if ($WallpaperDir -ne '') {
+    Invoke-WinmarchyInstallStep -Description ('cycle wallpapers from ' + $WallpaperDir) -Action {
+        if (-not (Test-Path $WallpaperDir)) {
+            Add-WinmarchyInstallWarning ('Wallpaper folder not found: ' + $WallpaperDir + '. Cycling not enabled; set it later with: winmarchy wallpaper dir <path>')
+            return
+        }
+        $pictures = @(Get-WinmarchyWallpaperCandidates -Folder $WallpaperDir)
+        if ($pictures.Count -eq 0) {
+            Add-WinmarchyInstallWarning ('No pictures (jpg, png, bmp) in ' + $WallpaperDir + '. Cycling not enabled; set it later with: winmarchy wallpaper dir <path>')
+            return
+        }
+        Set-WinmarchyStateValue -Name 'wallpaperDir' -Value ((Resolve-Path $WallpaperDir).Path)
+        Write-Output ('install:   ' + $pictures.Count + ' pictures found; both modes will cycle them')
+        if (Test-WinmarchyIsWindows) {
+            $null = Invoke-WinmarchyWallpaperNext
+        }
     }
 }
 

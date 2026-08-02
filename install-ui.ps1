@@ -205,6 +205,7 @@ function Start-WinmarchyWpfWizard {
         'PreviewLine1', 'PreviewLine2', 'PreviewLine3', 'PreviewLine4', 'PreviewLine5', 'PreviewPrompt', 'PreviewCaption',
         'OptApps', 'OptAppsNote', 'OptChooser', 'OptChooserNote',
         'OptAutostart', 'OptAutostartNote', 'OptTray', 'OptTrayNote',
+        'OptWallpaperDir', 'BtnBrowseWallpapers', 'BtnClearWallpapers', 'OptWallpaperNote',
         'ReviewSummary', 'ReviewPlan',
         'InstallStatus', 'InstallProgress', 'InstallLog', 'LogScroller',
         'DoneTitle', 'DoneSub', 'DoneWarnings', 'OptEnterNow',
@@ -303,6 +304,18 @@ function Start-WinmarchyWpfWizard {
     $ui.OptChooser.IsChecked = $state.Choices.BuildChooser
     $ui.OptAutostart.IsChecked = $state.Choices.Autostart
     $ui.OptTray.IsChecked = $state.Choices.Tray
+    $ui.OptWallpaperDir.Text = $state.Choices.WallpaperDir
+    # FolderBrowserDialog is WinForms; fine to mix with WPF for one dialog.
+    $null = $ui.BtnBrowseWallpapers.Add_Click({
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = 'Choose the folder your wallpapers live in'
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $ui.OptWallpaperDir.Text = $dialog.SelectedPath
+        }
+        $dialog.Dispose()
+    })
+    $null = $ui.BtnClearWallpapers.Add_Click({ $ui.OptWallpaperDir.Text = '' })
     $ui.OptTrayNote.Text = 'A small Winmarchy icon in the notification area, with the swap, the themes and the keybindings on it. This is the way back to Omarchy that is always in the same place; the Start menu shortcuts get filed under Recommended where they are easy to miss. Desktop shortcuts are created either way.'
 
     foreach ($row in $state.Preflight) {
@@ -344,6 +357,7 @@ function Start-WinmarchyWpfWizard {
         $state.Choices.BuildChooser = [bool]$ui.OptChooser.IsChecked
         $state.Choices.Autostart = [bool]$ui.OptAutostart.IsChecked
         $state.Choices.Tray = [bool]$ui.OptTray.IsChecked
+        $state.Choices.WallpaperDir = $ui.OptWallpaperDir.Text.Trim()
         $state.Choices = Resolve-WinmarchyWizardChoices -Choices $state.Choices -Preflight $state.Preflight
     }
 
@@ -637,6 +651,8 @@ function Start-WinmarchyConsoleWizard {
         $choices.Autostart = Read-WinmarchyYesNo -Question '  Show the chooser at login?' -Default $choices.Autostart
     }
     $choices.Tray = Read-WinmarchyYesNo -Question '  Put a Winmarchy icon by the clock, so the swap is always one click away?' -Default $choices.Tray
+    $wallpaperAnswer = Read-Host '  Folder of wallpapers to cycle in both modes (blank keeps the themed ones)'
+    if ($wallpaperAnswer) { $choices.WallpaperDir = $wallpaperAnswer.Trim() }
     $choices = Resolve-WinmarchyWizardChoices -Choices $choices -Preflight $preflight
 
     Write-Output ''

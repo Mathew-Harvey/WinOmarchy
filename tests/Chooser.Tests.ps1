@@ -106,6 +106,26 @@ Describe 'Never shows nothing' {
         $applet | Should -Match 'NotifyIcon'
     }
 
+    It 'guards the Windows key only while Omarchy mode is on, and dies with the tray' {
+        # The guard is a low-level keyboard hook in the tray host: a bare
+        # Windows key tap must not open the Start menu in Omarchy mode, and
+        # killing the tray must return the key to stock instantly.
+        $guard = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'WinKeyGuard.cs'))
+        $guard | Should -Match 'WH_KEYBOARD_LL|WhKeyboardLl'
+        $guard | Should -Match 'omarchy'
+        $guard | Should -Match 'SendInput'
+        $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
+        $applet | Should -Match 'WinKeyGuard\.Install\(\)'
+        $applet | Should -Match 'WinKeyGuard\.Uninstall\(\)'
+    }
+
+    It 'cycles wallpapers from the tray on a timer, in both hosts' {
+        $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
+        $applet | Should -Match 'wallpaper next'
+        $script = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'bin' 'tray.ps1')))
+        $script | Should -Match 'wallpaper'
+    }
+
     It 'can run on a newer .NET than it was built for' {
         # A net8.0 app with only a newer Desktop Runtime installed refuses to
         # start, and a WinExe failing that way is silent at login.

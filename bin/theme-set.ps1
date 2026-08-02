@@ -118,10 +118,17 @@ function Set-WinmarchyTheme {
         Write-WinmarchyLog -Message ('theme-set: cursor step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 6. Wallpaper: generate once per theme, then apply. Only meaningful in
-    # Omarchy mode; in win11 mode the user's wallpaper stays untouched.
+    # 6. Wallpaper. With a wallpaper folder configured, a theme change deals
+    # a fresh random picture from it, in either mode (the folder is the
+    # user's explicit choice; see the note above Get-WinmarchyWallpaperFolder).
+    # Without one, the generated theme wallpaper applies in Omarchy mode only
+    # and win11 mode's wallpaper stays untouched.
     try {
-        if ($omarchyActive) {
+        $wallpaperFolder = Get-WinmarchyWallpaperFolder
+        if ($wallpaperFolder) {
+            $null = Invoke-WinmarchyWallpaperNext
+            Write-WinmarchyLog -Message 'theme-set: wallpaper dealt from the folder'
+        } elseif ($omarchyActive) {
             $wallpaperPath = Join-Path (Get-WinmarchyWallpaperDir) ($Name + '.png')
             if (-not (Test-Path $wallpaperPath)) {
                 New-WinmarchyWallpaperImage -Theme $theme -Path $wallpaperPath

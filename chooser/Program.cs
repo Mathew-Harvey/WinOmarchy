@@ -219,6 +219,7 @@ public sealed class WinmarchyState
     public string Mode = "win11";
     public string LastMode = "win11";
     public string Theme = "tokyo-night";
+    public string WallpaperDir = "";
     public bool ChooserDisabled;
 
     public static WinmarchyState Load()
@@ -234,6 +235,7 @@ public sealed class WinmarchyState
                     state.Mode = node["mode"]?.GetValue<string>() ?? state.Mode;
                     state.LastMode = node["lastMode"]?.GetValue<string>() ?? state.LastMode;
                     state.Theme = node["theme"]?.GetValue<string>() ?? state.Theme;
+                    state.WallpaperDir = node["wallpaperDir"]?.GetValue<string>() ?? "";
                     state.ChooserDisabled = node["chooserDisabled"]?.GetValue<bool>() ?? false;
                 }
             }

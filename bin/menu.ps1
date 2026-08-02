@@ -64,7 +64,12 @@ function Get-WinmarchySystemMenuEntries {
     return @(
         'Theme menu',
         'Next theme',
+        'Next wallpaper',
         'Keybindings',
+        'Tutorial',
+        'System stats (btop)',
+        'Git TUI (lazygit)',
+        'Files',
         $swapLabel,
         'Reload GlazeWM',
         'Edit GlazeWM config',
@@ -86,7 +91,26 @@ function Invoke-WinmarchyMenuAction {
     switch -Wildcard ($Label) {
         'Theme menu' { Show-WinmarchyThemeMenu }
         'Next theme' { & $dispatcher theme next }
+        'Next wallpaper' { & $dispatcher wallpaper next }
         'Keybindings' { & (Join-Path $PSScriptRoot 'keybindings.ps1') }
+        'Tutorial' { & $dispatcher tutorial }
+        'System stats (btop)' {
+            # Runs in THIS console, which is the floating menu terminal when
+            # the menu was opened from the bar or lwin+escape. The Omarchy
+            # original is SUPER+CTRL+T, "Activity", a btop TUI
+            # (ref/omarchy/default/hypr/bindings/utilities.lua).
+            & $dispatcher stats
+        }
+        'Git TUI (lazygit)' {
+            $lazygit = Find-WinmarchyExecutable -Name 'lazygit'
+            if ($lazygit) {
+                if ($env:USERPROFILE) { Push-Location $env:USERPROFILE }
+                try { & $lazygit } finally { if ($env:USERPROFILE) { Pop-Location } }
+            } else {
+                Write-Output 'lazygit is not installed. Fix with: winget install -e --id JesseDuffield.lazygit'
+            }
+        }
+        'Files' { Start-Process 'explorer.exe' }
         'Swap to Omarchy mode' { & $dispatcher mode omarchy }
         'Swap to Windows 11 mode' { & $dispatcher mode win11 }
         'Reload GlazeWM' { Invoke-WinmarchyGlazewmCommand -Command 'wm-reload-config' }

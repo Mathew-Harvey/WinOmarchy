@@ -38,6 +38,9 @@ function New-WinmarchyWizardChoices {
         # only always-visible way back to Omarchy from a stock desktop, so it
         # is on unless the user turns it off.
         Tray         = $true
+        # Empty means themed wallpapers; a folder path means both modes cycle
+        # random pictures from it.
+        WallpaperDir = ''
     }
 }
 
@@ -65,6 +68,9 @@ function New-WinmarchyInstallArguments {
     if (-not $Choices.BuildChooser) { $arguments['SkipChooser'] = $true }
     if (-not $Choices.Autostart) { $arguments['NoAutostart'] = $true }
     if (-not $Choices.Tray) { $arguments['NoTray'] = $true }
+    if ($Choices.ContainsKey('WallpaperDir') -and $Choices.WallpaperDir -ne '') {
+        $arguments['WallpaperDir'] = $Choices.WallpaperDir
+    }
     return $arguments
 }
 
@@ -78,6 +84,9 @@ function Get-WinmarchyInstallCommandLine {
     $parts = @('.\install.ps1', '-Theme', $arguments.Theme)
     foreach ($switchName in @('SkipApps', 'SkipChooser', 'NoAutostart', 'NoTray')) {
         if ($arguments.ContainsKey($switchName)) { $parts = $parts + ('-' + $switchName) }
+    }
+    if ($arguments.ContainsKey('WallpaperDir')) {
+        $parts = $parts + @('-WallpaperDir', ('"' + $arguments.WallpaperDir + '"'))
     }
     return ($parts -join ' ')
 }
@@ -106,9 +115,14 @@ function Get-WinmarchyWizardSummary {
         $lines = $lines + 'At login: nothing; Windows starts as it always has'
     }
     if ($Choices.Tray) {
-        $lines = $lines + 'In Windows: a Winmarchy icon by the clock, plus desktop shortcuts, so the swap is always one click away'
+        $lines = $lines + 'In Windows: a Winmarchy icon by the clock, so the swap is always one click away'
     } else {
-        $lines = $lines + 'In Windows: no icon by the clock; swap from the desktop shortcuts, the Start menu or the command line'
+        $lines = $lines + 'In Windows: no icon by the clock; swap from the Start menu or the command line'
+    }
+    if ($Choices.ContainsKey('WallpaperDir') -and $Choices.WallpaperDir -ne '') {
+        $lines = $lines + ('Wallpapers: cycle random pictures from ' + $Choices.WallpaperDir + ', in both modes')
+    } else {
+        $lines = $lines + 'Wallpapers: the generated theme wallpaper in Omarchy mode; Windows keeps its own'
     }
     $lines = $lines + 'Always: back up every touched file first, and never proceed if that backup fails'
     return $lines

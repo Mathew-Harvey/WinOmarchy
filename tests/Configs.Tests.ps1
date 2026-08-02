@@ -193,7 +193,7 @@ Describe 'yasb config structure' {
 
     It 'lays out the widgets exactly as specified' {
         $bar = $script:yasbConfig['bars']['winmarchy-bar']
-        @($bar['widgets']['left']) | Should -Be @('glazewm_workspaces', 'active_window')
+        @($bar['widgets']['left']) | Should -Be @('menu_button', 'glazewm_workspaces', 'active_window')
         @($bar['widgets']['center']) | Should -Be @('clock')
         @($bar['widgets']['right']) | Should -Be @('cpu', 'memory', 'volume', 'systray', 'power_menu')
     }
@@ -219,6 +219,7 @@ Describe 'yasb config structure' {
             'yasb.power_menu.PowerMenuWidget',
             'yasb.systray.SystrayWidget',
             'yasb.taskbar.TaskbarWidget',
+            'yasb.custom.CustomWidget',
             'yasb.home.HomeWidget',
             'yasb.launchpad.LaunchpadWidget'
         )

@@ -272,6 +272,19 @@ keybindings:
   - commands: ['shell-exec winmarchy theme next']
     bindings: ['lwin+ctrl+space']
 
+  # Next wallpaper, when a wallpaper folder is configured. Omarchy's
+  # background switcher lives on SUPER+CTRL+SPACE
+  # (ref/omarchy/default/hypr/bindings/utilities.lua); that combo is taken
+  # by next-theme here, so b for background.
+  - commands: ['shell-exec winmarchy wallpaper next']
+    bindings: ['lwin+ctrl+b']
+
+  # System monitor TUI in a floating terminal. Mirrors Omarchy exactly:
+  # SUPER+CTRL+T, "Activity", a btop TUI
+  # (ref/omarchy/default/hypr/bindings/utilities.lua).
+  - commands: ['shell-exec alacritty --title "Winmarchy Stats" -e powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\winmarchy.ps1 stats']
+    bindings: ['lwin+ctrl+t']
+
   # Toggle the bar.
   - commands: ['shell-exec yasbc toggle-bar']
     bindings: ['lwin+shift+space']
