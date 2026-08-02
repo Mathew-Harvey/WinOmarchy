@@ -206,6 +206,7 @@ function Start-WinmarchyWpfWizard {
         'OptApps', 'OptAppsNote', 'OptChooser', 'OptChooserNote',
         'OptAutostart', 'OptAutostartNote', 'OptTray', 'OptTrayNote',
         'OptWallpaperDir', 'BtnBrowseWallpapers', 'BtnClearWallpapers', 'OptWallpaperNote',
+        'OptWallpaperInterval', 'OptWallpaperIntervalLabel',
         'ReviewSummary', 'ReviewPlan',
         'InstallStatus', 'InstallProgress', 'InstallLog', 'LogScroller',
         'DoneTitle', 'DoneSub', 'DoneWarnings', 'OptEnterNow',
@@ -316,6 +317,13 @@ function Start-WinmarchyWpfWizard {
         $dialog.Dispose()
     })
     $null = $ui.BtnClearWallpapers.Add_Click({ $ui.OptWallpaperDir.Text = '' })
+    $ui.OptWallpaperInterval.Value = $state.Choices.WallpaperInterval
+    $null = $ui.OptWallpaperInterval.Add_ValueChanged({
+        $minutes = [int]$ui.OptWallpaperInterval.Value
+        $unit = ' minutes'
+        if ($minutes -eq 1) { $unit = ' minute' }
+        $ui.OptWallpaperIntervalLabel.Text = ($minutes.ToString() + $unit)
+    })
     $ui.OptTrayNote.Text = 'A small Winmarchy icon in the notification area, with the swap, the themes and the keybindings on it. This is the way back to Omarchy that is always in the same place; the Start menu shortcuts get filed under Recommended where they are easy to miss. Desktop shortcuts are created either way.'
 
     foreach ($row in $state.Preflight) {
@@ -358,6 +366,7 @@ function Start-WinmarchyWpfWizard {
         $state.Choices.Autostart = [bool]$ui.OptAutostart.IsChecked
         $state.Choices.Tray = [bool]$ui.OptTray.IsChecked
         $state.Choices.WallpaperDir = $ui.OptWallpaperDir.Text.Trim()
+        $state.Choices.WallpaperInterval = [int]$ui.OptWallpaperInterval.Value
         $state.Choices = Resolve-WinmarchyWizardChoices -Choices $state.Choices -Preflight $state.Preflight
     }
 
@@ -651,8 +660,12 @@ function Start-WinmarchyConsoleWizard {
         $choices.Autostart = Read-WinmarchyYesNo -Question '  Show the chooser at login?' -Default $choices.Autostart
     }
     $choices.Tray = Read-WinmarchyYesNo -Question '  Put a Winmarchy icon by the clock, so the swap is always one click away?' -Default $choices.Tray
-    $wallpaperAnswer = Read-Host '  Folder of wallpapers to cycle in both modes (blank keeps the themed ones)'
-    if ($wallpaperAnswer) { $choices.WallpaperDir = $wallpaperAnswer.Trim() }
+    $wallpaperAnswer = Read-Host '  Folder of wallpapers to cycle in both modes, subfolders included (blank keeps the themed ones)'
+    if ($wallpaperAnswer) {
+        $choices.WallpaperDir = $wallpaperAnswer.Trim()
+        $intervalAnswer = Read-Host '  Change the wallpaper every how many minutes? (blank for 30)'
+        if ($intervalAnswer -match '^\d+$') { $choices.WallpaperInterval = [int]$intervalAnswer }
+    }
     $choices = Resolve-WinmarchyWizardChoices -Choices $choices -Preflight $preflight
 
     Write-Output ''

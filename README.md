@@ -135,10 +135,14 @@ focus, `lwin+shift+arrows` move, `lwin+w` close, `lwin+f` fullscreen,
 `Win+L` for lock and `Alt+Tab` stays native.
 
 Point setup (or `winmarchy wallpaper dir <path>`) at a folder of your own
-pictures and both modes deal a random one from it: on every swap, on every
-theme change, every half hour, and on `lwin+ctrl+b`. This is the one thing
-Winmarchy will change about Windows 11 mode, and only because you asked it
-to; `winmarchy wallpaper off` stops it.
+pictures, subfolders and all, and both modes deal a random one from the
+whole tree: on every swap, on every theme change, on `lwin+ctrl+b`, and on
+whatever interval you set with the wizard's slider (or
+`winmarchy wallpaper every <minutes>`, 1 to 1440, default 30). The folder
+and the interval live in Winmarchy's state, so they persist across swaps,
+sign-outs and reboots, in both modes alike. This is the one thing Winmarchy
+will change about Windows 11 mode, and only because you asked it to;
+`winmarchy wallpaper off` stops it.
 
 The bar's top-left button opens the menu, Omarchy style: themes, wallpaper,
 keybindings, the tutorial, system TUIs, files, the swap and the power

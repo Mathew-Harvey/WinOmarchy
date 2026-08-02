@@ -34,6 +34,7 @@ public static class TrayApplet
     private static string _iconTheme = string.Empty;
     private static IntPtr _iconHandle = IntPtr.Zero;
     private static Timer? _wallpaperTimer;
+    private static int _wallpaperMinutes;
 
     // Icon.FromHandle wraps the HICON without owning it, so the handle from
     // Bitmap.GetHicon must be destroyed by hand (documented behaviour).
@@ -82,15 +83,25 @@ public static class TrayApplet
             // tray has the right lifetime: guard dies with the icon.
             WinKeyGuard.Install();
 
-            // With a wallpaper folder configured, a fresh picture every half
-            // hour, in either mode. The tick asks the dispatcher, which is a
-            // quiet no-op when cycling is off, so the timer needs no state.
-            _wallpaperTimer = new Timer { Interval = 30 * 60 * 1000 };
+            // With a wallpaper folder configured, a fresh picture on the
+            // interval the user chose (state.wallpaperIntervalMinutes). The
+            // timer ticks every minute and counts up, so a changed interval
+            // takes effect within a minute rather than after the old one.
+            _wallpaperTimer = new Timer { Interval = 60 * 1000 };
             _wallpaperTimer.Tick += (_, _) =>
             {
                 var current = WinmarchyState.Load();
-                if (!string.IsNullOrEmpty(current.WallpaperDir))
+                if (string.IsNullOrEmpty(current.WallpaperDir))
                 {
+                    _wallpaperMinutes = 0;
+                    return;
+                }
+                _wallpaperMinutes++;
+                var interval = current.WallpaperIntervalMinutes;
+                if (interval < 1) { interval = 30; }
+                if (_wallpaperMinutes >= interval)
+                {
+                    _wallpaperMinutes = 0;
                     Program.RunWinmarchy("wallpaper next", waitForExit: false);
                 }
             };

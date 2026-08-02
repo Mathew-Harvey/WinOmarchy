@@ -123,14 +123,17 @@ Describe 'Mapping answers to install.ps1' {
         Get-WinmarchyInstallCommandLine -Choices $choices | Should -Be '.\install.ps1 -Theme nord -SkipApps'
     }
 
-    It 'passes the wallpaper folder through, quoted, and omits it when empty' {
-        $choices = @{ Theme = 'nord'; InstallApps = $true; BuildChooser = $true; Autostart = $true; Tray = $true; WallpaperDir = 'C:\Users\mat\Pictures\Walls' }
+    It 'passes the wallpaper folder and interval through, and omits both when empty' {
+        $choices = @{ Theme = 'nord'; InstallApps = $true; BuildChooser = $true; Autostart = $true; Tray = $true; WallpaperDir = 'C:\Users\mat\Pictures\Walls'; WallpaperInterval = 5 }
         $arguments = New-WinmarchyInstallArguments -Choices $choices
         $arguments.WallpaperDir | Should -Be 'C:\Users\mat\Pictures\Walls'
-        Get-WinmarchyInstallCommandLine -Choices $choices | Should -Be '.\install.ps1 -Theme nord -WallpaperDir "C:\Users\mat\Pictures\Walls"'
+        $arguments.WallpaperIntervalMinutes | Should -Be 5
+        Get-WinmarchyInstallCommandLine -Choices $choices | Should -Be '.\install.ps1 -Theme nord -WallpaperDir "C:\Users\mat\Pictures\Walls" -WallpaperIntervalMinutes 5'
 
         $choices.WallpaperDir = ''
-        (New-WinmarchyInstallArguments -Choices $choices).ContainsKey('WallpaperDir') | Should -BeFalse
+        $arguments = New-WinmarchyInstallArguments -Choices $choices
+        $arguments.ContainsKey('WallpaperDir') | Should -BeFalse
+        $arguments.ContainsKey('WallpaperIntervalMinutes') | Should -BeFalse
     }
 }
 

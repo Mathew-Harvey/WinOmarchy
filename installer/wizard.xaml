@@ -269,8 +269,14 @@
           <Button x:Name="BtnClearWallpapers" Grid.Column="2" Content="Clear" Margin="8,0,0,0" Padding="14,4"
                   Background="#24283b" Foreground="#c0caf5" BorderBrush="#414868" />
         </Grid>
+        <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+          <TextBlock Text="Change every" Foreground="#a9b1d6" FontSize="13" VerticalAlignment="Center" />
+          <Slider x:Name="OptWallpaperInterval" Width="240" Minimum="1" Maximum="120" Value="30"
+                  TickFrequency="1" IsSnapToTickEnabled="True" Margin="10,0" VerticalAlignment="Center" />
+          <TextBlock x:Name="OptWallpaperIntervalLabel" Foreground="#c0caf5" FontSize="13" VerticalAlignment="Center" Text="30 minutes" />
+        </StackPanel>
         <TextBlock x:Name="OptWallpaperNote" Foreground="#565f89" FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,16"
-                   Text="Optional. Point at a folder of pictures and BOTH modes deal a random one from it: on every swap, on every theme change, and every half hour. Leave it empty and Omarchy mode uses its generated theme wallpapers while Windows keeps yours." />
+                   Text="Optional. Point at a folder of pictures (subfolders are included) and BOTH modes deal a random one from it: on every swap, on every theme change, and on the slider's interval. Leave the folder empty and Omarchy mode uses its generated theme wallpapers while Windows keeps yours." />
       </StackPanel>
 
       <!-- 4: Review -->

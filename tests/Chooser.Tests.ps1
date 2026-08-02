@@ -119,11 +119,15 @@ Describe 'Never shows nothing' {
         $applet | Should -Match 'WinKeyGuard\.Uninstall\(\)'
     }
 
-    It 'cycles wallpapers from the tray on a timer, in both hosts' {
+    It 'cycles wallpapers from the tray on the configured interval, in both hosts' {
+        # One-minute ticks with a counter, so a changed interval takes effect
+        # within a minute rather than after the old interval runs out.
         $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
         $applet | Should -Match 'wallpaper next'
+        $applet | Should -Match 'WallpaperIntervalMinutes'
+        $applet | Should -Match '60 \* 1000'
         $script = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'bin' 'tray.ps1')))
-        $script | Should -Match 'wallpaper'
+        $script | Should -Match 'Get-WinmarchyWallpaperIntervalMinutes'
     }
 
     It 'can run on a newer .NET than it was built for' {

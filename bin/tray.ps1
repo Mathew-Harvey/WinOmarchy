@@ -248,12 +248,20 @@ public static extern bool DestroyIcon(System.IntPtr hIcon);
         }
     })
 
-    # With a wallpaper folder configured, a fresh picture every half hour;
-    # the dispatcher call is a quiet no-op when cycling is off.
+    # With a wallpaper folder configured, a fresh picture on the interval
+    # the user chose. One-minute ticks with a counter, so a changed interval
+    # takes effect within a minute rather than after the old one.
     $script:wallpaperTimer = New-Object System.Windows.Forms.Timer
-    $script:wallpaperTimer.Interval = 30 * 60 * 1000
+    $script:wallpaperTimer.Interval = 60 * 1000
+    $script:wallpaperMinutes = 0
     $script:wallpaperTimer.add_Tick({
-        if ((Get-WinmarchyState).wallpaperDir) {
+        if (-not (Get-WinmarchyState).wallpaperDir) {
+            $script:wallpaperMinutes = 0
+            return
+        }
+        $script:wallpaperMinutes = $script:wallpaperMinutes + 1
+        if ($script:wallpaperMinutes -ge (Get-WinmarchyWallpaperIntervalMinutes)) {
+            $script:wallpaperMinutes = 0
             Start-WinmarchyDetached -Arguments @('wallpaper', 'next')
         }
     })

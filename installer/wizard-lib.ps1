@@ -39,8 +39,9 @@ function New-WinmarchyWizardChoices {
         # is on unless the user turns it off.
         Tray         = $true
         # Empty means themed wallpapers; a folder path means both modes cycle
-        # random pictures from it.
+        # random pictures from it, subfolders included, on this interval.
         WallpaperDir = ''
+        WallpaperInterval = 30
     }
 }
 
@@ -70,6 +71,9 @@ function New-WinmarchyInstallArguments {
     if (-not $Choices.Tray) { $arguments['NoTray'] = $true }
     if ($Choices.ContainsKey('WallpaperDir') -and $Choices.WallpaperDir -ne '') {
         $arguments['WallpaperDir'] = $Choices.WallpaperDir
+        if ($Choices.ContainsKey('WallpaperInterval')) {
+            $arguments['WallpaperIntervalMinutes'] = [int]$Choices.WallpaperInterval
+        }
     }
     return $arguments
 }
@@ -87,6 +91,9 @@ function Get-WinmarchyInstallCommandLine {
     }
     if ($arguments.ContainsKey('WallpaperDir')) {
         $parts = $parts + @('-WallpaperDir', ('"' + $arguments.WallpaperDir + '"'))
+        if ($arguments.ContainsKey('WallpaperIntervalMinutes')) {
+            $parts = $parts + @('-WallpaperIntervalMinutes', $arguments.WallpaperIntervalMinutes.ToString())
+        }
     }
     return ($parts -join ' ')
 }
@@ -120,7 +127,9 @@ function Get-WinmarchyWizardSummary {
         $lines = $lines + 'In Windows: no icon by the clock; swap from the Start menu or the command line'
     }
     if ($Choices.ContainsKey('WallpaperDir') -and $Choices.WallpaperDir -ne '') {
-        $lines = $lines + ('Wallpapers: cycle random pictures from ' + $Choices.WallpaperDir + ', in both modes')
+        $intervalText = '30'
+        if ($Choices.ContainsKey('WallpaperInterval')) { $intervalText = ([int]$Choices.WallpaperInterval).ToString() }
+        $lines = $lines + ('Wallpapers: cycle random pictures from ' + $Choices.WallpaperDir + ' (subfolders included), in both modes, changing every ' + $intervalText + ' minute(s)')
     } else {
         $lines = $lines + 'Wallpapers: the generated theme wallpaper in Omarchy mode; Windows keeps its own'
     }

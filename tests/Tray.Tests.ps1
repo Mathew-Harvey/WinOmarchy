@@ -160,6 +160,31 @@ Describe 'Wallpaper cycling' {
         @(Get-WinmarchyWallpaperCandidates -Folder $folder).Count | Should -Be 3
     }
 
+    It 'recurses through subfolders, flattening the whole tree into one pool' {
+        $folder = Join-Path $TestDrive ('walls-' + [System.IO.Path]::GetRandomFileName())
+        $null = New-Item -ItemType Directory -Path (Join-Path $folder (Join-Path 'nature' 'mountains')) -Force
+        $null = New-Item -ItemType Directory -Path (Join-Path $folder 'cities') -Force
+        Write-WinmarchyTextFile -Path (Join-Path $folder 'top.jpg') -Content 'x'
+        Write-WinmarchyTextFile -Path (Join-Path $folder (Join-Path 'cities' 'tokyo.png')) -Content 'x'
+        Write-WinmarchyTextFile -Path (Join-Path $folder (Join-Path 'nature' (Join-Path 'mountains' 'alps.jpg'))) -Content 'x'
+        Write-WinmarchyTextFile -Path (Join-Path $folder (Join-Path 'cities' 'readme.md')) -Content 'x'
+        $found = @(Get-WinmarchyWallpaperCandidates -Folder $folder)
+        $found.Count | Should -Be 3
+        ($found -join ';') | Should -Match 'alps'
+    }
+
+    It 'defaults the change interval to half an hour and clamps nonsense' {
+        Get-WinmarchyWallpaperIntervalMinutes | Should -Be 30
+        Set-WinmarchyStateValue -Name 'wallpaperIntervalMinutes' -Value 5
+        Get-WinmarchyWallpaperIntervalMinutes | Should -Be 5
+        Set-WinmarchyStateValue -Name 'wallpaperIntervalMinutes' -Value 0
+        Get-WinmarchyWallpaperIntervalMinutes | Should -Be 1
+        Set-WinmarchyStateValue -Name 'wallpaperIntervalMinutes' -Value 99999
+        Get-WinmarchyWallpaperIntervalMinutes | Should -Be 1440
+        Set-WinmarchyStateValue -Name 'wallpaperIntervalMinutes' -Value 'garbage'
+        Get-WinmarchyWallpaperIntervalMinutes | Should -Be 30
+    }
+
     It 'never deals the same picture twice in a row when there is a choice' {
         $candidates = @('C:\w\a.jpg', 'C:\w\b.jpg', 'C:\w\c.jpg')
         foreach ($i in 1..20) {

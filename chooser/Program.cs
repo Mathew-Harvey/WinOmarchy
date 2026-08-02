@@ -220,6 +220,7 @@ public sealed class WinmarchyState
     public string LastMode = "win11";
     public string Theme = "tokyo-night";
     public string WallpaperDir = "";
+    public int WallpaperIntervalMinutes = 30;
     public bool ChooserDisabled;
 
     public static WinmarchyState Load()
@@ -236,6 +237,11 @@ public sealed class WinmarchyState
                     state.LastMode = node["lastMode"]?.GetValue<string>() ?? state.LastMode;
                     state.Theme = node["theme"]?.GetValue<string>() ?? state.Theme;
                     state.WallpaperDir = node["wallpaperDir"]?.GetValue<string>() ?? "";
+                    var intervalNode = node["wallpaperIntervalMinutes"];
+                    if (intervalNode != null)
+                    {
+                        try { state.WallpaperIntervalMinutes = intervalNode.GetValue<int>(); } catch { }
+                    }
                     state.ChooserDisabled = node["chooserDisabled"]?.GetValue<bool>() ?? false;
                 }
             }
