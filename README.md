@@ -68,14 +68,21 @@ You do not need to reboot. Nothing here installs a service or a driver.
 Three ways to swap, available the moment setup finishes:
 
 - the **Winmarchy icon by the clock**, left click or right click
-- the **Swap to Omarchy mode** shortcut setup puts on your desktop
+- the **Winmarchy folder in the Start menu**, under All apps
 - `winmarchy mode omarchy` from any shell
 
+Setup leaves the desktop alone: it puts no shortcuts of its own there, and
+it removes the icons the third-party app installers drop while it runs
+(ones on the shared desktop need admin rights to remove, so those are named
+in a warning instead).
+
 The login chooser needs a new logon session, so sign out and back in to meet
-it (a reboot works too, but is not required). To see it straight away without
-signing out, run `winmarchy chooser`. If it does not appear at login, run
-`winmarchy doctor`: it checks the whole chain, from whether the chooser was
-built to whether Windows has its startup entry switched off.
+it (a reboot works too, but is not required). It waits twenty seconds before
+continuing to your last mode, and any mouse movement or key press stops the
+clock. To see it straight away without signing out, run `winmarchy chooser`.
+If it does not appear at login, run `winmarchy doctor`: it checks the whole
+chain, from whether the chooser was built to whether Windows has its startup
+entry switched off.
 
 If you prefer a text prompt, `install-ui.ps1 -Console` asks the same
 questions in the terminal. That is also the automatic fallback if the
@@ -134,8 +141,11 @@ the wallpaper and the Windows light or dark app mode in one pass; the bar
 picks up its new stylesheet without restarting.
 
 Swapping back and forth is `winmarchy mode win11` and
-`winmarchy mode omarchy`, from the tray icon, the desktop shortcuts, the
-Start menu, the in-mode menu on `lwin+escape`, or any shell.
+`winmarchy mode omarchy`, from the tray icon, the Start menu, the in-mode
+menu on `lwin+escape`, or any shell. The tray icon lives in the chooser
+executable, which has no console; without the chooser built it falls back
+to a PowerShell host, and on Windows 11 that host's terminal window stays
+visible, because Windows Terminal does not honour hidden-console requests.
 
 `winmarchy lockscreen on` themes the lock screen from the active palette,
 which also themes the sign-in background, since Windows draws sign-in over
@@ -189,7 +199,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
 ```
 
 returns the machine to baseline: Windows 11 mode re-asserted, both autostart
-entries and the tray icon and every shortcut and the PATH entry removed, the Winmarchy colour schemes taken out of
+entries and the tray icon and the Start menu folder and the PATH entry
+removed, the Winmarchy colour schemes taken out of
 Windows Terminal while your own settings stay put, your pre-install GlazeWM
 and yasb configs restored from the oldest backup set, and
 `%LOCALAPPDATA%\winmarchy` removed. `-KeepTerminalTheme`, `-KeepState` and

@@ -178,3 +178,26 @@ during setup, or run the installer with a bad winget source.
       all four of lwin+enter, lwin+k, lwin+escape and lwin+ctrl+shift+space
       work. Confirm the GlazeWM config at ~/.glzr/glazewm/config.yaml carries
       the full unquoted path on all four lines.
+
+## H. The four fixes from the first on-machine round
+
+- [ ] H1. `winmarchy mode omarchy` completes: bar up, tiling on, taskbar
+      hidden, icons hidden, wallpaper themed, and it STAYS (the taskbar call
+      no longer crashes the swap). `winmarchy doctor` agrees.
+- [ ] H2. Swap back and forth three times; both directions stay clean.
+- [ ] H3. Restart Windows: the chooser appears and waits. Do not touch
+      anything: after twenty seconds it continues to the last mode, and the
+      log line says "countdown expired with no input", not "user chose".
+- [ ] H4. Restart again and move the mouse: the countdown stops and the
+      chooser waits for a real choice.
+- [ ] H5. No terminal window anywhere for the tray: the icon is by the clock
+      and Task Manager shows Winmarchy.Chooser.exe with a --tray command
+      line, not a powershell.exe.
+- [ ] H6. Tray actions (swap both ways, next theme, chooser, tutorial,
+      repair) open no console window; Keybindings and Theme menu open a
+      real, visible terminal on purpose.
+- [ ] H7. Re-run setup: exactly one tray icon afterwards (the old one is
+      stopped, the new one takes over).
+- [ ] H8. After setup, the desktop carries no new icons from the app
+      installers and none from Winmarchy. Anything setup could not remove
+      from the shared desktop was named in a warning.

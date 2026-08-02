@@ -50,21 +50,10 @@ Invoke-WinmarchyUninstallStep -Description 'remove the chooser and tray Run keys
 }
 
 # 3. The running tray icon, if there is one: leaving it up would keep a
-# PowerShell process alive pointing at files that are about to disappear.
+# process alive pointing at files that are about to disappear. Covers both
+# hosts, the chooser exe (--tray) and the PowerShell fallback.
 Invoke-WinmarchyUninstallStep -Description 'close the notification area icon' -Action {
-    if (Test-WinmarchyIsWindows) {
-        foreach ($process in @(Get-Process -Name 'powershell' -ErrorAction SilentlyContinue)) {
-            $commandLine = ''
-            try {
-                $commandLine = [string](Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId = ' + $process.Id) -ErrorAction SilentlyContinue).CommandLine
-            } catch {
-                $commandLine = ''
-            }
-            if ($commandLine -like '*tray.ps1*' -and $commandLine -like '*winmarchy*') {
-                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            }
-        }
-    }
+    Stop-WinmarchyTrayProcesses
 }
 
 # 4. Start menu and desktop shortcuts.

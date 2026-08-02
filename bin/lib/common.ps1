@@ -847,7 +847,12 @@ function Set-WinmarchyTaskbarAutoHide {
     }
     $data2 = New-Object Winmarchy.AppBarData
     $data2.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($data2)
-    $data2.lParam = [IntPtr]$newState
+    # Through int64 first: Windows PowerShell 5.1 cannot convert an unsigned
+    # integer to IntPtr ("Cannot convert the "1" value of type System.UInt64
+    # to type System.IntPtr"), and $newState is uint64 from the bit maths
+    # above. PowerShell 7 converts it fine, which is exactly how this crashed
+    # only on the real machine (FLAGS.md FLAG-26).
+    $data2.lParam = [IntPtr][int64]$newState
     # ABM_SETSTATE = 0xA.
     $null = [Winmarchy.NativeMethods]::SHAppBarMessage(10, [ref]$data2)
     Write-WinmarchyLog -Message ('taskbar auto-hide set to ' + $Enabled)
@@ -1561,6 +1566,138 @@ function Test-WinmarchyNerdFontInstalled {
 }
 
 # ---------------------------------------------------------------------------
+# Desktop shortcut hygiene
+# ---------------------------------------------------------------------------
+
+function Get-WinmarchyDesktopDirs {
+    # The user's desktop and the shared one. Machine-wide installers (MSIs)
+    # drop their shortcuts on the shared desktop.
+    $dirs = @()
+    if (Test-WinmarchyIsWindows) {
+        $userDesktop = [System.Environment]::GetFolderPath('Desktop')
+        if ($userDesktop) { $dirs = $dirs + $userDesktop }
+        $commonDesktop = [System.Environment]::GetFolderPath('CommonDesktopDirectory')
+        if ($commonDesktop) { $dirs = $dirs + $commonDesktop }
+    } elseif ($env:WINMARCHY_DESKTOP_DIRS) {
+        # Test hook: a semicolon-separated list of directories.
+        $dirs = @($env:WINMARCHY_DESKTOP_DIRS -split ';' | Where-Object { $_ })
+    }
+    # Plain return, not the ", $x" wrap: callers use @(...) and foreach, and
+    # wrapping an EMPTY array gives them one element holding an empty array.
+    return $dirs
+}
+
+function Get-WinmarchyDesktopShortcutSnapshot {
+    # Full paths of every .lnk currently on the desktops. Taken before the
+    # winget installs so anything that appears afterwards is attributable.
+    $shortcuts = @()
+    foreach ($dir in (Get-WinmarchyDesktopDirs)) {
+        if (-not (Test-Path $dir)) { continue }
+        foreach ($file in @(Get-ChildItem -Path $dir -Filter '*.lnk' -File -ErrorAction SilentlyContinue)) {
+            $shortcuts = $shortcuts + $file.FullName
+        }
+    }
+    return $shortcuts
+}
+
+function Remove-WinmarchyNewDesktopShortcuts {
+    # Removes desktop shortcuts that appeared since the snapshot: the icons
+    # the app installers drop, which the user did not ask for. Anything that
+    # cannot be removed (the shared desktop needs admin) is returned so the
+    # caller can say so instead of failing silently.
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Snapshot)
+    $removed = @()
+    $stuck = @()
+    foreach ($dir in (Get-WinmarchyDesktopDirs)) {
+        if (-not (Test-Path $dir)) { continue }
+        foreach ($file in @(Get-ChildItem -Path $dir -Filter '*.lnk' -File -ErrorAction SilentlyContinue)) {
+            if ($Snapshot -contains $file.FullName) { continue }
+            try {
+                Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop
+                $removed = $removed + $file.FullName
+                Write-WinmarchyLog -Message ('removed installer desktop shortcut ' + $file.FullName)
+            } catch {
+                $stuck = $stuck + $file.FullName
+                Write-WinmarchyLog -Message ('could not remove desktop shortcut ' + $file.FullName + ': ' + $_.Exception.Message) -Level 'WARN'
+            }
+        }
+    }
+    return [pscustomobject]@{ Removed = $removed; Stuck = $stuck }
+}
+
+# ---------------------------------------------------------------------------
+# Tray host resolution
+# ---------------------------------------------------------------------------
+
+function Get-WinmarchyTrayCommand {
+    # How the notification area icon should be started on this machine.
+    # The chooser exe hosts it when present: a WinExe has no console, so
+    # Windows Terminal (the Windows 11 default terminal, which does not
+    # honour hidden-console requests; microsoft/terminal issues 12570 and
+    # 15311) has nothing to keep open. Without the exe, the PowerShell
+    # script host is the fallback, terminal window and all.
+    $chooserExe = Get-WinmarchyChooserExePath
+    if (Test-Path $chooserExe) {
+        return [pscustomobject]@{
+            FilePath     = $chooserExe
+            ArgumentList = @('--tray')
+            RunKeyValue  = ('"' + $chooserExe + '" --tray')
+            Host         = 'exe'
+        }
+    }
+    $trayScript = Join-Path (Join-Path (Get-WinmarchyHome) 'bin') 'tray.ps1'
+    $powershellExe = Get-WinmarchyPowerShellExe
+    return [pscustomobject]@{
+        FilePath     = $powershellExe
+        ArgumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"' + $trayScript + '"'))
+        RunKeyValue  = ('"' + $powershellExe + '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $trayScript + '"')
+        Host         = 'powershell'
+    }
+}
+
+function Stop-WinmarchyTrayProcesses {
+    # Stops any running tray icon, whichever host holds it. Needed on
+    # upgrade (the old icon holds the single-instance mutex, so the new one
+    # would exit immediately) and on uninstall.
+    if (-not (Test-WinmarchyIsWindows)) { return }
+    foreach ($process in @(Get-Process -Name 'powershell' -ErrorAction SilentlyContinue)) {
+        $commandLine = ''
+        try {
+            $commandLine = [string](Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId = ' + $process.Id) -ErrorAction SilentlyContinue).CommandLine
+        } catch {
+            $commandLine = ''
+        }
+        if ($commandLine -like '*tray.ps1*' -and $commandLine -like '*winmarchy*') {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Write-WinmarchyLog -Message ('stopped the PowerShell-hosted tray (pid ' + $process.Id + ')')
+        }
+    }
+    foreach ($process in @(Get-Process -Name 'Winmarchy.Chooser' -ErrorAction SilentlyContinue)) {
+        $commandLine = ''
+        try {
+            $commandLine = [string](Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId = ' + $process.Id) -ErrorAction SilentlyContinue).CommandLine
+        } catch {
+            $commandLine = ''
+        }
+        if ($commandLine -like '*--tray*') {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Write-WinmarchyLog -Message ('stopped the exe-hosted tray (pid ' + $process.Id + ')')
+        }
+    }
+}
+
+function Start-WinmarchyTrayHost {
+    # Starts the icon now, in this session, using whichever host this
+    # machine has. (Named Host to stay clear of Start-WinmarchyTray in
+    # tray.ps1, which IS the icon's message loop.)
+    Assert-WinmarchyWindows -Operation 'Tray launch'
+    $command = Get-WinmarchyTrayCommand
+    Write-WinmarchyLog -Message ('starting the tray via ' + $command.Host)
+    $null = Start-Process -FilePath $command.FilePath -ArgumentList $command.ArgumentList -WindowStyle Hidden
+    return $command.Host
+}
+
+# ---------------------------------------------------------------------------
 # winget outcomes
 # ---------------------------------------------------------------------------
 
@@ -1696,14 +1833,12 @@ function Start-WinmarchyChooser {
     if (-not $payload.Ok) {
         throw ('The chooser is not installed properly (missing: ' + ($payload.Missing -join ', ') + '). Re-run install.ps1 with the .NET 8 SDK present, or swap with "winmarchy mode omarchy".')
     }
-    $argumentList = @()
+    # --show: a person asked for this, so the "do not ask at login" flag must
+    # not swallow it into a silent jump to the last mode.
+    $argumentList = @('--show')
     if ($Plain) { $argumentList = $argumentList + '--plain' }
     Write-WinmarchyLog -Message ('launching the chooser: ' + $payload.ExePath)
-    if ($argumentList.Count -gt 0) {
-        $process = Start-Process -FilePath $payload.ExePath -ArgumentList $argumentList -PassThru
-    } else {
-        $process = Start-Process -FilePath $payload.ExePath -PassThru
-    }
+    $process = Start-Process -FilePath $payload.ExePath -ArgumentList $argumentList -PassThru
     if ($Wait) { $process.WaitForExit() }
     return $process
 }

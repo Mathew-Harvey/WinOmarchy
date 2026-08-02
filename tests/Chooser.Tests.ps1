@@ -78,6 +78,34 @@ Describe 'Never shows nothing' {
         $source | Should -Match 'ShutdownMode\.OnLastWindowClose'
     }
 
+    It 'gives the login countdown 20 seconds, in both faces' {
+        # 5 seconds auto-continued to the last mode before the user had taken
+        # their hand off the keyboard, which read as "no chooser appeared at
+        # login". Input still cancels it instantly.
+        $main = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'MainWindow.xaml.cs'))
+        $main | Should -Match '\["countdownSeconds"\]\s*=\s*20'
+        $plain = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'FallbackWindow.xaml.cs'))
+        $plain | Should -Match '_secondsLeft\s*=\s*20'
+    }
+
+    It 'logs a countdown expiry differently from a click' {
+        # Both used to log "user chose", which made the auto-continue at
+        # login indistinguishable from a real choice in the log.
+        $appJs = [System.IO.File]::ReadAllText((Join-Path (Join-Path $script:chooserDir 'ui') 'app.js'))
+        $appJs | Should -Match "auto:\s*auto\s*===\s*true"
+        $main = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'MainWindow.xaml.cs'))
+        $main | Should -Match 'countdown expired'
+        $plain = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'FallbackWindow.xaml.cs'))
+        $plain | Should -Match 'countdown expired'
+    }
+
+    It 'hosts the tray with no console when asked' {
+        $program = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'Program.cs'))
+        $program | Should -Match 'TrayApplet\.Run\(\)'
+        $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
+        $applet | Should -Match 'NotifyIcon'
+    }
+
     It 'can run on a newer .NET than it was built for' {
         # A net8.0 app with only a newer Desktop Runtime installed refuses to
         # start, and a WinExe failing that way is silent at login.

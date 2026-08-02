@@ -8,6 +8,7 @@
   var lastMode = 'win11';
   var selectedMode = null;
   var countdownRemaining = 5;
+  var countdownTotal = 5;
   var countdownTimer = null;
   var countdownCancelled = false;
   var choiceSent = false;
@@ -55,14 +56,17 @@
     });
   }
 
-  function choose(mode) {
+  function choose(mode, auto) {
     if (choiceSent) { return; }
     choiceSent = true;
     cancelCountdown();
     document.body.classList.add('fading');
     window.setTimeout(function () {
       if (host) {
-        host.postMessage({ type: 'choose', mode: mode });
+        // auto distinguishes "the countdown expired" from "the user clicked"
+        // in the log, because at login the two look identical from outside
+        // and diagnosing that difference once took a day.
+        host.postMessage({ type: 'choose', mode: mode, auto: auto === true });
       }
     }, 380);
   }
@@ -72,16 +76,17 @@
     if (countdownRemaining <= 0) {
       countNum.textContent = '0';
       ring.style.strokeDashoffset = '119.38';
-      choose(lastMode);
+      choose(lastMode, true);
       return;
     }
     countNum.textContent = String(countdownRemaining);
     countdownText.textContent = 'Continuing to ' + modeLabel(lastMode) + ' in ' + countdownRemaining;
-    var fraction = countdownRemaining / 5;
+    var fraction = countdownRemaining / countdownTotal;
     ring.style.strokeDashoffset = String(119.38 * (1 - fraction));
   }
 
   function startCountdown(seconds) {
+    countdownTotal = seconds;
     countdownRemaining = seconds;
     countNum.textContent = String(seconds);
     countdownText.textContent = 'Continuing to ' + modeLabel(lastMode) + ' in ' + seconds;

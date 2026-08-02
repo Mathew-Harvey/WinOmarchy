@@ -162,6 +162,10 @@ if ($SkipApps) {
 } elseif (-not (Test-WinmarchyIsWindows)) {
     Write-Output 'install: winget installs skipped (not on Windows)'
 } else {
+    # Snapshot the desktops first: several of the app installers drop a
+    # shortcut icon there, the user did not ask for any of them, and the only
+    # way to tell theirs from the user's own is to know what was there before.
+    $script:desktopSnapshot = @(Get-WinmarchyDesktopShortcutSnapshot)
     foreach ($package in $wingetPackages) {
         $packageId = $package.id
         $packagePurpose = $package.purpose
@@ -204,6 +208,17 @@ if ($SkipApps) {
         $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         $env:Path = $machinePath + ';' + $userPath
+    }
+    Invoke-WinmarchyInstallStep -Description 'remove the desktop icons the app installers dropped' -Action {
+        $cleanup = Remove-WinmarchyNewDesktopShortcuts -Snapshot $script:desktopSnapshot
+        foreach ($path in $cleanup.Removed) {
+            Write-Output ('install:   removed ' + (Split-Path -Leaf $path))
+        }
+        if ($cleanup.Stuck.Count -gt 0) {
+            $names = @()
+            foreach ($path in $cleanup.Stuck) { $names = $names + (Split-Path -Leaf $path) }
+            Add-WinmarchyInstallWarning ('These installer shortcuts are on the shared desktop, which needs admin rights to clean: ' + ($names -join ', ') + '. Delete them by hand if unwanted.')
+        }
     }
 }
 
@@ -323,38 +338,41 @@ if ((Test-WinmarchyIsWindows) -and (-not $SkipChooser)) {
 # Shortcuts and wallpapers are wanted whether or not the chooser was built:
 # the Start menu entries are the swap path when there is no login chooser.
 if (Test-WinmarchyIsWindows) {
-    Invoke-WinmarchyInstallStep -Description 'create the Start menu and desktop shortcuts' -Action {
+    Invoke-WinmarchyInstallStep -Description 'create the Start menu shortcuts' -Action {
         $startDir = Join-Path $env:APPDATA (Join-Path 'Microsoft' (Join-Path 'Windows' (Join-Path 'Start Menu' (Join-Path 'Programs' 'Winmarchy'))))
         $null = New-Item -ItemType Directory -Path $startDir -Force
         $dispatcher = Join-Path (Join-Path $installRoot 'bin') 'winmarchy.ps1'
         $powershellExe = Get-WinmarchyPowerShellExe
         $shell = New-Object -ComObject WScript.Shell
+        # No desktop copies: the user asked for a clean desktop, and the tray
+        # icon plus these entries cover every path in. An earlier install put
+        # two swap shortcuts on the desktop; take them back off.
+        $desktopDir = [System.Environment]::GetFolderPath('Desktop')
+        if ($desktopDir) {
+            foreach ($leftover in @('Swap to Omarchy mode', 'Swap to Windows 11 mode')) {
+                $link = Join-Path $desktopDir ($leftover + '.lnk')
+                if (Test-Path $link) { Remove-Item -Path $link -Force -ErrorAction SilentlyContinue }
+            }
+        }
         $shortcuts = @(
-            @{ name = 'Swap to Omarchy mode'; args = 'mode omarchy'; hidden = $true; desktop = $true },
-            @{ name = 'Swap to Windows 11 mode'; args = 'mode win11'; hidden = $true; desktop = $true },
-            @{ name = 'Winmarchy Menu'; args = 'menu'; hidden = $false; desktop = $false },
-            @{ name = 'Winmarchy Chooser'; args = 'chooser'; hidden = $true; desktop = $false },
-            @{ name = 'Winmarchy Tray Icon'; args = 'tray'; hidden = $true; desktop = $false },
-            @{ name = 'Restore Windows 11 (repair)'; args = 'mode win11 -Repair'; hidden = $true; desktop = $false }
+            @{ name = 'Swap to Omarchy mode'; args = 'mode omarchy'; hidden = $true },
+            @{ name = 'Swap to Windows 11 mode'; args = 'mode win11'; hidden = $true },
+            @{ name = 'Winmarchy Menu'; args = 'menu'; hidden = $false },
+            @{ name = 'Winmarchy Chooser'; args = 'chooser'; hidden = $true },
+            @{ name = 'Winmarchy Tray Icon'; args = 'tray'; hidden = $true },
+            @{ name = 'Restore Windows 11 (repair)'; args = 'mode win11 -Repair'; hidden = $true }
         )
         # WScript.Shell WindowStyle: 1 is normal, 7 is minimised. A swap needs
         # no console, so the shortcuts that do not print anything useful start
         # minimised rather than throwing a window at the user.
         foreach ($item in $shortcuts) {
-            $targets = @(Join-Path $startDir ($item.name + '.lnk'))
-            if ($item.desktop) {
-                $desktopDir = [System.Environment]::GetFolderPath('Desktop')
-                if ($desktopDir) { $targets = $targets + (Join-Path $desktopDir ($item.name + '.lnk')) }
-            }
-            foreach ($target in $targets) {
-                $link = $shell.CreateShortcut($target)
-                $link.TargetPath = $powershellExe
-                $link.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $dispatcher + '" ' + $item.args
-                $link.WorkingDirectory = $installRoot
-                $link.Description = 'Winmarchy: ' + $item.name
-                if ($item.hidden) { $link.WindowStyle = 7 }
-                $link.Save()
-            }
+            $link = $shell.CreateShortcut((Join-Path $startDir ($item.name + '.lnk')))
+            $link.TargetPath = $powershellExe
+            $link.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $dispatcher + '" ' + $item.args
+            $link.WorkingDirectory = $installRoot
+            $link.Description = 'Winmarchy: ' + $item.name
+            if ($item.hidden) { $link.WindowStyle = 7 }
+            $link.Save()
         }
     }
 
@@ -365,16 +383,24 @@ if (Test-WinmarchyIsWindows) {
         }
     } else {
         Invoke-WinmarchyInstallStep -Description 'add the Winmarchy icon to the notification area at login' -Action {
-            $trayScript = Join-Path (Join-Path $installRoot 'bin') 'tray.ps1'
-            $command = '"' + (Get-WinmarchyPowerShellExe) + '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $trayScript + '"'
-            Set-WinmarchyRunKey -Name 'WinmarchyTray' -Command $command
+            # The chooser exe hosts the icon when it exists: a WinExe has no
+            # console, so no terminal window can be left open for it. The
+            # PowerShell host is the fallback, and on Windows 11 its console
+            # WILL stay visible, because Windows Terminal (the default
+            # terminal) does not honour hidden-console requests
+            # (microsoft/terminal issues 12570 and 15311).
+            $trayCommand = Get-WinmarchyTrayCommand
+            if ($trayCommand.Host -eq 'powershell') {
+                Add-WinmarchyInstallWarning 'The chooser exe is not present, so the tray icon runs under PowerShell and Windows will show a terminal window for it. Build the chooser (install the .NET 8 SDK and re-run setup) to lose the window.'
+            }
+            Set-WinmarchyRunKey -Name 'WinmarchyTray' -Command $trayCommand.RunKeyValue
         }
         Invoke-WinmarchyInstallStep -Description 'start the notification area icon now' -Action {
             # So the swap is reachable immediately, without signing out first.
-            $trayScript = Join-Path (Join-Path $installRoot 'bin') 'tray.ps1'
-            $null = Start-Process -FilePath (Get-WinmarchyPowerShellExe) -ArgumentList @(
-                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"' + $trayScript + '"')
-            ) -WindowStyle Hidden
+            # An icon from an earlier install holds the single-instance mutex,
+            # so it has to go before the fresh one can take over.
+            Stop-WinmarchyTrayProcesses
+            $null = Start-WinmarchyTrayHost
         }
     }
 
@@ -474,7 +500,7 @@ foreach ($entry in $topKeys) {
 Write-Output ''
 Write-Output '  three ways to swap, right now, without signing out:'
 Write-Output '    the Winmarchy icon by the clock (left or right click it)'
-Write-Output '    the "Swap to Omarchy mode" shortcut on your desktop'
+Write-Output '    the Winmarchy folder in the Start menu (under All apps)'
 Write-Output '    winmarchy mode omarchy'
 Write-Output ''
 Write-Output '  the chooser appears at your next login. To see it now: winmarchy chooser'
