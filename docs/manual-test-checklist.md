@@ -248,3 +248,6 @@ during setup, or run the installer with a bad winget source.
 - [ ] I11. Desktop icons: hidden in Omarchy mode, back in Windows 11 mode,
       across five swaps in a row. Then kill Explorer mid-omarchy, restart
       it, swap to Windows 11: icons return (the live read self-heals).
+- [ ] I12. After a swap to Omarchy, the log shows "win key guard: armed",
+      and after a few bare Windows key taps a "masked N bare tap(s)" line.
+      doctor's "tray running" row says the chooser exe hosts the icon.

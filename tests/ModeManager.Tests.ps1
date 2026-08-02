@@ -487,6 +487,7 @@ Describe 'doctor' {
         Mock Test-WinmarchyWebView2Runtime { $true }
         Mock Test-WinmarchyStartupDisabledByWindows { $false }
         Mock Test-WinmarchyNerdFontInstalled { $true }
+        Mock Get-WinmarchyTrayStatus { 'exe' }
         Mock Resolve-WinmarchyBindingCriticalApp { 'C:\fake\tool.exe' }
         Mock Get-WinmarchyRunKeyValue { ('"' + $script:fakeChooserExe + '"') }
     }
@@ -506,7 +507,7 @@ Describe 'doctor' {
     It 'checks every link in the chain between install and a chooser at login' {
         $json = Invoke-WinmarchyDoctor -Json
         $checks = @(@($json | ConvertFrom-Json) | ForEach-Object { $_.check })
-        foreach ($required in @('chooser installed', 'run key autostart', 'startup entry enabled', 'webview2 runtime', 'tray autostart')) {
+        foreach ($required in @('chooser installed', 'run key autostart', 'startup entry enabled', 'webview2 runtime', 'tray autostart', 'tray running')) {
             $checks | Should -Contain $required
         }
     }

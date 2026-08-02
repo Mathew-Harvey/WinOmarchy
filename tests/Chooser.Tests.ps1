@@ -114,14 +114,20 @@ Describe 'Never shows nothing' {
         $guard | Should -Match 'WH_KEYBOARD_LL|WhKeyboardLl'
         $guard | Should -Match 'omarchy'
         $guard | Should -Match 'SendInput'
-        # The two defects the first version shipped: a text sniff of the
-        # state file that never matched 5.1's two-space JSON, and an
-        # injection at key-up time that queued behind the in-flight up.
+        # The three defects earlier versions shipped: a text sniff of the
+        # state file that never matched 5.1's two-space JSON; an injection at
+        # key-up time that queued behind the in-flight up; and file reads
+        # INSIDE the hook callback, which can blow the LowLevelHooksTimeout
+        # and get the hook silently removed for the whole session.
         $guard | Should -Match 'WinmarchyState\.Load\(\)'
         $guard | Should -Not -Match 'ReadAllText\(Paths\.StateFile\)'
+        $guard | Should -Match 'volatile bool _omarchyActive'
+        $callback = ($guard -split 'private static IntPtr Callback')[1]
+        $callback | Should -Not -Match 'WinmarchyState'
+        $callback | Should -Not -Match 'Paths\.Log'
         # Written with character classes so the 5.1 compat grep does not
         # mistake the C# operators inside this pattern for PowerShell ones.
-        $guard | Should -Match ('WmKeydown [|]{2} message == WmSyskeydown\).{1,4}OmarchyModeActive')
+        $guard | Should -Match ('WmKeydown [|]{2} message == WmSyskeydown')
         $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
         $applet | Should -Match 'WinKeyGuard\.Install\(\)'
         $applet | Should -Match 'WinKeyGuard\.Uninstall\(\)'
