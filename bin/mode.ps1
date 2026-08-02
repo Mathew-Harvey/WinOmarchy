@@ -28,6 +28,20 @@ function Enter-WinmarchyOmarchyMode {
         Set-WinmarchyStateValue -Name 'savedAppsUseLightTheme' -Value $appsTheme.AppsUseLightTheme
         Set-WinmarchyStateValue -Name 'savedSystemUsesLightTheme' -Value $appsTheme.SystemUsesLightTheme
     }
+    # Same again for the lock screen, but only when the user opted in: without
+    # a capture there is nothing to restore, so theme-set is told to leave it
+    # alone rather than change something it cannot undo.
+    if ($state.lockScreenEnabled -and (-not $state.savedLockScreen)) {
+        $currentLockScreen = Get-WinmarchyCurrentLockScreenImage
+        if ($currentLockScreen) {
+            Set-WinmarchyStateValue -Name 'savedLockScreen' -Value $currentLockScreen
+            Write-WinmarchyLog -Message ('enter-omarchy: captured lock screen ' + $currentLockScreen)
+        } else {
+            Set-WinmarchyStateValue -Name 'lockScreenEnabled' -Value $false
+            Write-WinmarchyLog -Message 'enter-omarchy: the current lock screen is not a file that can be put back (Spotlight or a slideshow), so lock screen theming stays off' -Level 'WARN'
+            Write-Warning 'Lock screen theming switched off: Windows is showing Spotlight or a slideshow, which Winmarchy cannot restore afterwards. Set a picture in Settings > Personalisation > Lock screen first, then run: winmarchy lockscreen on'
+        }
+    }
 
     try {
         # Step: start GlazeWM.
@@ -74,6 +88,9 @@ function Enter-WinmarchyOmarchyMode {
         $freshState = Get-WinmarchyState
         Add-WinmarchyJournalEntry -Action 'wallpaper-set' -Data @{ previous = $freshState.savedWallpaper }
         Add-WinmarchyJournalEntry -Action 'apps-theme-set' -Data @{ previousApps = $freshState.savedAppsUseLightTheme; previousSystem = $freshState.savedSystemUsesLightTheme }
+        if ($freshState.lockScreenEnabled -and $freshState.savedLockScreen) {
+            Add-WinmarchyJournalEntry -Action 'lock-screen-set' -Data @{ previous = $freshState.savedLockScreen }
+        }
         Set-WinmarchyTheme -Name $freshState.theme -AsOmarchy
 
         # Health check: GlazeWM process alive AND its IPC socket connectable
@@ -172,6 +189,16 @@ function Enter-WinmarchyWin11Mode {
         Write-WinmarchyLog -Message ('enter-win11: wallpaper restore failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
+    # Step: restore the captured lock screen picture.
+    try {
+        if ($state.savedLockScreen) {
+            Set-WinmarchyLockScreenImage -Path $state.savedLockScreen
+        }
+    } catch {
+        $failures = $failures + ('lock-screen: ' + $_.Exception.Message)
+        Write-WinmarchyLog -Message ('enter-win11: lock screen restore failed: ' + $_.Exception.Message) -Level 'ERROR'
+    }
+
     # Step: restore the captured light/dark app mode.
     try {
         if ($null -ne $state.savedAppsUseLightTheme) {
@@ -226,6 +253,7 @@ function Enter-WinmarchyWin11Mode {
     Set-WinmarchyStateValue -Name 'savedWallpaper' -Value $null
     Set-WinmarchyStateValue -Name 'savedAppsUseLightTheme' -Value $null
     Set-WinmarchyStateValue -Name 'savedSystemUsesLightTheme' -Value $null
+    Set-WinmarchyStateValue -Name 'savedLockScreen' -Value $null
     # savedWtColorScheme and savedWtFontFace are deliberately kept: they record
     # the terminal as it was before Winmarchy ever touched it, and the restore
     # above has just put those values back, so the next Omarchy entry would
@@ -258,6 +286,7 @@ function Invoke-WinmarchyRepair {
                     'icons-hidden' { Set-WinmarchyDesktopIcons -Visible ([bool]$entry.data.previous) }
                     'wallpaper-set' { Set-WinmarchyWallpaper -Path $entry.data.previous }
                     'apps-theme-set' { Set-WinmarchyAppsTheme -AppsUseLightTheme $entry.data.previousApps -SystemUsesLightTheme $entry.data.previousSystem }
+                    'lock-screen-set' { Set-WinmarchyLockScreenImage -Path $entry.data.previous }
                     default { Write-WinmarchyLog -Message ('repair: unknown journal action ' + $entry.action) -Level 'WARN' }
                 }
             } catch {
@@ -274,6 +303,62 @@ function Invoke-WinmarchyRepair {
     } else {
         Enter-WinmarchyWin11Mode
     }
+}
+
+function Set-WinmarchyLockScreenMode {
+    # "winmarchy lockscreen on|off|status". Opt-in, because a themed lock
+    # screen is the one Winmarchy surface that cannot be restored exactly:
+    # switching it back puts the original picture back, but a machine that was
+    # on Windows Spotlight or a slideshow stays on "Picture" afterwards. So
+    # turning it on requires a picture that can be captured first, and saying
+    # so plainly is part of the deal.
+    [CmdletBinding()]
+    param([string]$Action = 'status')
+
+    $state = Get-WinmarchyState
+    if ($Action -eq 'on') {
+        Assert-WinmarchyWindows -Operation 'Lock screen theming'
+        $current = Get-WinmarchyCurrentLockScreenImage
+        if (-not $current) {
+            throw 'Windows is showing Spotlight or a slideshow on the lock screen, and Winmarchy cannot put those back afterwards. Open Settings > Personalisation > Lock screen, choose Picture, then run this again.'
+        }
+        Set-WinmarchyStateValue -Name 'savedLockScreen' -Value $current
+        Set-WinmarchyStateValue -Name 'lockScreenEnabled' -Value $true
+        Write-Output ('Lock screen theming on. Your current picture is remembered: ' + $current)
+        if ($state.mode -eq 'omarchy') {
+            Set-WinmarchyTheme -Name $state.theme
+            Write-Output 'Applied now. Press Win+L to see it.'
+        } else {
+            Write-Output 'It applies the next time you enter Omarchy mode, and is put back when you leave it.'
+        }
+        return
+    }
+
+    if ($Action -eq 'off') {
+        Assert-WinmarchyWindows -Operation 'Lock screen theming'
+        if ($state.savedLockScreen) {
+            try {
+                Set-WinmarchyLockScreenImage -Path $state.savedLockScreen
+                Write-Output ('Lock screen put back to ' + $state.savedLockScreen)
+            } catch {
+                Write-Warning ('Could not put the lock screen back: ' + $_.Exception.Message)
+            }
+        }
+        Set-WinmarchyStateValue -Name 'lockScreenEnabled' -Value $false
+        Set-WinmarchyStateValue -Name 'savedLockScreen' -Value $null
+        Write-Output 'Lock screen theming off; Winmarchy will not touch it again.'
+        return
+    }
+
+    $flag = 'off'
+    if ($state.lockScreenEnabled) { $flag = 'on' }
+    Write-Output ('lock screen theming: ' + $flag)
+    if ($state.savedLockScreen) {
+        Write-Output ('remembered original:  ' + $state.savedLockScreen)
+    }
+    Write-Output 'The sign-in screen uses the lock screen picture, so this themes both.'
+    Write-Output 'Choosing a mode from the sign-in screen itself is not possible without an'
+    Write-Output 'administrator-installed credential provider, which Winmarchy will not do.'
 }
 
 function Get-WinmarchyStatus {
@@ -350,7 +435,47 @@ function Invoke-WinmarchyDoctor {
         $rows = $rows + (New-DoctorRow 'wt settings found' $false 'Windows Terminal has never run; theme skips it')
     }
 
-    $rows = $rows + (New-DoctorRow 'run key autostart' (Test-WinmarchyRunKeyPresent) 'HKCU Run key for the chooser')
+    # The chooser chain, end to end. Everything between "the installer said it
+    # worked" and "something appears at login" is checked separately, because a
+    # break anywhere in it used to look identical: a login where nothing
+    # happened.
+    $payload = Test-WinmarchyChooserPayload
+    $payloadDetail = $payload.ExePath
+    if (-not $payload.Ok) { $payloadDetail = 'missing: ' + ($payload.Missing -join ', ') }
+    $rows = $rows + (New-DoctorRow 'chooser installed' $payload.Ok $payloadDetail)
+
+    $runKeyValue = Get-WinmarchyRunKeyValue
+    $runKeyOk = $false
+    $runKeyDetail = 'not set; the chooser will not appear at login'
+    if ($runKeyValue) {
+        $runKeyDetail = $runKeyValue
+        $runKeyTarget = $runKeyValue.Trim('"')
+        $runKeyOk = (Test-Path $runKeyTarget)
+        if (-not $runKeyOk) { $runKeyDetail = $runKeyValue + ' (that file does not exist)' }
+    }
+    $rows = $rows + (New-DoctorRow 'run key autostart' $runKeyOk $runKeyDetail)
+
+    $startupDisabled = Test-WinmarchyStartupDisabledByWindows
+    $startupDetail = 'enabled in Settings > Apps > Startup'
+    if ($startupDisabled) { $startupDetail = 'switched OFF in Settings > Apps > Startup; turn Winmarchy back on there' }
+    $rows = $rows + (New-DoctorRow 'startup entry enabled' (-not $startupDisabled) $startupDetail)
+
+    $hasWebView2 = Test-WinmarchyWebView2Runtime
+    $webViewDetail = 'Evergreen runtime found'
+    if (-not $hasWebView2) { $webViewDetail = 'not found; the chooser falls back to its plain window. Install from https://developer.microsoft.com/microsoft-edge/webview2/' }
+    $rows = $rows + (New-DoctorRow 'webview2 runtime' $hasWebView2 $webViewDetail)
+
+    $trayValue = Get-WinmarchyRunKeyValue -Name 'WinmarchyTray'
+    $trayDetail = 'not set; no Winmarchy icon in the notification area'
+    if ($trayValue) { $trayDetail = $trayValue }
+    $rows = $rows + (New-DoctorRow 'tray autostart' ([bool]$trayValue) $trayDetail)
+
+    if ($state.lockScreenEnabled) {
+        $lockDetail = 'on, original captured: ' + $state.savedLockScreen
+        $lockOk = [bool]$state.savedLockScreen
+        if (-not $lockOk) { $lockDetail = 'on, but no original captured yet (captured on entering Omarchy mode)' }
+        $rows = $rows + (New-DoctorRow 'lock screen theming' $lockOk $lockDetail)
+    }
 
     if ($Json) {
         Write-Output ($rows | ConvertTo-Json -Depth 4)

@@ -43,20 +43,48 @@ Invoke-WinmarchyUninstallStep -Description 'return to Windows 11 mode' -Action {
     Enter-WinmarchyWin11Mode -ForceRepair
 }
 
-# 2. Autostart.
-Invoke-WinmarchyUninstallStep -Description 'remove the chooser Run key' -Action {
+# 2. Autostart, for both the chooser and the notification area icon.
+Invoke-WinmarchyUninstallStep -Description 'remove the chooser and tray Run keys' -Action {
     Remove-WinmarchyRunKey
+    Remove-WinmarchyRunKey -Name 'WinmarchyTray'
 }
 
-# 3. Start menu shortcuts.
-Invoke-WinmarchyUninstallStep -Description 'remove the Start menu shortcuts' -Action {
+# 3. The running tray icon, if there is one: leaving it up would keep a
+# PowerShell process alive pointing at files that are about to disappear.
+Invoke-WinmarchyUninstallStep -Description 'close the notification area icon' -Action {
+    if (Test-WinmarchyIsWindows) {
+        foreach ($process in @(Get-Process -Name 'powershell' -ErrorAction SilentlyContinue)) {
+            $commandLine = ''
+            try {
+                $commandLine = [string](Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId = ' + $process.Id) -ErrorAction SilentlyContinue).CommandLine
+            } catch {
+                $commandLine = ''
+            }
+            if ($commandLine -like '*tray.ps1*' -and $commandLine -like '*winmarchy*') {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
+# 4. Start menu and desktop shortcuts.
+Invoke-WinmarchyUninstallStep -Description 'remove the Start menu and desktop shortcuts' -Action {
     if ($env:APPDATA) {
         $startDir = Join-Path $env:APPDATA (Join-Path 'Microsoft' (Join-Path 'Windows' (Join-Path 'Start Menu' (Join-Path 'Programs' 'Winmarchy'))))
         if (Test-Path $startDir) { Remove-Item -Path $startDir -Recurse -Force }
     }
+    if (Test-WinmarchyIsWindows) {
+        $desktopDir = [System.Environment]::GetFolderPath('Desktop')
+        if ($desktopDir) {
+            foreach ($name in @('Swap to Omarchy mode', 'Swap to Windows 11 mode')) {
+                $link = Join-Path $desktopDir ($name + '.lnk')
+                if (Test-Path $link) { Remove-Item -Path $link -Force }
+            }
+        }
+    }
 }
 
-# 4. PATH entry.
+# 5. PATH entry.
 Invoke-WinmarchyUninstallStep -Description 'remove the bin directory from the user PATH' -Action {
     if (Test-WinmarchyIsWindows) {
         $binDir = Join-Path $installRoot 'bin'
@@ -71,7 +99,7 @@ Invoke-WinmarchyUninstallStep -Description 'remove the bin directory from the us
     }
 }
 
-# 5. Windows Terminal: surgically remove only what Winmarchy added (the
+# 6. Windows Terminal: surgically remove only what Winmarchy added (the
 # Winmarchy schemes and the defaults.colorScheme pointing at one), so any
 # customisation the user made since install survives. The one-time
 # settings.json.winmarchy-bak is left beside the file as a by-hand recovery
@@ -111,7 +139,7 @@ if ($KeepTerminalTheme) {
     }
 }
 
-# 5a. Alacritty: put the user's own config back, or remove Winmarchy's.
+# 6a. Alacritty: put the user's own config back, or remove Winmarchy's.
 Invoke-WinmarchyUninstallStep -Description 'restore the Alacritty config' -Action {
     $alacrittyPath = Get-WinmarchyAlacrittyConfigPath
     if ($alacrittyPath) {
@@ -121,7 +149,7 @@ Invoke-WinmarchyUninstallStep -Description 'restore the Alacritty config' -Actio
     }
 }
 
-# 5b. Cursor: take the Winmarchy colours back out, leaving other settings.
+# 6b. Cursor: take the Winmarchy colours back out, leaving other settings.
 Invoke-WinmarchyUninstallStep -Description 'remove the Winmarchy colours from Cursor' -Action {
     $cursorPath = Get-WinmarchyCursorSettingsPath
     if ($cursorPath) {
@@ -130,7 +158,7 @@ Invoke-WinmarchyUninstallStep -Description 'remove the Winmarchy colours from Cu
     }
 }
 
-# 6. GlazeWM and yasb configs: restore the user's originals from the OLDEST
+# 7. GlazeWM and yasb configs: restore the user's originals from the OLDEST
 # backup (the pre-Winmarchy machine state). Where the manifest records that
 # no file existed before install, the deployed file is removed instead.
 Invoke-WinmarchyUninstallStep -Description 'restore pre-install GlazeWM and yasb configs' -Action {
@@ -169,7 +197,7 @@ Invoke-WinmarchyUninstallStep -Description 'restore pre-install GlazeWM and yasb
     }
 }
 
-# 7. The winmarchy directory itself.
+# 8. The winmarchy directory itself.
 Invoke-WinmarchyUninstallStep -Description ('remove ' + $installRoot) -Action {
     if (-not (Test-Path $installRoot)) { return }
     if ($KeepState) {
@@ -184,7 +212,7 @@ Invoke-WinmarchyUninstallStep -Description ('remove ' + $installRoot) -Action {
     }
 }
 
-# 8. Apps.
+# 9. Apps.
 if ($RemoveApps) {
     if ((Test-WinmarchyIsWindows) -and (Get-Command winget -ErrorAction SilentlyContinue)) {
         foreach ($packageId in @(

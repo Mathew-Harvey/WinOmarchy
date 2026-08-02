@@ -49,20 +49,53 @@ public partial class MainWindow : Window
         // is fine: the page falls back to a flat Win11-style panel.
         CaptureDesktopScreenshot();
 
-        // 20 second health timeout: if WebView2 never renders, fall back.
+        // 20 second health timeout: if WebView2 never renders, hand over to the
+        // plain chooser rather than sitting on a blank fullscreen window.
         _healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
         _healthTimer.Tick += (_, _) =>
         {
             _healthTimer.Stop();
             if (!_healthy)
             {
-                Program.Fallback("webview did not become healthy within 20 seconds");
-                Close();
+                HandOverToPlainChooser("WebView2 did not render within 20 seconds");
             }
         };
         _healthTimer.Start();
 
         Loaded += async (_, _) => await InitializeWebViewAsync();
+    }
+
+    private void HandOverToPlainChooser(string reason)
+    {
+        // The user must always be given a choice. Where this class used to log
+        // a line and close (which looked like nothing happening at login), it
+        // now shows the WebView2-free chooser and closes behind it.
+        if (_choiceMade)
+        {
+            return;
+        }
+        _choiceMade = true;
+        _healthTimer.Stop();
+        try
+        {
+            if (_renderTest)
+            {
+                // No standby UI during the automated render test: the artefact
+                // is the point, so a failure there must stay a failure.
+                Program.Fallback(reason);
+                Close();
+                return;
+            }
+            var plain = new FallbackWindow(_state, reason);
+            plain.Show();
+            plain.Activate();
+        }
+        catch (Exception ex)
+        {
+            // If even plain WPF will not draw, get out of the way entirely.
+            Program.Fallback("plain chooser could not be shown either: " + ex.Message);
+        }
+        Close();
     }
 
     private static void CaptureDesktopScreenshot()
@@ -104,8 +137,8 @@ public partial class MainWindow : Window
             // topmost fullscreen window: fall back and get out of the way.
             WebView.CoreWebView2.ProcessFailed += (_, args) =>
             {
-                Program.Fallback("webview process failed: " + args.ProcessFailedKind);
-                Dispatcher.Invoke(Close);
+                Dispatcher.Invoke(() => HandOverToPlainChooser(
+                    "the WebView2 process failed (" + args.ProcessFailedKind + ")"));
             };
             WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             WebView.CoreWebView2.Settings.IsZoomControlEnabled = false;
@@ -114,8 +147,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Program.Fallback("webview initialisation failed: " + ex.Message);
-            Close();
+            HandOverToPlainChooser("WebView2 would not start: " + ex.Message);
         }
     }
 
@@ -123,8 +155,7 @@ public partial class MainWindow : Window
     {
         if (!e.IsSuccess)
         {
-            Program.Fallback("webview navigation failed: " + e.WebErrorStatus);
-            Close();
+            HandOverToPlainChooser("the chooser page would not load (" + e.WebErrorStatus + ")");
             return;
         }
         _healthy = true;
@@ -160,21 +191,7 @@ public partial class MainWindow : Window
 
     private JsonObject? LoadPalette()
     {
-        try
-        {
-            var themePath = Path.Combine(Paths.ThemesDir, _state.Theme + ".json");
-            if (!File.Exists(themePath))
-            {
-                return null;
-            }
-            var theme = JsonNode.Parse(File.ReadAllText(themePath));
-            return theme?["colors"]?.AsObject().DeepClone().AsObject();
-        }
-        catch (Exception ex)
-        {
-            Paths.Log("palette load failed (page defaults will show): " + ex.Message);
-            return null;
-        }
+        return Palette.LoadJson(_state.Theme);
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)

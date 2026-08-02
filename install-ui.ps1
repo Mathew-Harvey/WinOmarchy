@@ -204,7 +204,8 @@ function Start-WinmarchyWpfWizard {
         'PreviewWs1', 'PreviewWs2', 'PreviewWs3', 'PreviewTileFocused', 'PreviewTileOther',
         'PreviewLine1', 'PreviewLine2', 'PreviewLine3', 'PreviewLine4', 'PreviewLine5', 'PreviewPrompt', 'PreviewCaption',
         'OptApps', 'OptAppsNote', 'OptChooser', 'OptChooserNote',
-        'OptAutostart', 'OptAutostartNote', 'ReviewSummary', 'ReviewPlan',
+        'OptAutostart', 'OptAutostartNote', 'OptTray', 'OptTrayNote',
+        'ReviewSummary', 'ReviewPlan',
         'InstallStatus', 'InstallProgress', 'InstallLog', 'LogScroller',
         'DoneTitle', 'DoneSub', 'DoneWarnings', 'OptEnterNow',
         'FooterNote', 'BtnCancel', 'BtnBack', 'BtnNext'
@@ -298,9 +299,11 @@ function Start-WinmarchyWpfWizard {
 
     # --- components page ---
     $ui.OptApps.IsChecked = $state.Choices.InstallApps
-    $ui.OptAppsNote.Text = ('The ' + (@(Get-WinmarchyWingetPackages).Count) + ' packages Winmarchy uses: the window manager, bar, launcher, terminal, Neovim, the Nerd Font and a handful of command line tools. Per-user, no admin prompt.')
+    $ui.OptAppsNote.Text = ('The ' + (@(Get-WinmarchyWingetPackages).Count) + ' packages Winmarchy uses: the window manager, bar, launcher, terminal, Cursor, the Nerd Font and a handful of command line tools. Per-user, no admin prompt.')
     $ui.OptChooser.IsChecked = $state.Choices.BuildChooser
     $ui.OptAutostart.IsChecked = $state.Choices.Autostart
+    $ui.OptTray.IsChecked = $state.Choices.Tray
+    $ui.OptTrayNote.Text = 'A small Winmarchy icon in the notification area, with the swap, the themes and the keybindings on it. This is the way back to Omarchy that is always in the same place; the Start menu shortcuts get filed under Recommended where they are easy to miss. Desktop shortcuts are created either way.'
 
     foreach ($row in $state.Preflight) {
         if ($row.Name -eq 'winget' -and (-not $row.Pass)) {
@@ -340,6 +343,7 @@ function Start-WinmarchyWpfWizard {
         $state.Choices.InstallApps = [bool]$ui.OptApps.IsChecked
         $state.Choices.BuildChooser = [bool]$ui.OptChooser.IsChecked
         $state.Choices.Autostart = [bool]$ui.OptAutostart.IsChecked
+        $state.Choices.Tray = [bool]$ui.OptTray.IsChecked
         $state.Choices = Resolve-WinmarchyWizardChoices -Choices $state.Choices -Preflight $state.Preflight
     }
 
@@ -529,7 +533,10 @@ function Start-WinmarchyWpfWizard {
             } else {
                 $ui.DoneSub.Text = ('Everything is in place, and your original settings are backed up under ' + (Get-WinmarchyBackupDir) + '.')
                 if ($state.Choices.Autostart) {
-                    $ui.DoneSub.Text = $ui.DoneSub.Text + ' Log out and back in to meet the chooser.'
+                    $ui.DoneSub.Text = $ui.DoneSub.Text + ' The chooser appears at your next login; to see it now, run winmarchy chooser.'
+                }
+                if ($state.Choices.Tray) {
+                    $ui.DoneSub.Text = $ui.DoneSub.Text + ' The Winmarchy icon is by the clock now, with the swap on it.'
                 }
                 if ($result.Warnings.Count -gt 0) {
                     $ui.DoneWarnings.Text = ('Finished with ' + $result.Warnings.Count + ' warning(s): ' + ($result.Warnings -join '; '))
@@ -629,6 +636,7 @@ function Start-WinmarchyConsoleWizard {
     if ($choices.BuildChooser) {
         $choices.Autostart = Read-WinmarchyYesNo -Question '  Show the chooser at login?' -Default $choices.Autostart
     }
+    $choices.Tray = Read-WinmarchyYesNo -Question '  Put a Winmarchy icon by the clock, so the swap is always one click away?' -Default $choices.Tray
     $choices = Resolve-WinmarchyWizardChoices -Choices $choices -Preflight $preflight
 
     Write-Output ''

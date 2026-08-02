@@ -414,7 +414,7 @@ Describe 'theme application to real files' {
 }
 
 Describe 'doctor' {
-    It 'emits a JSON health table whose only failure is the absent WT settings' {
+    BeforeEach {
         $profileDir = $env:WINMARCHY_USERPROFILE
         $glazeDir = Join-Path $profileDir (Join-Path '.glzr' 'glazewm')
         $null = New-Item -ItemType Directory -Path $glazeDir -Force
@@ -425,13 +425,23 @@ Describe 'doctor' {
         Write-WinmarchyTextFile -Path (Join-Path $yasbDir 'styles.css') -Content '/* rendered */'
         Save-WinmarchyState -State (Get-WinmarchyDefaultState)
 
+        # A chooser that is present and registered, so the health rows below
+        # describe a working install unless a test breaks one on purpose.
+        $script:fakeChooserExe = Join-Path (Get-WinmarchyChooserDir) 'Winmarchy.Chooser.exe'
+        Write-WinmarchyTextFile -Path $script:fakeChooserExe -Content 'not really an exe'
+        Write-WinmarchyTextFile -Path (Join-Path (Join-Path (Get-WinmarchyChooserDir) 'ui') 'index.html') -Content '<html></html>'
+
         Mock Find-WinmarchyExecutable { 'C:\fake\tool.exe' }
         Mock Test-WinmarchyProcessRunning { $false }
         Mock Get-WinmarchyTaskbarAutoHide { $false }
         Mock Get-WinmarchyDesktopIconsVisible { $true }
         Mock Get-WtSettingsPath { $null }
-        Mock Test-WinmarchyRunKeyPresent { $true }
+        Mock Test-WinmarchyWebView2Runtime { $true }
+        Mock Test-WinmarchyStartupDisabledByWindows { $false }
+        Mock Get-WinmarchyRunKeyValue { ('"' + $script:fakeChooserExe + '"') }
+    }
 
+    It 'emits a JSON health table whose only failure is the absent WT settings' {
         $json = Invoke-WinmarchyDoctor -Json
         $rows = @($json | ConvertFrom-Json)
 
@@ -441,6 +451,38 @@ Describe 'doctor' {
             if (-not $row.pass) { $failing = $failing + $row.check }
         }
         $failing | Should -Be @('wt settings found')
+    }
+
+    It 'checks every link in the chain between install and a chooser at login' {
+        $json = Invoke-WinmarchyDoctor -Json
+        $checks = @(@($json | ConvertFrom-Json) | ForEach-Object { $_.check })
+        foreach ($required in @('chooser installed', 'run key autostart', 'startup entry enabled', 'webview2 runtime', 'tray autostart')) {
+            $checks | Should -Contain $required
+        }
+    }
+
+    It 'fails the chooser row when the publish dropped the ui folder' {
+        Remove-Item -Path (Join-Path (Get-WinmarchyChooserDir) 'ui') -Recurse -Force
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $row = $rows | Where-Object { $_.check -eq 'chooser installed' }
+        $row.pass | Should -BeFalse
+        $row.detail | Should -Match 'index.html'
+    }
+
+    It 'fails the run key row when it points at a file that is not there' {
+        Mock Get-WinmarchyRunKeyValue { '"C:\nope\Winmarchy.Chooser.exe"' }
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $row = $rows | Where-Object { $_.check -eq 'run key autostart' }
+        $row.pass | Should -BeFalse
+        $row.detail | Should -Match 'does not exist'
+    }
+
+    It 'fails the startup row when Windows has the entry switched off' {
+        Mock Test-WinmarchyStartupDisabledByWindows { $true }
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $row = $rows | Where-Object { $_.check -eq 'startup entry enabled' }
+        $row.pass | Should -BeFalse
+        $row.detail | Should -Match 'Startup'
     }
 }
 }
