@@ -395,6 +395,24 @@ function Update-WtSettingsFile {
 
     $scheme = New-WtSchemeObject -Theme $Theme
 
+    # What the user had before we touched anything, so entering Windows 11
+    # mode can put the terminal back exactly. $null means "the key was absent",
+    # which restore honours by removing the key rather than writing a value.
+    $originalColorScheme = $null
+    $originalFontFace = $null
+    if ((Test-PsObjectProperty $settings 'profiles') -and ($null -ne $settings.profiles) -and (-not ($settings.profiles -is [System.Array]))) {
+        if ((Test-PsObjectProperty $settings.profiles 'defaults') -and ($null -ne $settings.profiles.defaults)) {
+            if (Test-PsObjectProperty $settings.profiles.defaults 'colorScheme') {
+                $originalColorScheme = $settings.profiles.defaults.colorScheme
+            }
+            if ((Test-PsObjectProperty $settings.profiles.defaults 'font') -and ($null -ne $settings.profiles.defaults.font)) {
+                if (Test-PsObjectProperty $settings.profiles.defaults.font 'face') {
+                    $originalFontFace = $settings.profiles.defaults.font.face
+                }
+            }
+        }
+    }
+
     if ((-not (Test-PsObjectProperty $settings 'schemes')) -or ($null -eq $settings.schemes)) {
         Set-PsObjectProperty $settings 'schemes' @()
     }
@@ -430,11 +448,70 @@ function Update-WtSettingsFile {
     $outText = $settings | ConvertTo-Json -Depth 64
     Write-WinmarchyTextFile -Path $Path -Content $outText
     return [pscustomobject]@{
-        Path          = $Path
-        BackupCreated = $backupCreated
-        SchemeName    = $scheme.name
-        FontSet       = [bool]$SetFontFace
+        Path                 = $Path
+        BackupCreated        = $backupCreated
+        SchemeName           = $scheme.name
+        FontSet              = [bool]$SetFontFace
+        OriginalColorScheme  = $originalColorScheme
+        OriginalFontFace     = $originalFontFace
     }
+}
+
+function Restore-WtSettingsFile {
+    # Undoes everything Update-WtSettingsFile did: drops every Winmarchy
+    # scheme and puts profiles.defaults.colorScheme and font.face back to the
+    # values captured before the first patch. A $null original means the key
+    # was not there, so it is removed rather than set. Leaves every other
+    # setting, including ones added since, untouched.
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [AllowNull()][string]$OriginalColorScheme,
+        [AllowNull()][string]$OriginalFontFace
+    )
+    if (-not (Test-Path $Path)) { return $false }
+    $settings = ConvertFrom-WtSettingsJson -RawText ([System.IO.File]::ReadAllText($Path))
+    $changed = $false
+
+    if ((Test-PsObjectProperty $settings 'schemes') -and ($null -ne $settings.schemes)) {
+        $kept = @()
+        foreach ($scheme in @($settings.schemes)) {
+            if ($null -ne $scheme -and $scheme.name -like 'Winmarchy *') {
+                $changed = $true
+            } else {
+                $kept = $kept + @(, $scheme)
+            }
+        }
+        if ($changed) { Set-PsObjectProperty $settings 'schemes' $kept }
+    }
+
+    if ((Test-PsObjectProperty $settings 'profiles') -and ($null -ne $settings.profiles) -and (-not ($settings.profiles -is [System.Array]))) {
+        if ((Test-PsObjectProperty $settings.profiles 'defaults') -and ($null -ne $settings.profiles.defaults)) {
+            $defaults = $settings.profiles.defaults
+            if ((Test-PsObjectProperty $defaults 'colorScheme') -and ($defaults.colorScheme -like 'Winmarchy *')) {
+                if ($OriginalColorScheme) {
+                    Set-PsObjectProperty $defaults 'colorScheme' $OriginalColorScheme
+                } else {
+                    $defaults.PSObject.Properties.Remove('colorScheme')
+                }
+                $changed = $true
+            }
+            if ((Test-PsObjectProperty $defaults 'font') -and ($null -ne $defaults.font)) {
+                if ((Test-PsObjectProperty $defaults.font 'face') -and ($defaults.font.face -eq 'JetBrainsMono Nerd Font')) {
+                    if ($OriginalFontFace) {
+                        Set-PsObjectProperty $defaults.font 'face' $OriginalFontFace
+                    } else {
+                        $defaults.font.PSObject.Properties.Remove('face')
+                    }
+                    $changed = $true
+                }
+            }
+        }
+    }
+
+    if ($changed) {
+        Write-WinmarchyTextFile -Path $Path -Content ($settings | ConvertTo-Json -Depth 64)
+    }
+    return $changed
 }
 
 # ---------------------------------------------------------------------------
@@ -452,6 +529,9 @@ function Get-WinmarchyDefaultState {
         savedWallpaper            = $null
         savedAppsUseLightTheme    = $null
         savedSystemUsesLightTheme = $null
+        savedWtColorScheme        = $null
+        savedWtFontFace           = $null
+        savedWtCaptured           = $false
     }
 }
 
@@ -1136,4 +1216,20 @@ function Get-WinmarchyPreflight {
     $rows = $rows + (New-WinmarchyPreflightRow 'Windows Terminal' $true $false $wtDetail)
 
     return $rows
+}
+
+function Get-WinmarchyNvimThemePath {
+    return (Join-Path (Get-WinmarchyNvimConfigDir) (Join-Path 'lua' (Join-Path 'plugins' 'winmarchy-theme.lua')))
+}
+
+function Remove-WinmarchyNvimTheme {
+    # Winmarchy owns this file entirely, so removing it returns Neovim to
+    # whatever colourscheme it used before Omarchy mode.
+    $path = Get-WinmarchyNvimThemePath
+    if (Test-Path $path) {
+        Remove-Item -Path $path -Force
+        Write-WinmarchyLog -Message 'nvim theme removed'
+        return $true
+    }
+    return $false
 }

@@ -162,6 +162,40 @@ Describe 'enter-win11' {
         $null -eq (Get-WinmarchyState).savedAppsUseLightTheme | Should -BeTrue
     }
 
+    It 'restores Windows Terminal and removes the Neovim theme' {
+        Mock Test-WinmarchyProcessRunning { $true }
+        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        Mock Get-WinmarchyDesktopIconsVisible { $false }
+        Mock Get-WtSettingsPath { 'C:\fake\settings.json' }
+        Mock Restore-WtSettingsFile { $true }
+        Mock Remove-WinmarchyNvimTheme { $true }
+        Set-WinmarchyStateValue -Name 'savedWtColorScheme' -Value 'Campbell'
+        Set-WinmarchyStateValue -Name 'savedWtFontFace' -Value 'Cascadia Mono'
+
+        Enter-WinmarchyWin11Mode
+
+        Should -Invoke Restore-WtSettingsFile -Times 1 -Exactly -ParameterFilter { $OriginalColorScheme -eq 'Campbell' -and $OriginalFontFace -eq 'Cascadia Mono' }
+        Should -Invoke Remove-WinmarchyNvimTheme -Times 1 -Exactly
+    }
+
+    It 'keeps the captured terminal baseline so the next swap can restore again' {
+        Mock Get-WtSettingsPath { $null }
+        Mock Remove-WinmarchyNvimTheme { $false }
+        Mock Test-WinmarchyProcessRunning { $false }
+        Mock Get-WinmarchyTaskbarAutoHide { $false }
+        Mock Get-WinmarchyDesktopIconsVisible { $true }
+        Set-WinmarchyStateValue -Name 'savedWtColorScheme' -Value 'Campbell'
+        Set-WinmarchyStateValue -Name 'savedWtCaptured' -Value $true
+
+        Enter-WinmarchyWin11Mode
+
+        # The wallpaper baseline is cleared (recaptured next time), but the
+        # terminal baseline is the pre-Winmarchy truth and must survive.
+        (Get-WinmarchyState).savedWtColorScheme | Should -Be 'Campbell'
+        (Get-WinmarchyState).savedWtCaptured | Should -BeTrue
+        $null -eq (Get-WinmarchyState).savedWallpaper | Should -BeTrue
+    }
+
     It 'continues past a failing step and still restores the rest' {
         Mock Test-WinmarchyProcessRunning { $true }
         Mock Get-WinmarchyTaskbarAutoHide { $true }
@@ -243,9 +277,10 @@ Describe 'theme application to real files' {
         Mock New-WinmarchyWallpaperImage { }
     }
 
-    It 'renders yasb styles, patches glazewm borders, writes the nvim spec and records state' {
+    It 'in win11 mode touches only the Winmarchy configs, never Windows itself' {
         Set-WinmarchyTheme -Name 'gruvbox'
 
+        # Winmarchy's own configuration is prepared, ready for next time.
         $stylesPath = Join-Path (Get-WinmarchyYasbConfigDir) 'styles.css'
         Test-Path $stylesPath | Should -BeTrue
         $styles = [System.IO.File]::ReadAllText($stylesPath)
@@ -256,14 +291,24 @@ Describe 'theme application to real files' {
         $glazeText | Should -Match "color: '#7daea3' # winmarchy:focused-border"
         $glazeText | Should -Match "color: '#665c54' # winmarchy:other-border"
 
+        (Get-WinmarchyState).theme | Should -Be 'gruvbox'
+
+        # Nothing the user sees in Windows 11 mode is touched.
+        $nvimSpec = Join-Path $env:WINMARCHY_NVIM_DIR (Join-Path 'lua' (Join-Path 'plugins' 'winmarchy-theme.lua'))
+        Test-Path $nvimSpec | Should -BeFalse
+        Should -Invoke Set-WinmarchyWallpaper -Times 0 -Exactly
+        Should -Invoke Set-WinmarchyAppsTheme -Times 0 -Exactly
+    }
+
+    It 'in omarchy mode also writes the nvim spec' {
+        Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
+
+        Set-WinmarchyTheme -Name 'gruvbox'
+
         $nvimSpec = Join-Path $env:WINMARCHY_NVIM_DIR (Join-Path 'lua' (Join-Path 'plugins' 'winmarchy-theme.lua'))
         Test-Path $nvimSpec | Should -BeTrue
         [System.IO.File]::ReadAllText($nvimSpec) | Should -Match 'gruvbox'
-
-        (Get-WinmarchyState).theme | Should -Be 'gruvbox'
-        # win11 mode: the user's wallpaper and app mode stay untouched.
-        Should -Invoke Set-WinmarchyWallpaper -Times 0 -Exactly
-        Should -Invoke Set-WinmarchyAppsTheme -Times 0 -Exactly
+        Should -Invoke Set-WinmarchyWallpaper -Times 1 -Exactly
     }
 
     It 'applies wallpaper and app mode only in omarchy mode' {

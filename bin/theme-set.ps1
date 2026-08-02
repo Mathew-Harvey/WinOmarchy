@@ -7,13 +7,10 @@ function Set-WinmarchyTheme {
     # -AsOmarchy forces the Omarchy-only surfaces (wallpaper, app mode) even
     # though state.mode still reads win11; enter-omarchy needs that because
     # mode is only committed after the health check passes.
-    # -SetTerminalFont additionally sets profiles.defaults.font.face; the
-    # installer passes it (the brief sets the font on install only).
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$Name,
-        [switch]$AsOmarchy,
-        [switch]$SetTerminalFont
+        [switch]$AsOmarchy
     )
 
     $theme = Get-WinmarchyTheme -Name $Name
@@ -59,24 +56,36 @@ function Set-WinmarchyTheme {
         Write-WinmarchyLog -Message ('theme-set: glazewm step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 3. Windows Terminal: patch settings.json (skip when WT has never run).
+    # 3. Windows Terminal: only in Omarchy mode. Windows 11 mode is defined as
+    # the absence of every Winmarchy effect, and the terminal is a surface the
+    # user sees in both modes, so entering win11 restores it (see mode.ps1).
     try {
-        $wtPath = Get-WtSettingsPath
-        if ($wtPath) {
-            $null = Update-WtSettingsFile -Path $wtPath -Theme $theme -SetFontFace:$SetTerminalFont
-            Write-WinmarchyLog -Message 'theme-set: windows terminal patched'
-        } else {
-            Write-WinmarchyLog -Message 'theme-set: windows terminal has never run; skipped' -Level 'WARN'
+        if ($omarchyActive) {
+            $wtPath = Get-WtSettingsPath
+            if ($wtPath) {
+                $result = Update-WtSettingsFile -Path $wtPath -Theme $theme -SetFontFace
+                # Capture the pre-Winmarchy values once, on the first patch,
+                # so the restore on the way out is exact.
+                if (-not (Get-WinmarchyState).savedWtCaptured) {
+                    Set-WinmarchyStateValue -Name 'savedWtColorScheme' -Value $result.OriginalColorScheme
+                    Set-WinmarchyStateValue -Name 'savedWtFontFace' -Value $result.OriginalFontFace
+                    Set-WinmarchyStateValue -Name 'savedWtCaptured' -Value $true
+                }
+                Write-WinmarchyLog -Message 'theme-set: windows terminal patched'
+            } else {
+                Write-WinmarchyLog -Message 'theme-set: windows terminal has never run; skipped' -Level 'WARN'
+            }
         }
     } catch {
         $stepFailures = $stepFailures + 'windows-terminal'
         Write-WinmarchyLog -Message ('theme-set: windows terminal step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 4. Neovim: write the plugin spec, only when a LazyVim config exists.
+    # 4. Neovim: only in Omarchy mode, and only when a LazyVim config exists.
+    # enter-win11 deletes the file again so Neovim returns to its own scheme.
     try {
         $nvimPluginsDir = Join-Path (Get-WinmarchyNvimConfigDir) (Join-Path 'lua' 'plugins')
-        if (Test-Path $nvimPluginsDir) {
+        if ($omarchyActive -and (Test-Path $nvimPluginsDir)) {
             $nvimTemplate = [System.IO.File]::ReadAllText((Join-Path (Get-WinmarchyTemplatesDir) 'nvim-theme.lua.tpl'))
             $nvimRendered = Expand-WinmarchyTemplate -Template $nvimTemplate -Tokens $tokens
             Write-WinmarchyTextFile -Path (Join-Path $nvimPluginsDir 'winmarchy-theme.lua') -Content $nvimRendered

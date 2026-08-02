@@ -354,9 +354,11 @@ if ($NoAutostart -and (Test-WinmarchyIsWindows)) {
     }
 }
 
-Invoke-WinmarchyInstallStep -Description ('apply the ' + $Theme + ' theme') -Action {
-    # -SetTerminalFont: the brief sets the terminal font face on install only.
-    Set-WinmarchyTheme -Name $Theme -SetTerminalFont
+Invoke-WinmarchyInstallStep -Description ('apply the ' + $Theme + ' theme to the Winmarchy configs') -Action {
+    # Installing leaves Windows itself untouched: the terminal, Neovim, the
+    # wallpaper and the light/dark mode are only changed on entering Omarchy
+    # mode, and restored on the way back out.
+    Set-WinmarchyTheme -Name $Theme
 }
 
 # ---------------------------------------------------------------------------

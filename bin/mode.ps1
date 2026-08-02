@@ -171,6 +171,26 @@ function Enter-WinmarchyWin11Mode {
         Write-WinmarchyLog -Message ('enter-win11: app theme restore failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
+    # Step: put Windows Terminal back. The colour scheme and font face are a
+    # visible Winmarchy effect, so Windows 11 mode must not carry them.
+    try {
+        $wtPath = Get-WtSettingsPath
+        if ($wtPath) {
+            $null = Restore-WtSettingsFile -Path $wtPath -OriginalColorScheme $state.savedWtColorScheme -OriginalFontFace $state.savedWtFontFace
+        }
+    } catch {
+        $failures = $failures + ('windows-terminal: ' + $_.Exception.Message)
+        Write-WinmarchyLog -Message ('enter-win11: terminal restore failed: ' + $_.Exception.Message) -Level 'ERROR'
+    }
+
+    # Step: remove the Neovim theme file so Neovim returns to its own scheme.
+    try {
+        $null = Remove-WinmarchyNvimTheme
+    } catch {
+        $failures = $failures + ('nvim: ' + $_.Exception.Message)
+        Write-WinmarchyLog -Message ('enter-win11: nvim theme removal failed: ' + $_.Exception.Message) -Level 'ERROR'
+    }
+
     # Commit. The journal is cleared because the baseline has been re-asserted
     # wholesale; there is nothing left to undo. The captured baseline values
     # are cleared too, so the NEXT enter-omarchy recaptures whatever the user
@@ -181,6 +201,10 @@ function Enter-WinmarchyWin11Mode {
     Set-WinmarchyStateValue -Name 'savedWallpaper' -Value $null
     Set-WinmarchyStateValue -Name 'savedAppsUseLightTheme' -Value $null
     Set-WinmarchyStateValue -Name 'savedSystemUsesLightTheme' -Value $null
+    # savedWtColorScheme and savedWtFontFace are deliberately kept: they record
+    # the terminal as it was before Winmarchy ever touched it, and the restore
+    # above has just put those values back, so the next Omarchy entry would
+    # otherwise capture its own settings as the baseline.
     if ($failures.Count -eq 0) {
         Write-WinmarchyLog -Message 'enter-win11: committed clean'
         Write-Output 'Windows 11 mode restored.'
