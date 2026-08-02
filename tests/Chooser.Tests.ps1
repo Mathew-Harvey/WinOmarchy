@@ -114,6 +114,14 @@ Describe 'Never shows nothing' {
         $guard | Should -Match 'WH_KEYBOARD_LL|WhKeyboardLl'
         $guard | Should -Match 'omarchy'
         $guard | Should -Match 'SendInput'
+        # The two defects the first version shipped: a text sniff of the
+        # state file that never matched 5.1's two-space JSON, and an
+        # injection at key-up time that queued behind the in-flight up.
+        $guard | Should -Match 'WinmarchyState\.Load\(\)'
+        $guard | Should -Not -Match 'ReadAllText\(Paths\.StateFile\)'
+        # Written with character classes so the 5.1 compat grep does not
+        # mistake the C# operators inside this pattern for PowerShell ones.
+        $guard | Should -Match ('WmKeydown [|]{2} message == WmSyskeydown\).{1,4}OmarchyModeActive')
         $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
         $applet | Should -Match 'WinKeyGuard\.Install\(\)'
         $applet | Should -Match 'WinKeyGuard\.Uninstall\(\)'

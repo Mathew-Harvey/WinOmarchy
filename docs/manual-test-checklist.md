@@ -242,3 +242,9 @@ during setup, or run the installer with a bad winget source.
 - [ ] I9. Set the slider (or winmarchy wallpaper every 5): the wallpaper
       changes on that pace in BOTH modes, and a new interval takes effect
       within a minute. winmarchy wallpaper status reports folder and pace.
+- [ ] I10. In Omarchy mode a bare Windows key tap opens nothing, every lwin
+      combo fires, and Win+L locks. In Windows 11 mode the key opens Start.
+      (This retests I5 after FLAG-36.)
+- [ ] I11. Desktop icons: hidden in Omarchy mode, back in Windows 11 mode,
+      across five swaps in a row. Then kill Explorer mid-omarchy, restart
+      it, swap to Windows 11: icons return (the live read self-heals).

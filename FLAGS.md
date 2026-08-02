@@ -893,3 +893,52 @@ interval runs out. Folder and interval live in state.json, which is mode
 independent: they persist across swaps, sign-outs and reboots in both modes.
 
 Status: closed.
+
+## FLAG-36: the Windows key guard shipped armed but firing blanks
+
+Context: Mat: "the windows key still opens the windows menu in omarchy
+mode". Two independent defects, both of the class only the real machine
+could catch.
+
+First, the guard never armed. It decided the mode by searching the raw
+state.json text for the substring "mode": "omarchy" with one space after
+the colon. Windows PowerShell 5.1's ConvertTo-Json writes TWO spaces after
+the colon; PowerShell 7, which writes the file in the build container,
+writes one. Green here, dead there, exactly the FLAG-26 lesson in a new
+coat. The guard now parses the file properly through WinmarchyState.Load,
+once a second, and a test forbids the raw-text sniff from returning.
+
+Second, even armed it fired too late. The dummy key was injected during the
+Windows key-UP's own hook callback, and SendInput queues behind the
+in-flight key-up, so the shell saw a completed bare tap and opened Start
+before the unassigned key ever landed. The injection now happens on the
+key DOWN: the shell sees Win plus an unassigned key while Win is held, the
+tap is cancelled up front, and every real combo still works because 0xE8
+is bound to nothing. Nothing is swallowed in either direction, so no key
+can stick and Windows 11 mode remains untouched.
+
+Status: closed; needs the machine to confirm a bare tap opens nothing in
+Omarchy mode while combos and Win+L still fire.
+
+## FLAG-37: desktop icons stuck hidden in Windows mode
+
+Context: Mat: "In windows mode i can no longer put files on my desk top and
+view them." The icon toggle is a blind WM_COMMAND to SHELLDLL_DefView, and
+the code trusted the registry HideIcons value as the current state. Those
+two can disagree: any missed or doubled toggle, or an interrupted swap,
+leaves reality (icons hidden) out of step with belief (registry says
+visible), after which enter-win11 reads "already visible", does nothing,
+and the desktop stays empty in Windows mode with no path back.
+
+Fix: the state is now read LIVE. The desktop icons are the SysListView32
+child of the DefView, and the show/hide command shows and hides that
+window, so IsWindowVisible on it is the actual truth (FindWindowEx and
+IsWindowVisible, both documented user32 calls). The registry is now only
+Explorer's startup belief, written to match reality on every set, and the
+toggle verifies itself afterwards: if the live state still disagrees, it
+falls back to registry plus an Explorer restart rather than walking away
+wrong. A machine already stuck heals on the next enter-win11 or repair,
+because the live read sees the truth. By hand, right-clicking the desktop,
+View, Show desktop icons does the same.
+
+Status: closed; the live read and the self-heal are checklist items.

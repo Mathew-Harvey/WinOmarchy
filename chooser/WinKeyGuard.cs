@@ -102,9 +102,6 @@ public static class WinKeyGuard
     // garbage collector frees the callback under it and the process dies.
     private static readonly HookProc Proc = Callback;
 
-    private static bool _winDown;
-    private static bool _otherKeySeen;
-
     // The mode is re-read from state.json at most once a second, so a swap
     // takes effect on the next keystroke without a filesystem read per key.
     private static bool _omarchyActive;
@@ -145,9 +142,13 @@ public static class WinKeyGuard
             _modeCheckedAtTick = now;
             try
             {
-                // A targeted read beats a full state load on a hot path.
-                var raw = File.ReadAllText(Paths.StateFile);
-                _omarchyActive = raw.Contains("\"mode\": \"omarchy\"") || raw.Contains("\"mode\":\"omarchy\"");
+                // A real JSON parse, not a text sniff. The first version
+                // searched the raw file for the substring "mode": "omarchy"
+                // with one space, and Windows PowerShell 5.1's ConvertTo-Json
+                // writes TWO spaces after the colon, so the guard never armed
+                // on the real machine while passing everywhere PowerShell 7
+                // had written the file (FLAG-36).
+                _omarchyActive = WinmarchyState.Load().Mode == "omarchy";
             }
             catch
             {
@@ -164,31 +165,23 @@ public static class WinKeyGuard
             try
             {
                 var info = Marshal.PtrToStructure<KbdLlHookStruct>(lParam);
-                // Our own injected key must not count as "another key was
-                // pressed", or the guard would defeat itself.
+                // Our own injected key is skipped so the guard cannot loop.
                 if ((info.flags & LlkhfInjected) == 0)
                 {
                     var message = (int)wParam;
                     var isWinKey = info.vkCode == VkLwin || info.vkCode == VkRwin;
-                    if (message == WmKeydown || message == WmSyskeydown)
+                    // Inject on the DOWN, not the up. The shell opens Start
+                    // when a Win key-up arrives with no other key seen since
+                    // the down; an injection made during the up's own hook
+                    // callback is queued BEHIND that in-flight up and lands
+                    // too late, so Start opened anyway (the first version did
+                    // exactly that; FLAG-36). Injected during the down, the
+                    // unassigned key is seen while Win is held, the tap is
+                    // cancelled up front, and every real combo still works
+                    // because 0xE8 is bound to nothing.
+                    if (isWinKey && (message == WmKeydown || message == WmSyskeydown) && OmarchyModeActive())
                     {
-                        if (isWinKey)
-                        {
-                            _winDown = true;
-                            _otherKeySeen = false;
-                        }
-                        else if (_winDown)
-                        {
-                            _otherKeySeen = true;
-                        }
-                    }
-                    else if ((message == WmKeyup || message == WmSyskeyup) && isWinKey)
-                    {
-                        if (_winDown && !_otherKeySeen && OmarchyModeActive())
-                        {
-                            InjectUnassignedKey();
-                        }
-                        _winDown = false;
+                        InjectUnassignedKey();
                     }
                 }
             }
