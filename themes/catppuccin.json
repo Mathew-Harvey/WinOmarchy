@@ -3,7 +3,6 @@
   "label": "Catppuccin",
   "mode": "dark",
   "wt_scheme": "Winmarchy Catppuccin",
-  "nvim": { "plugin": "catppuccin/nvim", "name": "catppuccin", "colorscheme": "catppuccin-mocha" },
   "colors": {
     "accent": "#89b4fa", "selection": "#45475a", "muted": "#585b70",
     "background": "#1e1e2e", "dark_background": "#161622", "darker_background": "#101019", "lighter_background": "#313244",

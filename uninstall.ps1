@@ -111,6 +111,15 @@ if ($KeepTerminalTheme) {
     }
 }
 
+# 5b. Cursor: take the Winmarchy colours back out, leaving other settings.
+Invoke-WinmarchyUninstallStep -Description 'remove the Winmarchy colours from Cursor' -Action {
+    $cursorPath = Get-WinmarchyCursorSettingsPath
+    if ($cursorPath) {
+        $state = Get-WinmarchyState
+        $null = Restore-CursorSettingsFile -Path $cursorPath -HadCustomisations ([bool]$state.savedCursorHadColours) -OriginalColours $state.savedCursorColours
+    }
+}
+
 # 6. GlazeWM and yasb configs: restore the user's originals from the OLDEST
 # backup (the pre-Winmarchy machine state). Where the manifest records that
 # no file existed before install, the deployed file is removed instead.
@@ -172,7 +181,7 @@ if ($RemoveApps) {
             'glzr-io.glazewm', 'AmN.yasb', 'Flow-Launcher.Flow-Launcher',
             'junegunn.fzf', 'BurntSushi.ripgrep.MSVC', 'sharkdp.fd', 'sharkdp.bat',
             'eza-community.eza', 'ajeetdsouza.zoxide', 'JesseDuffield.lazygit',
-            'aristocratos.btop4win', 'zig.zig', 'DEVCOM.JetBrainsMonoNerdFont'
+            'aristocratos.btop4win', 'DEVCOM.JetBrainsMonoNerdFont'
         )) {
             Invoke-WinmarchyUninstallStep -Description ('winget uninstall ' + $packageId) -Action {
                 $savedPreference = $ErrorActionPreference
@@ -184,7 +193,7 @@ if ($RemoveApps) {
                 }
             }
         }
-        Write-Output 'uninstall: Windows Terminal, Neovim and Git left installed (general-purpose tools)'
+        Write-Output 'uninstall: Windows Terminal, Cursor and Git left installed (general-purpose tools)'
     }
 } else {
     Write-Output 'uninstall: winget apps left installed (use -RemoveApps to remove them)'

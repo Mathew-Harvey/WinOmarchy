@@ -1,7 +1,6 @@
 /* Test fixture exercising every token in the theme vocabulary. Used by the
    Phase 1 renderer tests; the real yasb template arrives in Phase 2. */
 /* name: {{name}} label: {{label}} mode: {{mode}} wt_scheme: {{wt_scheme}} */
-/* nvim: {{nvim_plugin}} {{nvim_colorscheme}} spec: {{nvim_plugin_spec}} */
 .accent { color: {{accent}}; }
 .selection { color: {{selection}}; }
 .muted { color: {{muted}}; }

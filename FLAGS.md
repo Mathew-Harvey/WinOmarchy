@@ -325,3 +325,58 @@ cover it, including a terminal patch-then-restore round trip against both a
 file with no colour scheme and one with an existing scheme and font.
 
 Status: closed.
+
+## FLAG-18: onboarding tutorial, and Cursor replaces Neovim
+
+Context: Mat asked for an onboarding tutorial teaching a Windows user the new
+keys, and to swap Neovim for Cursor and Windows Terminal for Ghostty.
+
+Tutorial: bin/tutorial.ps1 renders templates/tutorial.html.tpl in the active
+palette and opens it in the default browser. It is HTML rather than another
+WPF window on purpose: it can be rendered and inspected in the build
+container, which WPF cannot. It opens automatically the first time Omarchy
+mode is entered (state key tutorialSeen) and on demand with
+winmarchy tutorial. Lessons name bindings; the bindings come from the live
+GlazeWM config, and two tests enforce the contract in both directions: every
+key taught must be bound, and every bound key must be either taught or on the
+explicit not-taught list. Lessons lead with the way out (Super Shift X) and
+every card says what the key replaces in Windows terms.
+
+Cursor: winget id Anysphere.Cursor, verified present in microsoft/winget-pkgs
+with versions through 1.5.1. Cursor is a Visual Studio Code fork, so it is
+themed by setting workbench.colorCustomizations in
+%APPDATA%\Cursor\User\settings.json from the palette, using documented VS
+Code theme colour identifiers. Like the terminal, this is an Omarchy-mode
+surface only: the previous value of that one key is captured on the first
+patch and put back on entering Windows 11 mode, or the key is removed
+entirely when Cursor had no customisations before. Neovim, the LazyVim
+starter step, the -SkipNeovim switch, the wizard's Neovim option and
+zig.zig (which existed only for nvim-treesitter) are all removed rather than
+left as dead weight.
+
+Status: closed.
+
+## FLAG-19: Ghostty has no official Windows build; terminal unchanged for now
+
+Context: Mat asked to replace Windows Terminal with Ghostty. Verified against
+the Ghostty project's own Windows support discussion
+(github.com/ghostty-org/ghostty/discussions/2563): as of April 2026 there is
+no official Windows executable or installer. Maintainers state they want a
+Direct3D renderer and have not settled on a frontend, and they explicitly
+discourage unofficial builds using the Ghostty name. Only third-party forks
+exist, none of them in winget.
+
+Decision: not implemented. Installing an unofficial fork of a terminal as the
+user's default shell is a supply-chain risk that needs Mat's explicit
+agreement, and the brief's hard constraint 8 forbids relying on anything
+unverified. Windows Terminal stays the themed terminal until Mat chooses.
+
+Open question for Mat: three options. (1) Stay on Windows Terminal and revisit
+when Ghostty ships Windows support. (2) Move to Alacritty, which is what
+Omarchy itself uses, is official on Windows, is in winget as
+Alacritty.Alacritty (0.17.0), and whose exact palette template already exists
+in ref/omarchy for a verbatim port. (3) Adopt a named community Ghostty fork,
+accepting the risk. Recommendation is 2 if the goal is Omarchy fidelity, 1 if
+the goal is Ghostty specifically.
+
+Status: open.

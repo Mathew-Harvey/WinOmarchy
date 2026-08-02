@@ -3,7 +3,6 @@
   "label": "Rose Pine",
   "mode": "light",
   "wt_scheme": "Winmarchy Rose Pine",
-  "nvim": { "plugin": "rose-pine/neovim", "name": "rose-pine", "colorscheme": "rose-pine-dawn" },
   "colors": {
     "accent": "#56949f", "selection": "#dfdad9", "muted": "#cecacd",
     "background": "#faf4ed", "dark_background": "#ede7e1", "darker_background": "#e1dbd5", "lighter_background": "#f2e9e1",

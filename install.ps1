@@ -4,7 +4,6 @@
 #   ... -WhatIf        print every action without doing anything
 #   ... -Theme nord    choose the initial theme (default tokyo-night)
 #   ... -SkipApps      skip winget installs, deploy configs only
-#   ... -SkipNeovim    never set up the LazyVim starter
 #   ... -SkipChooser   do not build the login chooser
 #   ... -NoAutostart   do not register the chooser to run at login
 # For a guided setup with the same options, run install-ui.ps1 instead.
@@ -15,7 +14,6 @@
 param(
     [string]$Theme = 'tokyo-night',
     [switch]$SkipApps,
-    [switch]$SkipNeovim,
     [switch]$SkipChooser,
     [switch]$NoAutostart
 )
@@ -137,7 +135,7 @@ $wingetPackages = @(
     @{ id = 'AmN.yasb'; purpose = 'status bar' },
     @{ id = 'Flow-Launcher.Flow-Launcher'; purpose = 'launcher' },
     @{ id = 'Microsoft.WindowsTerminal'; purpose = 'terminal' },
-    @{ id = 'Neovim.Neovim'; purpose = 'editor' },
+    @{ id = 'Anysphere.Cursor'; purpose = 'editor' },
     @{ id = 'Git.Git'; purpose = 'version control' },
     @{ id = 'junegunn.fzf'; purpose = 'fuzzy finder for menus' },
     @{ id = 'BurntSushi.ripgrep.MSVC'; purpose = 'grep' },
@@ -147,7 +145,6 @@ $wingetPackages = @(
     @{ id = 'ajeetdsouza.zoxide'; purpose = 'cd' },
     @{ id = 'JesseDuffield.lazygit'; purpose = 'git TUI' },
     @{ id = 'aristocratos.btop4win'; purpose = 'top' },
-    @{ id = 'zig.zig'; purpose = 'C compiler for nvim-treesitter' },
     @{ id = 'DEVCOM.JetBrainsMonoNerdFont'; purpose = 'font' }
 )
 
@@ -217,6 +214,18 @@ Invoke-WinmarchyInstallStep -Description ('write GlazeWM config to ' + (Get-Winm
         $replacement = "commands: ['shell-exec " + $flowExe + "'] # winmarchy:launcher-path"
         $configText = [regex]::Replace($configText, "commands: \['shell-exec [^']*'\] # winmarchy:launcher-path", $replacement)
     }
+    $cursorCandidates = @()
+    if ($env:LOCALAPPDATA) {
+        $cursorCandidates = $cursorCandidates + (Join-Path $env:LOCALAPPDATA (Join-Path 'Programs' (Join-Path 'cursor' 'Cursor.exe')))
+    }
+    if ($env:ProgramFiles) {
+        $cursorCandidates = $cursorCandidates + (Join-Path $env:ProgramFiles (Join-Path 'cursor' 'Cursor.exe'))
+    }
+    $cursorExe = Find-WinmarchyExecutable -Name 'Cursor' -FallbackPaths $cursorCandidates
+    if ($cursorExe) {
+        $editorReplacement = "commands: ['shell-exec " + $cursorExe + "'] # winmarchy:editor-path"
+        $configText = [regex]::Replace($configText, "commands: \['shell-exec [^']*'\] # winmarchy:editor-path", $editorReplacement)
+    }
     Write-WinmarchyTextFile -Path (Get-WinmarchyGlazewmConfigPath) -Content $configText
 }
 
@@ -242,37 +251,7 @@ if (Test-WinmarchyIsWindows) {
 }
 
 # ---------------------------------------------------------------------------
-# 5. Neovim: LazyVim starter only when no config exists at all
-# ---------------------------------------------------------------------------
-
-$nvimDir = Get-WinmarchyNvimConfigDir
-if ($SkipNeovim) {
-    Write-Output 'install: Neovim setup skipped (-SkipNeovim); theming still applies if a LazyVim config appears later'
-} elseif (Test-Path $nvimDir) {
-    Write-Output ('install: existing Neovim config at ' + $nvimDir + ' left completely untouched')
-} else {
-    Invoke-WinmarchyInstallStep -Description ('clone the LazyVim starter into ' + $nvimDir) -Action {
-        if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-            Add-WinmarchyInstallWarning 'git not found; LazyVim starter not cloned. Install git and re-run, or set up Neovim by hand.'
-            return
-        }
-        $savedPreference = $ErrorActionPreference
-        $ErrorActionPreference = 'Continue'
-        try {
-            & git clone --depth 1 https://github.com/LazyVim/starter $nvimDir 2>&1 | Out-Null
-        } finally {
-            $ErrorActionPreference = $savedPreference
-        }
-        if ($LASTEXITCODE -ne 0) {
-            Add-WinmarchyInstallWarning 'LazyVim starter clone failed; Neovim theming will activate once a LazyVim config exists.'
-            return
-        }
-        Remove-Item -Path (Join-Path $nvimDir '.git') -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# ---------------------------------------------------------------------------
-# 6. Chooser build, autostart, shortcuts, wallpapers, default theme
+# 5. Chooser build, autostart, shortcuts, wallpapers, default theme
 # ---------------------------------------------------------------------------
 
 if ((Test-WinmarchyIsWindows) -and $SkipChooser) {
@@ -355,7 +334,7 @@ if ($NoAutostart -and (Test-WinmarchyIsWindows)) {
 }
 
 Invoke-WinmarchyInstallStep -Description ('apply the ' + $Theme + ' theme to the Winmarchy configs') -Action {
-    # Installing leaves Windows itself untouched: the terminal, Neovim, the
+    # Installing leaves Windows itself untouched: the terminal, Cursor, the
     # wallpaper and the light/dark mode are only changed on entering Omarchy
     # mode, and restored on the way back out.
     Set-WinmarchyTheme -Name $Theme

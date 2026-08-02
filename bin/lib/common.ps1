@@ -138,7 +138,7 @@ function Get-WinmarchyTheme {
         throw ('Unknown theme "' + $Name + '"; no file at ' + $themePath)
     }
     $theme = [System.IO.File]::ReadAllText($themePath) | ConvertFrom-Json
-    foreach ($required in @('name', 'label', 'mode', 'wt_scheme', 'nvim', 'colors')) {
+    foreach ($required in @('name', 'label', 'mode', 'wt_scheme', 'colors')) {
         if (-not (Test-PsObjectProperty $theme $required)) {
             throw ('Theme "' + $Name + '" is missing required key "' + $required + '"')
         }
@@ -183,13 +183,6 @@ function Get-WinmarchyThemeTokens {
     $tokens['label'] = $Theme.label
     $tokens['mode'] = $Theme.mode
     $tokens['wt_scheme'] = $Theme.wt_scheme
-    $tokens['nvim_plugin'] = $Theme.nvim.plugin
-    $tokens['nvim_colorscheme'] = $Theme.nvim.colorscheme
-    $pluginSpec = '"' + $Theme.nvim.plugin + '"'
-    if ((Test-PsObjectProperty $Theme.nvim 'name') -and $Theme.nvim.name) {
-        $pluginSpec = $pluginSpec + ', name = "' + $Theme.nvim.name + '"'
-    }
-    $tokens['nvim_plugin_spec'] = $pluginSpec
     return $tokens
 }
 
@@ -532,6 +525,10 @@ function Get-WinmarchyDefaultState {
         savedWtColorScheme        = $null
         savedWtFontFace           = $null
         savedWtCaptured           = $false
+        savedCursorColours        = $null
+        savedCursorHadColours     = $false
+        savedCursorCaptured       = $false
+        tutorialSeen              = $false
     }
 }
 
@@ -660,10 +657,15 @@ function Get-WinmarchyYasbStylesTemplatePath {
     return (Join-Path (Get-WinmarchyRepoRoot) (Join-Path 'config' (Join-Path 'yasb' 'styles.template.css')))
 }
 
-function Get-WinmarchyNvimConfigDir {
-    if ($env:WINMARCHY_NVIM_DIR) { return $env:WINMARCHY_NVIM_DIR }
-    if ($env:LOCALAPPDATA) { return (Join-Path $env:LOCALAPPDATA 'nvim') }
-    return (Join-Path (Get-WinmarchyUserProfile) 'nvim')
+function Get-WinmarchyCursorSettingsPath {
+    # Cursor is a Visual Studio Code fork and keeps user settings in the same
+    # place under its own product name. Returns $null when Cursor has never
+    # run, in which case editor theming is skipped.
+    if ($env:WINMARCHY_CURSOR_SETTINGS) { return $env:WINMARCHY_CURSOR_SETTINGS }
+    if (-not $env:APPDATA) { return $null }
+    $path = Join-Path $env:APPDATA (Join-Path 'Cursor' (Join-Path 'User' 'settings.json'))
+    if (Test-Path $path) { return $path }
+    return $null
 }
 
 function Update-WinmarchyGlazewmBorders {
@@ -1205,10 +1207,10 @@ function Get-WinmarchyPreflight {
     if ($installed) { $installedDetail = 'Winmarchy is already installed; this run will update it, taking fresh backups first' }
     $rows = $rows + (New-WinmarchyPreflightRow 'Existing install' $true $false $installedDetail)
 
-    $hasNvim = Test-Path (Get-WinmarchyNvimConfigDir)
-    $nvimDetail = 'no Neovim config; the LazyVim starter can be set up for you'
-    if ($hasNvim) { $nvimDetail = 'your Neovim config exists and will be left completely untouched' }
-    $rows = $rows + (New-WinmarchyPreflightRow 'Neovim config' $true $false $nvimDetail)
+    $cursorPath = Get-WinmarchyCursorSettingsPath
+    $cursorDetail = 'not set up yet; run Cursor once and it will be themed from then on'
+    if ($cursorPath) { $cursorDetail = 'found; colours are themed in Omarchy mode and restored on the way out' }
+    $rows = $rows + (New-WinmarchyPreflightRow 'Cursor' $true $false $cursorDetail)
 
     $wtPath = Get-WtSettingsPath
     $wtDetail = 'Windows Terminal has never run; terminal theming will be skipped'
@@ -1218,18 +1220,71 @@ function Get-WinmarchyPreflight {
     return $rows
 }
 
-function Get-WinmarchyNvimThemePath {
-    return (Join-Path (Get-WinmarchyNvimConfigDir) (Join-Path 'lua' (Join-Path 'plugins' 'winmarchy-theme.lua')))
+function New-WinmarchyCursorColours {
+    # Builds the workbench colour overrides for a theme by rendering the
+    # template. Key names are Visual Studio Code theme colour identifiers,
+    # which Cursor inherits unchanged.
+    param([Parameter(Mandatory = $true)]$Theme)
+    $templatePath = Join-Path (Get-WinmarchyTemplatesDir) 'cursor-theme.json.tpl'
+    $template = [System.IO.File]::ReadAllText($templatePath)
+    $rendered = Expand-WinmarchyTemplate -Template $template -Tokens (Get-WinmarchyThemeTokens -Theme $Theme)
+    return ($rendered | ConvertFrom-Json)
 }
 
-function Remove-WinmarchyNvimTheme {
-    # Winmarchy owns this file entirely, so removing it returns Neovim to
-    # whatever colourscheme it used before Omarchy mode.
-    $path = Get-WinmarchyNvimThemePath
-    if (Test-Path $path) {
-        Remove-Item -Path $path -Force
-        Write-WinmarchyLog -Message 'nvim theme removed'
-        return $true
+function Update-CursorSettingsFile {
+    # Sets workbench.colorCustomizations from the palette, leaving every other
+    # Cursor setting alone. Returns the previous value of that one key (or
+    # $null when it was absent) so entering Windows 11 mode can put it back.
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)]$Theme
+    )
+    if (-not (Test-Path $Path)) { throw ('Cursor settings file not found at ' + $Path) }
+    $settings = ConvertFrom-WtSettingsJson -RawText ([System.IO.File]::ReadAllText($Path))
+
+    $backupPath = $Path + '.winmarchy-bak'
+    $backupCreated = $false
+    if (-not (Test-Path $backupPath)) {
+        Copy-Item -Path $Path -Destination $backupPath
+        $backupCreated = $true
     }
-    return $false
+
+    $original = $null
+    $hadKey = $false
+    if (Test-PsObjectProperty $settings 'workbench.colorCustomizations') {
+        $hadKey = $true
+        $original = $settings.'workbench.colorCustomizations'
+    }
+
+    Set-PsObjectProperty $settings 'workbench.colorCustomizations' (New-WinmarchyCursorColours -Theme $Theme)
+    Write-WinmarchyTextFile -Path $Path -Content ($settings | ConvertTo-Json -Depth 64)
+
+    return [pscustomobject]@{
+        Path             = $Path
+        BackupCreated    = $backupCreated
+        HadCustomisations = $hadKey
+        OriginalColours  = $original
+    }
+}
+
+function Restore-CursorSettingsFile {
+    # Puts workbench.colorCustomizations back to what it was, or removes the
+    # key entirely when Cursor had none before Winmarchy touched it.
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [bool]$HadCustomisations = $false,
+        $OriginalColours = $null
+    )
+    if (-not (Test-Path $Path)) { return $false }
+    $settings = ConvertFrom-WtSettingsJson -RawText ([System.IO.File]::ReadAllText($Path))
+    if (-not (Test-PsObjectProperty $settings 'workbench.colorCustomizations')) { return $false }
+
+    if ($HadCustomisations) {
+        Set-PsObjectProperty $settings 'workbench.colorCustomizations' $OriginalColours
+    } else {
+        $settings.PSObject.Properties.Remove('workbench.colorCustomizations')
+    }
+    Write-WinmarchyTextFile -Path $Path -Content ($settings | ConvertTo-Json -Depth 64)
+    Write-WinmarchyLog -Message 'cursor colours restored'
+    return $true
 }

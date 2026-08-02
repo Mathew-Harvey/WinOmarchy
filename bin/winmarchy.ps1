@@ -36,6 +36,7 @@ function Show-WinmarchyUsage {
     Write-Output '  winmarchy theme current     show the active theme'
     Write-Output '  winmarchy menu [system|theme]  open the menu'
     Write-Output '  winmarchy keys              show the keybinding overlay'
+    Write-Output '  winmarchy tutorial          open the Omarchy mode tutorial'
     Write-Output '  winmarchy status            show mode, theme and process state'
     Write-Output '  winmarchy repair            replay the undo journal and re-assert the recorded mode'
     Write-Output '  winmarchy doctor [-Json]    print a pass/fail health table'
@@ -83,6 +84,9 @@ switch ($Command) {
     }
     'keys' {
         & (Join-Path $PSScriptRoot 'keybindings.ps1')
+    }
+    'tutorial' {
+        & (Join-Path $PSScriptRoot 'tutorial.ps1')
     }
     'status' {
         Get-WinmarchyStatus

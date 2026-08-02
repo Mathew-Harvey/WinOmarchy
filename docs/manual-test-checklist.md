@@ -18,8 +18,7 @@ confirmation. If any fails, record it in FLAGS.md before working around it.
 - [ ] A2. Desktop icons: with files on the desktop, confirm icons vanish on
       entering Omarchy mode and return, in the same positions, on returning
       to Windows 11 mode.
-- [ ] A3. `wt -w new nvim` opens a new Windows Terminal window running
-      Neovim (FLAG-6).
+- [ ] A3. `lwin+shift+n` opens Cursor.
 - [ ] A4. `wt -w new --title "Winmarchy Menu" powershell -NoProfile -Command exit`
       opens a new window whose title starts with Winmarchy, and GlazeWM
       floats it centred (FLAG-6).
@@ -51,7 +50,7 @@ Each cycle, note anything slow, flickery or out of place.
 - [ ] B8. Symmetry: after B6, open Windows Terminal and confirm the colour
       scheme and font are exactly what they were before Winmarchy (check
       Settings > Appearance, and that no "Winmarchy ..." scheme is offered).
-      Open Neovim and confirm it uses its own colourscheme again. Then
+      Open Cursor and confirm its colours are its own again. Then
       `winmarchy mode omarchy` and confirm both come back.
 
 ## C. Recovery drills
@@ -100,8 +99,7 @@ Each cycle, note anything slow, flickery or out of place.
 - [ ] E3. Theme page: clicking each of the eight themes updates the preview
       panel (bar, workspace dots, focused border, tile lines) to that
       palette, and rose-pine visibly reads as a light theme.
-- [ ] E4. Components page: with a Neovim config present, that option is
-      greyed and explains why. Unticking "Build the login chooser" greys and
+- [ ] E4. Components page: unticking "Build the login chooser" greys and
       clears "Show the chooser when I log in".
 - [ ] E5. Review page shows the plain-language summary, an accurate
       equivalent command line, and a step list matching what install.ps1

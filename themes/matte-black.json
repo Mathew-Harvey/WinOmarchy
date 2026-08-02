@@ -3,7 +3,6 @@
   "label": "Matte Black",
   "mode": "dark",
   "wt_scheme": "Winmarchy Matte Black",
-  "nvim": { "plugin": "tahayvr/matteblack.nvim", "name": null, "colorscheme": "matteblack" },
   "colors": {
     "accent": "#e68e0d", "selection": "#2a2a2a", "muted": "#333333",
     "background": "#121212", "dark_background": "#0d0d0d", "darker_background": "#090909", "lighter_background": "#1e1e1e",

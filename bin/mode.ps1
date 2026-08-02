@@ -88,6 +88,17 @@ function Enter-WinmarchyOmarchyMode {
         Set-WinmarchyStateValue -Name 'lastMode' -Value 'omarchy'
         Write-WinmarchyLog -Message 'enter-omarchy: committed'
         Write-Output 'Omarchy mode active.'
+
+        # First time in: teach the keys. Never blocks the swap, and never
+        # shows twice; winmarchy tutorial reopens it on demand.
+        if (-not (Get-WinmarchyState).tutorialSeen) {
+            try {
+                & (Join-Path $PSScriptRoot 'tutorial.ps1')
+                Write-Output 'First run: the tutorial is opening in your browser (winmarchy tutorial to see it again).'
+            } catch {
+                Write-WinmarchyLog -Message ('enter-omarchy: tutorial failed to open: ' + $_.Exception.Message) -Level 'WARN'
+            }
+        }
     } catch {
         $reason = $_.Exception.Message
         Write-WinmarchyLog -Message ('enter-omarchy failed: ' + $reason) -Level 'ERROR'
@@ -183,12 +194,15 @@ function Enter-WinmarchyWin11Mode {
         Write-WinmarchyLog -Message ('enter-win11: terminal restore failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # Step: remove the Neovim theme file so Neovim returns to its own scheme.
+    # Step: put Cursor's colours back to whatever they were.
     try {
-        $null = Remove-WinmarchyNvimTheme
+        $cursorPath = Get-WinmarchyCursorSettingsPath
+        if ($cursorPath) {
+            $null = Restore-CursorSettingsFile -Path $cursorPath -HadCustomisations ([bool]$state.savedCursorHadColours) -OriginalColours $state.savedCursorColours
+        }
     } catch {
-        $failures = $failures + ('nvim: ' + $_.Exception.Message)
-        Write-WinmarchyLog -Message ('enter-win11: nvim theme removal failed: ' + $_.Exception.Message) -Level 'ERROR'
+        $failures = $failures + ('cursor: ' + $_.Exception.Message)
+        Write-WinmarchyLog -Message ('enter-win11: cursor restore failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
     # Commit. The journal is cleared because the baseline has been re-asserted
