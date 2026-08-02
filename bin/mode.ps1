@@ -258,10 +258,18 @@ function Enter-WinmarchyWin11Mode {
     Set-WinmarchyStateValue -Name 'savedAppsUseLightTheme' -Value $null
     Set-WinmarchyStateValue -Name 'savedSystemUsesLightTheme' -Value $null
     Set-WinmarchyStateValue -Name 'savedLockScreen' -Value $null
-    # savedWtColorScheme and savedWtFontFace are deliberately kept: they record
-    # the terminal as it was before Winmarchy ever touched it, and the restore
-    # above has just put those values back, so the next Omarchy entry would
-    # otherwise capture its own settings as the baseline.
+    # The terminal and editor baselines are cleared too. The restore above has
+    # just put the user's own values back into the files, so the next Omarchy
+    # entry recaptures whatever the user has set IN WINDOWS by then. Keeping
+    # them forever (the old design) meant a scheme or font the user changed in
+    # Windows mode between swaps was clobbered by a stale snapshot on the next
+    # return: each mode's theming must never modify the other's (FLAG-34).
+    Set-WinmarchyStateValue -Name 'savedWtColorScheme' -Value $null
+    Set-WinmarchyStateValue -Name 'savedWtFontFace' -Value $null
+    Set-WinmarchyStateValue -Name 'savedWtCaptured' -Value $false
+    Set-WinmarchyStateValue -Name 'savedCursorColours' -Value $null
+    Set-WinmarchyStateValue -Name 'savedCursorHadColours' -Value $false
+    Set-WinmarchyStateValue -Name 'savedCursorCaptured' -Value $false
     if ($failures.Count -eq 0) {
         Write-WinmarchyLog -Message 'enter-win11: committed clean'
         Write-Output 'Windows 11 mode restored.'

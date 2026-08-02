@@ -224,3 +224,16 @@ during setup, or run the installer with a bad winget source.
       window goes with it. If "winmarchy stats" says btop is not installed
       while winget shows aristocratos.btop4win installed, record the actual
       exe name in FLAGS.md (FLAG-33).
+
+## J. Theme independence between the modes
+
+- [ ] J1. In Windows mode, set Windows Terminal to a scheme and font of your
+      own. Swap to Omarchy and back: both are exactly as you set them.
+- [ ] J2. Change the Windows Terminal scheme again, swap to Omarchy and
+      back: the NEW scheme survives (the baseline recaptures every entry).
+- [ ] J3. From the pre-update pollution: if the terminal shows an Omarchy
+      scheme while in Windows mode, one full swap cycle strips it rather
+      than re-capturing it. Confirm the scheme dropdown no longer selects a
+      Winmarchy scheme in Windows mode.
+- [ ] J4. Same round trip for Cursor colours and the Windows light/dark
+      setting. Omarchy keeps its theme; Windows keeps yours; neither leaks.

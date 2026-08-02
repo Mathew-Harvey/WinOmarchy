@@ -192,10 +192,13 @@ Describe 'enter-win11' {
 
         Enter-WinmarchyWin11Mode
 
-        # The wallpaper baseline is cleared (recaptured next time), but the
-        # terminal baseline is the pre-Winmarchy truth and must survive.
-        (Get-WinmarchyState).savedWtColorScheme | Should -Be 'Campbell'
-        (Get-WinmarchyState).savedWtCaptured | Should -BeTrue
+        # EVERY baseline is cleared on the way out, terminal included: the
+        # restore has just put the user's values back into the files, and the
+        # next Omarchy entry must recapture whatever the user has set in
+        # Windows since. A kept snapshot clobbered later changes (FLAG-34).
+        $null -eq (Get-WinmarchyState).savedWtColorScheme | Should -BeTrue
+        (Get-WinmarchyState).savedWtCaptured | Should -BeFalse
+        (Get-WinmarchyState).savedCursorCaptured | Should -BeFalse
         $null -eq (Get-WinmarchyState).savedWallpaper | Should -BeTrue
     }
 
@@ -410,6 +413,51 @@ Describe 'theme application to real files' {
             $once | Should -Match ([regex]::Escape("color: '" + $theme.colors.accent + "' # winmarchy:focused-border"))
             $once | Should -Match ([regex]::Escape("color: '" + $theme.colors.muted + "' # winmarchy:other-border"))
         }
+    }
+}
+
+Describe 'Theme baseline capture' {
+    BeforeEach {
+        # Only the terminal step matters here; every other surface is stubbed.
+        Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
+        Mock Get-WinmarchyAlacrittyConfigPath { $null }
+        Mock Get-WinmarchyCursorSettingsPath { $null }
+        Mock Get-WtSettingsPath { 'C:\fake\settings.json' }
+        Mock Set-WinmarchyWallpaper { }
+        Mock New-WinmarchyWallpaperImage { }
+        Mock Set-WinmarchyAppsTheme { }
+        Mock Test-WinmarchyProcessRunning { $false }
+    }
+
+    It 'captures the real terminal settings of the user on entry' {
+        Mock Update-WtSettingsFile { [pscustomobject]@{ OriginalColorScheme = 'Campbell'; OriginalFontFace = 'Cascadia Mono'; Changed = $true } }
+        Set-WinmarchyTheme -Name 'nord'
+        $state = Get-WinmarchyState
+        $state.savedWtColorScheme | Should -Be 'Campbell'
+        $state.savedWtFontFace | Should -Be 'Cascadia Mono'
+        $state.savedWtCaptured | Should -BeTrue
+    }
+
+    It 'refuses to capture Winmarchy leftovers as user settings' {
+        # An old build themed the terminal unconditionally; capturing that as
+        # the baseline would restore the Omarchy look into Windows mode
+        # forever. A Winmarchy value must become "no baseline", which the
+        # restore strips.
+        Mock Update-WtSettingsFile { [pscustomobject]@{ OriginalColorScheme = 'Winmarchy Rose Pine'; OriginalFontFace = 'JetBrainsMono Nerd Font'; Changed = $true } }
+        Set-WinmarchyTheme -Name 'nord'
+        $state = Get-WinmarchyState
+        $null -eq $state.savedWtColorScheme | Should -BeTrue
+        $null -eq $state.savedWtFontFace | Should -BeTrue
+        $state.savedWtCaptured | Should -BeTrue
+    }
+
+    It 'recognises its own Cursor colours across every shipped theme' {
+        foreach ($name in (Get-WinmarchyThemeNames)) {
+            $rendered = New-WinmarchyCursorColours -Theme (Get-WinmarchyTheme -Name $name)
+            Test-WinmarchyCursorColoursAreOurs -Colours $rendered | Should -BeTrue -Because ($name + ' is ours')
+        }
+        Test-WinmarchyCursorColoursAreOurs -Colours ([pscustomobject]@{ 'editor.background' = '#123456' }) | Should -BeFalse
+        Test-WinmarchyCursorColoursAreOurs -Colours $null | Should -BeFalse
     }
 }
 

@@ -2064,6 +2064,21 @@ function Update-CursorSettingsFile {
     }
 }
 
+function Test-WinmarchyCursorColoursAreOurs {
+    # Whether a captured colorCustomizations block is one Winmarchy itself
+    # wrote: compared against the rendered template for every shipped theme.
+    # Best effort by JSON equality, which holds for the poisoning case that
+    # matters (Winmarchy wrote the file, so shape and order match).
+    param($Colours)
+    if ($null -eq $Colours) { return $false }
+    $capturedJson = $Colours | ConvertTo-Json -Depth 8
+    foreach ($themeName in (Get-WinmarchyThemeNames)) {
+        $rendered = New-WinmarchyCursorColours -Theme (Get-WinmarchyTheme -Name $themeName)
+        if (($rendered | ConvertTo-Json -Depth 8) -eq $capturedJson) { return $true }
+    }
+    return $false
+}
+
 function Restore-CursorSettingsFile {
     # Puts workbench.colorCustomizations back to what it was, or removes the
     # key entirely when Cursor had none before Winmarchy touched it.

@@ -837,3 +837,40 @@ binary differently on the machine, doctor's guidance and the stats command
 both surface it rather than failing silently.
 
 Status: closed; the btop4win executable name is deferred-to-machine.
+
+## FLAG-34: each mode's theme must never modify the other's
+
+Context: Mat's instruction, verbatim: "The theme that was in windows, should
+not be modified by the omarchy theming and vice versa." Two defects broke
+that promise, one latent on his machine right now.
+
+First, the terminal and editor baselines were captured once and kept forever
+(the old comment called it deliberate). So a colour scheme or font the user
+changed IN WINDOWS between swaps was clobbered by the stale snapshot on the
+next return from Omarchy mode. Fixed: entering Windows 11 mode now clears
+every captured baseline (terminal, editor, wallpaper, app mode alike), and
+each Omarchy entry recaptures whatever the user has set in Windows by then.
+The capture-once gate within a single Omarchy session stays, so mid-session
+theme changes cannot capture Winmarchy's own values.
+
+Second, the poisoned baseline. Mat's first install ran a build old enough to
+theme Windows Terminal unconditionally; his terminal still carries that
+scheme in Windows mode. The next successful Omarchy entry would have
+captured "Winmarchy Rose Pine" as HIS setting and then faithfully restored
+the Omarchy look into Windows mode on every exit, forever. Guards now sit at
+the capture points: a terminal scheme matching "Winmarchy *" or the
+JetBrainsMono Nerd Font face, and Cursor colours identical to any shipped
+theme's rendered template, are treated as no baseline, which makes the
+restore strip them instead of reinstate them. His machine heals on the first
+full swap cycle after updating. The font guard can misfire for a user who
+genuinely chose that font before Winmarchy; the cost is the font resetting
+to the terminal default once, accepted and recorded.
+
+Also fixed in the same round: check.ps1 counted only failed tests, so a test
+FILE that failed to parse reported ALL GREEN while its whole container of
+tests silently never ran. It happened during this change (an apostrophe in a
+test name). The gate now fails on broken containers explicitly.
+
+Status: closed; the on-machine confirmation is one full swap cycle showing
+the Windows terminal scheme, font, colours, wallpaper and light/dark exactly
+as the user left them, with checklist item J covering it.
