@@ -179,6 +179,20 @@ function Get-WinmarchyTutorialLessons {
             Windows = 'Similar to auto-hiding the taskbar.'
         },
         [pscustomobject]@{
+            Group = 'Look and feel'
+            Binding = 'lwin+ctrl+b'
+            Title = 'Next wallpaper'
+            What = 'Deals the next random picture from your wallpaper folder, if you set one up. With no folder, it just tells you how to.'
+            Windows = 'Replaces Settings, Personalisation, Background.'
+        },
+        [pscustomobject]@{
+            Group = 'Getting help'
+            Binding = 'lwin+ctrl+t'
+            Title = 'System monitor'
+            What = 'Opens btop in a floating terminal: CPU, memory, disks, network and processes, live. Press q to close it. The same key Omarchy uses for its Activity view.'
+            Windows = 'Replaces Task Manager for a quick look.'
+        },
+        [pscustomobject]@{
             Group = 'Getting help'
             Binding = 'lwin+k'
             Title = 'The full key list'

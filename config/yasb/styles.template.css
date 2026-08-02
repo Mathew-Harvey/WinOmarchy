@@ -35,6 +35,23 @@
     font-size: 14px;
 }
 
+/* The top-left menu button: the accent-coloured way into everything, so it
+   reads as a button rather than another status field. */
+.menu-button-widget {
+    padding: 0px 10px;
+    margin: 3px 2px 3px 4px;
+    border-radius: 4px;
+}
+
+.menu-button-widget .label {
+    color: {{accent}};
+    font-size: 15px;
+}
+
+.menu-button-widget:hover {
+    background-color: {{lighter_background}};
+}
+
 /* GlazeWM workspaces. Class names from
    ref/yasb/docs/widgets/(Widget)-GlazeWM-Workspaces.md. The focused_* rules
    MUST come after the active_* rules or active_* wins on shared properties. */

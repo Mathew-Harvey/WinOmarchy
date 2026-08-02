@@ -39,11 +39,30 @@ bars:
       enabled: true
       duration: 300
     widgets:
-      left: ["glazewm_workspaces", "active_window"]
+      left: ["menu_button", "glazewm_workspaces", "active_window"]
       center: ["clock"]
       right: ["cpu", "memory", "volume", "systray", "power_menu"]
 
 widgets:
+  # The Omarchy-style menu button, top left: one click opens the Winmarchy
+  # menu, which reaches everything (themes, wallpaper, keys, tutorial, TUIs,
+  # the swap, power). Shape from ref/yasb/docs/widgets/(Widget)-Custom.md:
+  # a CustomWidget with a static label and an exec callback; winmarchy.cmd
+  # is on the user PATH, installed by install.ps1. The glyph is the
+  # Nerd Font Windows logo (U+E70F) so the button reads as "the menu for
+  # this machine".
+  menu_button:
+    type: "yasb.custom.CustomWidget"
+    options:
+      label: "\ue70f"
+      label_alt: "menu"
+      class_name: "menu-button-widget"
+      exec_options:
+        run_once: true
+      callbacks:
+        on_left: "exec winmarchy menu popup"
+        on_right: "exec winmarchy menu popup"
+
   # Shape from ref/yasb/docs/widgets/(Widget)-GlazeWM-Workspaces.md.
   glazewm_workspaces:
     type: "glazewm.workspaces.GlazewmWorkspacesWidget"

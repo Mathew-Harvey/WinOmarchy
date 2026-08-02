@@ -72,15 +72,18 @@ Describe 'The dependency table' {
 }
 
 Describe 'GlazeWM path patching' {
-    It 'patches all four Alacritty invocations, not just the one with a marker' {
+    It 'patches every Alacritty invocation, not just the one with a marker' {
         # lwin+enter carries the terminal-path marker; the keybinding overlay,
-        # the system menu and the theme menu do not, and used to be left on the
-        # bare name so a Program Files install worked for one key and failed
-        # for three.
+        # the system menu, the theme menu and the stats TUI do not, and used
+        # to be left on the bare name so a Program Files install worked for
+        # one key and failed for the rest. The count is asserted against the
+        # config so a new alacritty binding cannot dodge the patch.
+        $expected = ([regex]::Matches($script:glazeConfig, 'shell-exec alacritty')).Count
+        $expected | Should -BeGreaterOrEqual 5
         $patched = Update-WinmarchyGlazewmAppPaths -ConfigText $script:glazeConfig -ResolvedPaths @{
             'alacritty' = 'C:\Program Files\Alacritty\alacritty.exe'
         }
-        ([regex]::Matches($patched, [regex]::Escape('C:\Program Files\Alacritty\alacritty.exe'))).Count | Should -Be 4
+        ([regex]::Matches($patched, [regex]::Escape('C:\Program Files\Alacritty\alacritty.exe'))).Count | Should -Be $expected
         $patched | Should -Not -Match "shell-exec alacritty"
     }
 

@@ -766,3 +766,74 @@ between the two moments the installer looked are touched, so nothing the
 user placed themselves can ever be swept up.
 
 Status: closed.
+
+## FLAG-30: wallpaper folder cycling, in both modes
+
+Context: Mat asked for setup to take a folder of wallpapers and for BOTH
+modes to cycle random pictures from it. That makes Windows 11 mode no longer
+strictly "the absence of all Winmarchy effects": with a folder configured,
+Winmarchy changes the Windows wallpaper too. Recorded as a deliberate scope
+change on the user's explicit instruction, not a drift. With no folder set,
+nothing changes: themed wallpapers in Omarchy mode, Windows keeps its own.
+
+Mechanics: the wizard's components page and install.ps1 -WallpaperDir set
+state.wallpaperDir; a picture is dealt on every swap, every theme change,
+every half hour from the tray timer, on lwin+ctrl+b and from the menus. The
+picker avoids repeating the current picture when there is a choice. If the
+folder goes missing, cycling pauses with a log line rather than failing.
+"winmarchy wallpaper off" stops it and leaves the current picture in place;
+an exact restore is impossible once the user has been cycling by choice, and
+the pre-install wallpaper remains recorded in the oldest backup manifest.
+
+Status: closed.
+
+## FLAG-31: the bar's top-left menu button
+
+Context: Omarchy's bar has a menu in the top left that reaches everything.
+Emulated with a yasb CustomWidget (shape verified against
+ref/yasb/docs/widgets/(Widget)-Custom.md) whose on_left callback execs
+"winmarchy menu popup" through the winmarchy.cmd shim on the user PATH. The
+popup opens the system menu in the same floating Alacritty the lwin+escape
+binding uses, with a plain PowerShell window as the stand-in when Alacritty
+is missing. The system menu itself grew to carry everything: themes,
+wallpaper, keys, tutorial, the TUIs, files, the swap, config editing, the
+chooser toggle and power.
+
+Status: closed; the glyph rendering and click behaviour need the machine.
+
+## FLAG-32: the Windows key no longer opens the Start menu in Omarchy mode
+
+Context: Mat: "in omarchy the windows key should not trigger the windows
+menu". GlazeWM swallows bound combos but a bare Win tap still reaches the
+shell. No supported per-user setting turns that off cleanly, and the NoWinKeys
+policy is a blunt instrument that also needs Explorer to restart.
+
+Decision: WinKeyGuard.cs, a low-level keyboard hook (SetWindowsHookExW,
+WH_KEYBOARD_LL) inside the tray host. When a Windows key goes down and comes
+back up with no other key in between, and state.mode reads omarchy, SendInput
+injects the unassigned virtual key 0xE8 before the key-up passes, so the
+shell sees a combo rather than a bare tap and Start stays shut. Nothing is
+ever swallowed, so no key can stick. The mode is re-read at most once a
+second. The guard's lifetime is the tray's: kill the icon and the Windows key
+is stock again instantly, which is the recoverability story. In Windows 11
+mode the key behaves exactly as stock. Limitation: no guard when the tray is
+running under the PowerShell fallback host; recorded, not worked around.
+
+Status: closed; needs on-machine confirmation that combos still fire and
+Win+L still locks.
+
+## FLAG-33: system TUIs
+
+Context: Omarchy leans on TUIs for system work. Mirrored where the tools
+already ship: lwin+ctrl+t opens btop in a floating terminal, the same key
+Omarchy binds for its Activity view (verified verbatim in
+ref/omarchy/default/hypr/bindings/utilities.lua: "SUPER + CTRL + T",
+"Activity", tui btop). "winmarchy stats" is the command underneath, running
+btop4win (falling back to btop) in the current console. The system menu
+carries "System stats (btop)" and "Git TUI (lazygit)". lazydocker is not
+mirrored: Winmarchy does not install Docker. The btop4win executable name
+is resolved at runtime rather than assumed; if the winget package names its
+binary differently on the machine, doctor's guidance and the stats command
+both surface it rather than failing silently.
+
+Status: closed; the btop4win executable name is deferred-to-machine.

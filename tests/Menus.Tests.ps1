@@ -82,7 +82,7 @@ Describe 'System menu entries' {
 
     It 'carries every entry the brief requires' {
         $entries = @(Get-WinmarchySystemMenuEntries)
-        foreach ($required in @('Theme menu', 'Next theme', 'Keybindings', 'Reload GlazeWM', 'Edit GlazeWM config', 'Lock', 'Sleep', 'Restart', 'Shutdown', 'Sign out')) {
+        foreach ($required in @('Theme menu', 'Next theme', 'Next wallpaper', 'Keybindings', 'Tutorial', 'System stats (btop)', 'Git TUI (lazygit)', 'Files', 'Reload GlazeWM', 'Edit GlazeWM config', 'Lock', 'Sleep', 'Restart', 'Shutdown', 'Sign out')) {
             $entries | Should -Contain $required
         }
     }

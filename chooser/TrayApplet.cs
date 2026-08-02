@@ -21,6 +21,9 @@ using System.Drawing;
 using System.IO;
 using System.Threading;
 using System.Windows.Forms;
+// System.Threading is only here for the mutex; the timer must be the
+// WinForms one so its ticks run on the message loop thread.
+using Timer = System.Windows.Forms.Timer;
 
 namespace Winmarchy.Chooser;
 
@@ -30,6 +33,7 @@ public static class TrayApplet
     private static ContextMenuStrip? _menu;
     private static string _iconTheme = string.Empty;
     private static IntPtr _iconHandle = IntPtr.Zero;
+    private static Timer? _wallpaperTimer;
 
     // Icon.FromHandle wraps the HICON without owning it, so the handle from
     // Bitmap.GetHicon must be destroyed by hand (documented behaviour).
@@ -73,12 +77,33 @@ public static class TrayApplet
                     _menu.Show(Control.MousePosition);
                 }
             };
+            // While Omarchy mode is on, a bare Windows key tap must not open
+            // the Start menu; see WinKeyGuard.cs. Lives here because the
+            // tray has the right lifetime: guard dies with the icon.
+            WinKeyGuard.Install();
+
+            // With a wallpaper folder configured, a fresh picture every half
+            // hour, in either mode. The tick asks the dispatcher, which is a
+            // quiet no-op when cycling is off, so the timer needs no state.
+            _wallpaperTimer = new Timer { Interval = 30 * 60 * 1000 };
+            _wallpaperTimer.Tick += (_, _) =>
+            {
+                var current = WinmarchyState.Load();
+                if (!string.IsNullOrEmpty(current.WallpaperDir))
+                {
+                    Program.RunWinmarchy("wallpaper next", waitForExit: false);
+                }
+            };
+            _wallpaperTimer.Start();
+
             Paths.Log("tray: icon shown (hosted by the chooser exe, no console)");
             System.Windows.Forms.Application.Run();
             return 0;
         }
         finally
         {
+            WinKeyGuard.Uninstall();
+            _wallpaperTimer?.Stop();
             if (_icon != null)
             {
                 _icon.Visible = false;
@@ -115,6 +140,7 @@ public static class TrayApplet
         _menu.Items.Add(new ToolStripSeparator());
         AddAction("Theme menu", () => RunDispatcherVisible("menu theme"));
         AddAction("Next theme", () => RunDispatcherHidden("theme next"));
+        AddAction("Next wallpaper", () => RunDispatcherHidden("wallpaper next"));
         AddAction("Keybindings", () => RunDispatcherVisible("keys"));
         AddAction("Tutorial", () => RunDispatcherHidden("tutorial"));
         _menu.Items.Add(new ToolStripSeparator());

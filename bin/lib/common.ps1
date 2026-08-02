@@ -544,6 +544,7 @@ function Get-WinmarchyDefaultState {
         savedCursorCaptured       = $false
         savedLockScreen           = $null
         lockScreenEnabled         = $false
+        wallpaperDir              = $null
         tutorialSeen              = $false
     }
 }
@@ -1022,6 +1023,81 @@ function New-WinmarchyWallpaperImage {
         $graphics.Dispose()
         $bitmap.Dispose()
     }
+}
+
+# ---------------------------------------------------------------------------
+# Wallpaper folder cycling
+# ---------------------------------------------------------------------------
+#
+# When the user points Winmarchy at a folder of pictures, BOTH modes cycle
+# random wallpapers from it: on every swap, on every theme change, and every
+# half hour from the tray. This is the one place Windows 11 mode is not
+# bone stock, and it is that way because Mat asked for it in exactly those
+# words; with no folder set, Windows 11 mode stays untouched and Omarchy
+# mode uses the generated theme wallpapers.
+
+function Get-WinmarchyWallpaperFolder {
+    # The configured folder, or $null when cycling is off or the folder has
+    # gone missing (unplugged drive, renamed directory).
+    $dir = (Get-WinmarchyState).wallpaperDir
+    if (-not $dir) { return $null }
+    if (-not (Test-Path $dir)) {
+        Write-WinmarchyLog -Message ('wallpaper folder ' + $dir + ' is not reachable; cycling paused') -Level 'WARN'
+        return $null
+    }
+    return $dir
+}
+
+function Get-WinmarchyWallpaperCandidates {
+    # Every usable picture in the folder. The formats are the ones the
+    # SPI_SETDESKWALLPAPER path accepts on Windows 11 (bmp always; jpg and
+    # png are transcoded by the shell).
+    param([Parameter(Mandatory = $true)][string]$Folder)
+    $pictures = @()
+    foreach ($file in @(Get-ChildItem -Path $Folder -File -ErrorAction SilentlyContinue)) {
+        if ($file.Extension -match '^\.(jpg|jpeg|png|bmp)$') {
+            $pictures = $pictures + $file.FullName
+        }
+    }
+    return $pictures
+}
+
+function Get-WinmarchyNextWallpaperPath {
+    # Picks a random picture, avoiding the current one when there is a
+    # choice so "next" always visibly changes something. Pure given the
+    # folder listing, so the picking rule is testable headlessly.
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Candidates,
+        [string]$Current = ''
+    )
+    if ($Candidates.Count -eq 0) { return $null }
+    if ($Candidates.Count -eq 1) { return $Candidates[0] }
+    $pool = @($Candidates | Where-Object { $_ -ne $Current })
+    if ($pool.Count -eq 0) { $pool = $Candidates }
+    return ($pool | Get-Random)
+}
+
+function Invoke-WinmarchyWallpaperNext {
+    # Applies the next random wallpaper from the folder. Quiet no-op when
+    # cycling is off, so callers (tray timer, keybinding, menu) need no
+    # guard of their own.
+    [CmdletBinding()]
+    param()
+    $folder = Get-WinmarchyWallpaperFolder
+    if (-not $folder) {
+        Write-Output 'Wallpaper cycling is off. Point it at a folder with: winmarchy wallpaper dir <path>'
+        return
+    }
+    $candidates = @(Get-WinmarchyWallpaperCandidates -Folder $folder)
+    if ($candidates.Count -eq 0) {
+        Write-Warning ('No pictures (jpg, png, bmp) found in ' + $folder)
+        return
+    }
+    $current = ''
+    if (Test-WinmarchyIsWindows) { $current = [string](Get-WinmarchyCurrentWallpaper) }
+    $next = Get-WinmarchyNextWallpaperPath -Candidates $candidates -Current $current
+    Set-WinmarchyWallpaper -Path $next
+    Write-Output ('wallpaper: ' + (Split-Path -Leaf $next))
 }
 
 # ---------------------------------------------------------------------------

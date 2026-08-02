@@ -122,6 +122,16 @@ Describe 'Mapping answers to install.ps1' {
         $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $true; Autostart = $true; Tray = $true }
         Get-WinmarchyInstallCommandLine -Choices $choices | Should -Be '.\install.ps1 -Theme nord -SkipApps'
     }
+
+    It 'passes the wallpaper folder through, quoted, and omits it when empty' {
+        $choices = @{ Theme = 'nord'; InstallApps = $true; BuildChooser = $true; Autostart = $true; Tray = $true; WallpaperDir = 'C:\Users\mat\Pictures\Walls' }
+        $arguments = New-WinmarchyInstallArguments -Choices $choices
+        $arguments.WallpaperDir | Should -Be 'C:\Users\mat\Pictures\Walls'
+        Get-WinmarchyInstallCommandLine -Choices $choices | Should -Be '.\install.ps1 -Theme nord -WallpaperDir "C:\Users\mat\Pictures\Walls"'
+
+        $choices.WallpaperDir = ''
+        (New-WinmarchyInstallArguments -Choices $choices).ContainsKey('WallpaperDir') | Should -BeFalse
+    }
 }
 
 Describe 'Review summary' {
