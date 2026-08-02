@@ -112,9 +112,8 @@ focus, `lwin+shift+arrows` move, `lwin+w` close, `lwin+f` fullscreen,
 Eight themes ship: tokyo-night, catppuccin, gruvbox, nord, everforest,
 rose-pine (light), matte-black and kanagawa. `winmarchy theme set <name>`
 recolours the bar, the window borders, Alacritty, Windows Terminal, Cursor,
-the wallpaper
-and the Windows light or dark app mode in one pass; the bar picks up its
-new stylesheet without restarting.
+the wallpaper and the Windows light or dark app mode in one pass; the bar
+picks up its new stylesheet without restarting.
 
 Swapping back and forth is `winmarchy mode win11` and
 `winmarchy mode omarchy`, from the menu, from the Start menu shortcuts, or
@@ -123,11 +122,11 @@ from any shell.
 The swap is symmetric, and that is the point. Windows 11 mode is defined as
 the total absence of Winmarchy: no GlazeWM, no yasb, taskbar and desktop
 icons back, your own wallpaper and light or dark setting restored, your
-your Alacritty config and Windows Terminal colour scheme back to exactly
-what they were, and Cursor's colours back to whatever they were. Entering Omarchy mode applies
-all of it again. Installing Winmarchy changes
-none of it: until you first enter Omarchy mode, the machine looks and
-behaves exactly as it did before.
+Alacritty config and Windows Terminal colour scheme back to exactly what
+they were, and Cursor's colours back to whatever they were. Entering
+Omarchy mode applies all of it again. Installing Winmarchy changes none of
+it: until you first enter Omarchy mode, the machine looks and behaves
+exactly as it did before.
 
 ## Honest limitations
 
