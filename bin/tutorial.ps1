@@ -35,7 +35,7 @@ function Get-WinmarchyTutorialLessons {
             Group = 'Opening things'
             Binding = 'lwin+enter'
             Title = 'Open a terminal'
-            What = 'A new terminal window, themed to match everything else. It tiles itself into the free space; you never position it.'
+            What = 'A new Alacritty window, themed to match everything else. It tiles itself into the free space; you never position it.'
             Windows = 'Replaces hunting for Terminal in the Start menu.'
         },
         [pscustomobject]@{

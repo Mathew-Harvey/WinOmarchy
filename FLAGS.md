@@ -379,4 +379,41 @@ in ref/omarchy for a verbatim port. (3) Adopt a named community Ghostty fork,
 accepting the risk. Recommendation is 2 if the goal is Omarchy fidelity, 1 if
 the goal is Ghostty specifically.
 
-Status: open.
+Status: closed. Mat chose option 2, Alacritty. See FLAG-20.
+
+## FLAG-20: Alacritty is the themed terminal
+
+Context: Mat chose option 2 from FLAG-19. Alacritty is what Omarchy itself
+uses, has official Windows support, and is in winget as
+Alacritty.Alacritty.
+
+Verified before implementing, against the Alacritty man page in the project
+repository: the Windows config location is %APPDATA%\alacritty\alacritty.toml,
+and the import mechanism is an import array inside a [general] section.
+
+Decision: templates/alacritty.toml.tpl is a verbatim port of Omarchy's
+default/themed/alacritty.toml.tpl colour mapping (see ref/omarchy), with
+Omarchy's two derived keys substituted directly: selection_background is
+selection, selection_foreground is bright_foreground.
+
+Winmarchy writes the whole alacritty.toml rather than editing it or adding
+an import line. Two reasons: TOML forbids a table being declared twice, so
+appending a [general] section to a config that already has one would break
+it, and there is no TOML parser on stock Windows PowerShell 5.1. Any
+pre-existing config is copied to alacritty.toml.winmarchy-bak exactly once;
+entering Windows 11 mode restores that backup, or removes the file entirely
+when it was ours to begin with. That keeps the swap symmetric with no TOML
+surgery. Same treatment in the uninstaller.
+
+lwin+enter and the popup menu and keybinding terminals now launch Alacritty,
+using its documented --title and -e flags; --title keeps the existing
+GlazeWM float rule working for the Winmarchy popups. install.ps1 resolves
+the Alacritty path at the winmarchy:terminal-path marker the same way it
+does the launcher and editor.
+
+Windows Terminal theming is deliberately kept. It is the terminal Windows
+itself opens from Win+X and right-click menus, so leaving it unthemed while
+everything else is themed would look broken. It is mode-scoped and restored
+exactly as before.
+
+Status: closed.

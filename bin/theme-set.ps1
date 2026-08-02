@@ -56,9 +56,24 @@ function Set-WinmarchyTheme {
         Write-WinmarchyLog -Message ('theme-set: glazewm step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 3. Windows Terminal: only in Omarchy mode. Windows 11 mode is defined as
-    # the absence of every Winmarchy effect, and the terminal is a surface the
-    # user sees in both modes, so entering win11 restores it (see mode.ps1).
+    # 3. Alacritty: the terminal Winmarchy launches. Omarchy mode only, and
+    # enter-win11 puts the user's own config back (see mode.ps1).
+    try {
+        if ($omarchyActive) {
+            $alacrittyPath = Get-WinmarchyAlacrittyConfigPath
+            if ($alacrittyPath) {
+                $null = Update-AlacrittyConfigFile -Path $alacrittyPath -Theme $theme
+                Write-WinmarchyLog -Message 'theme-set: alacritty config written'
+            }
+        }
+    } catch {
+        $stepFailures = $stepFailures + 'alacritty'
+        Write-WinmarchyLog -Message ('theme-set: alacritty step failed: ' + $_.Exception.Message) -Level 'ERROR'
+    }
+
+    # 4. Windows Terminal: still themed, so the terminal Windows opens from
+    # its own menus matches even though Alacritty is the one Winmarchy
+    # launches. Omarchy mode only; entering win11 restores it (see mode.ps1).
     try {
         if ($omarchyActive) {
             $wtPath = Get-WtSettingsPath
@@ -81,7 +96,7 @@ function Set-WinmarchyTheme {
         Write-WinmarchyLog -Message ('theme-set: windows terminal step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 4. Cursor: only in Omarchy mode, and only once Cursor has run at least
+    # 5. Cursor: only in Omarchy mode, and only once Cursor has run at least
     # once. enter-win11 puts the colours back (see mode.ps1).
     try {
         if ($omarchyActive) {
@@ -103,7 +118,7 @@ function Set-WinmarchyTheme {
         Write-WinmarchyLog -Message ('theme-set: cursor step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 5. Wallpaper: generate once per theme, then apply. Only meaningful in
+    # 6. Wallpaper: generate once per theme, then apply. Only meaningful in
     # Omarchy mode; in win11 mode the user's wallpaper stays untouched.
     try {
         if ($omarchyActive) {
@@ -119,7 +134,7 @@ function Set-WinmarchyTheme {
         Write-WinmarchyLog -Message ('theme-set: wallpaper step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 6. Windows app mode: dark for dark themes, light for rose-pine. Only in
+    # 7. Windows app mode: dark for dark themes, light for rose-pine. Only in
     # Omarchy mode; win11 mode keeps the user's own setting.
     try {
         if ($omarchyActive) {
@@ -133,7 +148,7 @@ function Set-WinmarchyTheme {
         Write-WinmarchyLog -Message ('theme-set: app mode step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 7. Record the theme in state.
+    # 8. Record the theme in state.
     Set-WinmarchyStateValue -Name 'theme' -Value $Name
 
     if ($stepFailures.Count -gt 0) {

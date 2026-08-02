@@ -182,6 +182,17 @@ function Enter-WinmarchyWin11Mode {
         Write-WinmarchyLog -Message ('enter-win11: app theme restore failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
+    # Step: put Alacritty's config back, or remove the one Winmarchy wrote.
+    try {
+        $alacrittyPath = Get-WinmarchyAlacrittyConfigPath
+        if ($alacrittyPath) {
+            $null = Restore-AlacrittyConfigFile -Path $alacrittyPath
+        }
+    } catch {
+        $failures = $failures + ('alacritty: ' + $_.Exception.Message)
+        Write-WinmarchyLog -Message ('enter-win11: alacritty restore failed: ' + $_.Exception.Message) -Level 'ERROR'
+    }
+
     # Step: put Windows Terminal back. The colour scheme and font face are a
     # visible Winmarchy effect, so Windows 11 mode must not carry them.
     try {

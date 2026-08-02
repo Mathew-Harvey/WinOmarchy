@@ -112,8 +112,9 @@ binding_modes:
         bindings: ['escape', 'enter', 'lwin+r']
 
 keybindings:
-  # Terminal.
-  - commands: ['shell-exec wt']
+  # Terminal. Alacritty is the themed terminal; install.ps1 patches the
+  # resolved path at the winmarchy:terminal-path marker.
+  - commands: ['shell-exec alacritty'] # winmarchy:terminal-path
     bindings: ['lwin+enter']
 
   # Browser. Change the URL to taste; explorer.exe with a URL opens the
@@ -253,16 +254,18 @@ keybindings:
   - commands: ['move-workspace --direction down']
     bindings: ['lwin+shift+alt+down']
 
-  # Keybinding overlay in a floating terminal.
-  - commands: ['shell-exec wt -w new --title "Winmarchy Keys" powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\keybindings.ps1']
+  # Keybinding overlay in a floating terminal. Alacritty --title sets the
+  # window title so the Winmarchy float rule above catches it, and -e runs
+  # the command; both are documented Alacritty flags.
+  - commands: ['shell-exec alacritty --title "Winmarchy Keys" -e powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\keybindings.ps1']
     bindings: ['lwin+k']
 
   # System menu.
-  - commands: ['shell-exec wt -w new --title "Winmarchy Menu" powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\menu.ps1 system']
+  - commands: ['shell-exec alacritty --title "Winmarchy Menu" -e powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\menu.ps1 system']
     bindings: ['lwin+escape']
 
   # Theme menu.
-  - commands: ['shell-exec wt -w new --title "Winmarchy Menu" powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\menu.ps1 theme']
+  - commands: ['shell-exec alacritty --title "Winmarchy Menu" -e powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\menu.ps1 theme']
     bindings: ['lwin+ctrl+shift+space']
 
   # Next theme.
