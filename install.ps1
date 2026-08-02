@@ -390,3 +390,9 @@ Write-Output '    lwin+escape         system menu'
 Write-Output '    lwin+shift+x        PANIC: back to Windows 11'
 Write-Output ''
 Write-Output 'Log out and back in to meet the chooser, or run: winmarchy mode omarchy'
+
+# Explicit success. Without this the exit code can be inherited from the last
+# native command run along the way (winget reports "already installed" and
+# "no applicable upgrade" as non-zero), which would look like a failed
+# install to anything checking the exit code.
+exit 0

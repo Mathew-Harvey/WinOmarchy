@@ -149,7 +149,7 @@
                   <ColumnDefinition Width="150" />
                   <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding Mark}" Foreground="{Binding MarkBrush}" FontSize="14" FontWeight="Bold" />
+                <TextBlock Grid.Column="0" Text="{Binding Mark}" Foreground="{Binding MarkColour}" FontSize="14" FontWeight="Bold" />
                 <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="#c0caf5" FontSize="13.5" />
                 <TextBlock Grid.Column="2" Text="{Binding Detail}" Foreground="#565f89" FontSize="13" TextWrapping="Wrap" />
               </Grid>
@@ -181,11 +181,11 @@
                 <StackPanel Margin="4,7">
                   <TextBlock Text="{Binding Label}" Foreground="#c0caf5" FontSize="14" />
                   <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                    <Border Width="17" Height="9" CornerRadius="2" Margin="0,0,4,0" Background="{Binding AccentBrush}" />
-                    <Border Width="17" Height="9" CornerRadius="2" Margin="0,0,4,0" Background="{Binding RedBrush}" />
-                    <Border Width="17" Height="9" CornerRadius="2" Margin="0,0,4,0" Background="{Binding GreenBrush}" />
-                    <Border Width="17" Height="9" CornerRadius="2" Margin="0,0,4,0" Background="{Binding YellowBrush}" />
-                    <Border Width="17" Height="9" CornerRadius="2" Background="{Binding MagentaBrush}" />
+                    <Border Width="17" Height="9" CornerRadius="2" Margin="0,0,4,0" Background="{Binding AccentColour}" />
+                    <Border Width="17" Height="9" CornerRadius="2" Margin="0,0,4,0" Background="{Binding RedColour}" />
+                    <Border Width="17" Height="9" CornerRadius="2" Margin="0,0,4,0" Background="{Binding GreenColour}" />
+                    <Border Width="17" Height="9" CornerRadius="2" Margin="0,0,4,0" Background="{Binding YellowColour}" />
+                    <Border Width="17" Height="9" CornerRadius="2" Background="{Binding MagentaColour}" />
                   </StackPanel>
                 </StackPanel>
               </DataTemplate>

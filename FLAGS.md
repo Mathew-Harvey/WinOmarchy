@@ -253,3 +253,37 @@ failing install reports rather than hangs, and one for partial-line
 handling.
 
 Status: closed.
+
+## FLAG-16: false failure verdict and black check marks in the wizard
+
+Context: reported from the machine with the log attached. The install ran
+perfectly start to finish (all 16 winget packages, deploy, configs, chooser
+build, shortcuts, wallpapers, theme) and the log ended with the normal
+summary, but the wizard showed "Setup did not finish". Separately, the ok
+and x marks on the system check page rendered black instead of green, amber
+or red.
+
+Cause one: the redirected error file was empty, so the false verdict came
+from the exit code. Start-Process -PassThru can return a Process whose
+ExitCode throws even after a clean run, and the code turned that exception
+into -1, which then read as a failure. install.ps1 also had no explicit exit
+statement, so its exit code could be inherited from the last native command
+(winget reports "already installed" and "no applicable upgrade" as non-zero
+values).
+
+Cause two: the check marks and the theme swatches bound Foreground and
+Background to SolidColorBrush objects held on PSCustomObjects. WPF cannot
+convert a PowerShell-wrapped Brush, so the binding failed silently and the
+elements fell back to their default black. Text bindings on the same objects
+worked, which is why only the colours were wrong.
+
+Decision: install.ps1 now ends with an explicit exit 0, so the exit code is
+a contract rather than an accident. Complete-WinmarchyInstallRun calls
+WaitForExit first, and an unreadable exit code is no longer treated as
+failure: it falls back to the error stream. All colour bindings are now hex
+strings, which WPF converts through the target property's type converter,
+and a test asserts no {Binding *Brush} pattern can return to the XAML. Five
+tests cover the verdict rules, including unreadable exit codes and warnings
+being distinguished from errors.
+
+Status: closed.

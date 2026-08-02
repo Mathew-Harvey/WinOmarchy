@@ -146,10 +146,29 @@ function Complete-WinmarchyInstallRun {
         }
     }
 
-    $exitCode = -1
-    try { $exitCode = $Run.Process.ExitCode } catch { $exitCode = -1 }
+    # WaitForExit with no timeout also flushes the redirected streams, so the
+    # exit code is settled before it is read.
+    try { $Run.Process.WaitForExit() } catch { }
+
+    # An unreadable exit code must never be reported as a failed install:
+    # Start-Process -PassThru can hand back a Process whose ExitCode throws
+    # even though the child finished perfectly. Fall back to the error stream.
+    $exitCode = $null
+    try {
+        $rawExitCode = $Run.Process.ExitCode
+        if ($null -ne $rawExitCode) { $exitCode = [int]$rawExitCode }
+    } catch {
+        $exitCode = $null
+    }
+
+    if ($null -eq $exitCode) {
+        $failed = ($errors.Count -gt 0)
+    } else {
+        $failed = ($exitCode -ne 0)
+    }
+
     return [pscustomobject]@{
-        Failed   = (($exitCode -ne 0) -or ($errors.Count -gt 0))
+        Failed   = $failed
         ExitCode = $exitCode
         Warnings = $warnings
         Lines    = $lines
@@ -214,14 +233,17 @@ function Start-WinmarchyWpfWizard {
     # --- system check page ---
     $checkRows = @()
     foreach ($row in $state.Preflight) {
+        # Bound values are hex strings, never Brush objects: WPF converts a
+        # string for us, but cannot convert a PowerShell-wrapped Brush, and a
+        # failed binding silently renders as default black.
         $mark = 'ok'
-        $brush = ConvertTo-WinmarchyBrush '#9ece6a'
+        $markColour = '#9ece6a'
         if (-not $row.Pass) {
             $mark = 'x'
-            $brush = ConvertTo-WinmarchyBrush '#f7768e'
-            if (-not $row.Blocking) { $brush = ConvertTo-WinmarchyBrush '#e0af68' }
+            $markColour = '#f7768e'
+            if (-not $row.Blocking) { $markColour = '#e0af68' }
         }
-        $checkRows = $checkRows + @(, [pscustomobject]@{ Mark = $mark; MarkBrush = $brush; Name = $row.Name; Detail = $row.Detail })
+        $checkRows = $checkRows + @(, [pscustomobject]@{ Mark = $mark; MarkColour = $markColour; Name = $row.Name; Detail = $row.Detail })
     }
     $ui.ChecksList.ItemsSource = $checkRows
 
@@ -236,11 +258,11 @@ function Start-WinmarchyWpfWizard {
             Background   = $theme.Background
             Foreground   = $theme.Foreground
             Muted        = $theme.Muted
-            AccentBrush  = (ConvertTo-WinmarchyBrush $theme.Accent)
-            RedBrush     = (ConvertTo-WinmarchyBrush $theme.Red)
-            GreenBrush   = (ConvertTo-WinmarchyBrush $theme.Green)
-            YellowBrush  = (ConvertTo-WinmarchyBrush $theme.Yellow)
-            MagentaBrush = (ConvertTo-WinmarchyBrush $theme.Magenta)
+            AccentColour  = $theme.Accent
+            RedColour     = $theme.Red
+            GreenColour   = $theme.Green
+            YellowColour  = $theme.Yellow
+            MagentaColour = $theme.Magenta
         })
     }
     $ui.ThemeList.ItemsSource = $gallery
