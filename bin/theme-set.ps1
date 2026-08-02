@@ -81,21 +81,26 @@ function Set-WinmarchyTheme {
         Write-WinmarchyLog -Message ('theme-set: windows terminal step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # 4. Neovim: only in Omarchy mode, and only when a LazyVim config exists.
-    # enter-win11 deletes the file again so Neovim returns to its own scheme.
+    # 4. Cursor: only in Omarchy mode, and only once Cursor has run at least
+    # once. enter-win11 puts the colours back (see mode.ps1).
     try {
-        $nvimPluginsDir = Join-Path (Get-WinmarchyNvimConfigDir) (Join-Path 'lua' 'plugins')
-        if ($omarchyActive -and (Test-Path $nvimPluginsDir)) {
-            $nvimTemplate = [System.IO.File]::ReadAllText((Join-Path (Get-WinmarchyTemplatesDir) 'nvim-theme.lua.tpl'))
-            $nvimRendered = Expand-WinmarchyTemplate -Template $nvimTemplate -Tokens $tokens
-            Write-WinmarchyTextFile -Path (Join-Path $nvimPluginsDir 'winmarchy-theme.lua') -Content $nvimRendered
-            Write-WinmarchyLog -Message 'theme-set: nvim theme written'
-        } else {
-            Write-WinmarchyLog -Message 'theme-set: no nvim plugins directory; skipped' -Level 'WARN'
+        if ($omarchyActive) {
+            $cursorPath = Get-WinmarchyCursorSettingsPath
+            if ($cursorPath) {
+                $cursorResult = Update-CursorSettingsFile -Path $cursorPath -Theme $theme
+                if (-not (Get-WinmarchyState).savedCursorCaptured) {
+                    Set-WinmarchyStateValue -Name 'savedCursorColours' -Value $cursorResult.OriginalColours
+                    Set-WinmarchyStateValue -Name 'savedCursorHadColours' -Value $cursorResult.HadCustomisations
+                    Set-WinmarchyStateValue -Name 'savedCursorCaptured' -Value $true
+                }
+                Write-WinmarchyLog -Message 'theme-set: cursor colours written'
+            } else {
+                Write-WinmarchyLog -Message 'theme-set: cursor has never run; skipped' -Level 'WARN'
+            }
         }
     } catch {
-        $stepFailures = $stepFailures + 'nvim'
-        Write-WinmarchyLog -Message ('theme-set: nvim step failed: ' + $_.Exception.Message) -Level 'ERROR'
+        $stepFailures = $stepFailures + 'cursor'
+        Write-WinmarchyLog -Message ('theme-set: cursor step failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
     # 5. Wallpaper: generate once per theme, then apply. Only meaningful in

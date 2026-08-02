@@ -246,9 +246,6 @@
         <CheckBox x:Name="OptApps" Style="{StaticResource Check}" Content="Install the apps with winget" />
         <TextBlock x:Name="OptAppsNote" Foreground="#565f89" FontSize="12.5" TextWrapping="Wrap" Margin="26,0,0,16" />
 
-        <CheckBox x:Name="OptNeovim" Style="{StaticResource Check}" Content="Set up Neovim with the LazyVim starter" />
-        <TextBlock x:Name="OptNeovimNote" Foreground="#565f89" FontSize="12.5" TextWrapping="Wrap" Margin="26,0,0,16" />
-
         <CheckBox x:Name="OptChooser" Style="{StaticResource Check}" Content="Build the login chooser" />
         <TextBlock x:Name="OptChooserNote" Foreground="#565f89" FontSize="12.5" TextWrapping="Wrap" Margin="26,0,0,16" />
 

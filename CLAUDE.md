@@ -8,7 +8,7 @@ file is the always-loaded summary. Do not weaken these rules without Mat's say-s
 
 Winmarchy gives Mat's Windows 11 machine two modes: stock Windows 11, and an
 Omarchy-inspired mode (GlazeWM tiling, yasb bar, Flow Launcher, themed terminal and
-Neovim, one palette driving every surface). A chooser appears at login; a hot swap is
+Cursor, one palette driving every surface). A chooser appears at login; a hot swap is
 available from either mode. Explorer stays the shell at all times. Windows 11 mode is
 defined as the absence of all Winmarchy runtime effects.
 

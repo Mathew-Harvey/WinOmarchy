@@ -203,7 +203,7 @@ function Start-WinmarchyWpfWizard {
         'ChecksList', 'ChecksVerdict', 'ThemeList', 'PreviewRoot', 'PreviewBar', 'PreviewClock',
         'PreviewWs1', 'PreviewWs2', 'PreviewWs3', 'PreviewTileFocused', 'PreviewTileOther',
         'PreviewLine1', 'PreviewLine2', 'PreviewLine3', 'PreviewLine4', 'PreviewLine5', 'PreviewPrompt', 'PreviewCaption',
-        'OptApps', 'OptAppsNote', 'OptNeovim', 'OptNeovimNote', 'OptChooser', 'OptChooserNote',
+        'OptApps', 'OptAppsNote', 'OptChooser', 'OptChooserNote',
         'OptAutostart', 'OptAutostartNote', 'ReviewSummary', 'ReviewPlan',
         'InstallStatus', 'InstallProgress', 'InstallLog', 'LogScroller',
         'DoneTitle', 'DoneSub', 'DoneWarnings', 'OptEnterNow',
@@ -299,17 +299,10 @@ function Start-WinmarchyWpfWizard {
     # --- components page ---
     $ui.OptApps.IsChecked = $state.Choices.InstallApps
     $ui.OptAppsNote.Text = ('The ' + (@(Get-WinmarchyWingetPackages).Count) + ' packages Winmarchy uses: the window manager, bar, launcher, terminal, Neovim, the Nerd Font and a handful of command line tools. Per-user, no admin prompt.')
-    $ui.OptNeovim.IsChecked = $state.Choices.SetupNeovim
     $ui.OptChooser.IsChecked = $state.Choices.BuildChooser
     $ui.OptAutostart.IsChecked = $state.Choices.Autostart
 
-    $nvimNote = 'Clones the LazyVim starter so Neovim picks up the palette straight away.'
     foreach ($row in $state.Preflight) {
-        if ($row.Name -eq 'Neovim config' -and $row.Detail -like '*will be left*') {
-            $nvimNote = 'You already have a Neovim config, so this stays off and your setup is left completely alone. Theming applies once a LazyVim config is present.'
-            $ui.OptNeovim.IsEnabled = $false
-            $ui.OptNeovim.IsChecked = $false
-        }
         if ($row.Name -eq 'winget' -and (-not $row.Pass)) {
             $ui.OptApps.IsEnabled = $false
             $ui.OptApps.IsChecked = $false
@@ -320,7 +313,6 @@ function Start-WinmarchyWpfWizard {
             $ui.OptChooser.IsChecked = $false
         }
     }
-    $ui.OptNeovimNote.Text = $nvimNote
 
     $chooserNote = 'The split-screen picker at login. Needs the .NET 8 SDK to build once.'
     $autostartNote = 'Without this, Windows starts normally and you swap from the Start menu or by running winmarchy mode omarchy.'
@@ -346,7 +338,6 @@ function Start-WinmarchyWpfWizard {
     # --- page navigation ---
     $collectChoices = {
         $state.Choices.InstallApps = [bool]$ui.OptApps.IsChecked
-        $state.Choices.SetupNeovim = [bool]$ui.OptNeovim.IsChecked
         $state.Choices.BuildChooser = [bool]$ui.OptChooser.IsChecked
         $state.Choices.Autostart = [bool]$ui.OptAutostart.IsChecked
         $state.Choices = Resolve-WinmarchyWizardChoices -Choices $state.Choices -Preflight $state.Preflight
@@ -609,10 +600,8 @@ function Start-WinmarchyConsoleWizard {
     Write-Output ''
 
     $choices = New-WinmarchyWizardChoices -Preflight $preflight
-    $nvimExists = $false
     $wingetMissing = $false
     foreach ($row in $preflight) {
-        if ($row.Name -eq 'Neovim config' -and $row.Detail -like '*will be left*') { $nvimExists = $true }
         if ($row.Name -eq 'winget' -and (-not $row.Pass)) { $wingetMissing = $true }
     }
 
@@ -635,11 +624,6 @@ function Start-WinmarchyConsoleWizard {
         Write-Output '  Apps: winget is not available, so the configuration is deployed on its own.'
     } else {
         $choices.InstallApps = Read-WinmarchyYesNo -Question ('  Install the ' + (@(Get-WinmarchyWingetPackages).Count) + ' apps with winget?') -Default $choices.InstallApps
-    }
-    if ($nvimExists) {
-        Write-Output '  Neovim: you already have a config, so it is left completely untouched.'
-    } else {
-        $choices.SetupNeovim = Read-WinmarchyYesNo -Question '  Set up Neovim with the LazyVim starter?' -Default $choices.SetupNeovim
     }
     $choices.BuildChooser = Read-WinmarchyYesNo -Question '  Build the login chooser?' -Default $choices.BuildChooser
     if ($choices.BuildChooser) {

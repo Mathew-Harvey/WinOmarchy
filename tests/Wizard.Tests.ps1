@@ -9,7 +9,6 @@ BeforeAll {
     . (Join-Path $script:repoRoot (Join-Path 'installer' 'wizard-lib.ps1'))
     $script:xamlPath = Join-Path $script:repoRoot (Join-Path 'installer' 'wizard.xaml')
     $script:savedHome = $env:WINMARCHY_HOME
-    $script:savedNvim = $env:WINMARCHY_NVIM_DIR
 
     function New-Row {
         param([string]$Name, [bool]$Pass, [bool]$Blocking, [string]$Detail = '')
@@ -19,28 +18,26 @@ BeforeAll {
 
 AfterAll {
     $env:WINMARCHY_HOME = $script:savedHome
-    $env:WINMARCHY_NVIM_DIR = $script:savedNvim
 }
 
 Describe 'Setup wizard' {
     BeforeEach {
         $testRoot = Join-Path $TestDrive ([System.IO.Path]::GetRandomFileName())
         $env:WINMARCHY_HOME = Join-Path $testRoot 'home'
-        $env:WINMARCHY_NVIM_DIR = Join-Path $testRoot 'nvim'
     }
 
 Describe 'Preflight' {
     It 'reports every check the wizard and installer rely on' {
         $names = @()
         foreach ($row in (Get-WinmarchyPreflight)) { $names = $names + $row.Name }
-        foreach ($expected in @('Windows 11', 'winget', '.NET 8 SDK', 'Disk space', 'Existing install', 'Neovim config', 'Windows Terminal')) {
+        foreach ($expected in @('Windows 11', 'winget', '.NET 8 SDK', 'Disk space', 'Existing install', 'Cursor', 'Windows Terminal')) {
             $names | Should -Contain $expected
         }
     }
 
     It 'never blocks on an optional component' {
         foreach ($row in (Get-WinmarchyPreflight)) {
-            if ($row.Name -eq '.NET 8 SDK' -or $row.Name -eq 'Existing install' -or $row.Name -eq 'Neovim config' -or $row.Name -eq 'Windows Terminal') {
+            if ($row.Name -eq '.NET 8 SDK' -or $row.Name -eq 'Existing install' -or $row.Name -eq 'Cursor' -or $row.Name -eq 'Windows Terminal') {
                 $row.Blocking | Should -BeFalse -Because ($row.Name + ' must never stop an install')
             }
         }
@@ -53,12 +50,6 @@ Describe 'Preflight' {
         # On Windows the with-apps case blocks; off Windows neither does, and
         # the point of the test is that -SkipApps only ever relaxes it.
         if ($withApps.Blocking) { $withApps.Pass | Should -BeFalse }
-    }
-
-    It 'notices an existing Neovim config and says it will be left alone' {
-        $null = New-Item -ItemType Directory -Path $env:WINMARCHY_NVIM_DIR -Force
-        $row = @(Get-WinmarchyPreflight) | Where-Object { $_.Name -eq 'Neovim config' }
-        $row.Detail | Should -Match 'left completely untouched'
     }
 
     It 'notices an existing install and calls it an update' {
@@ -79,83 +70,62 @@ Describe 'Default choices' {
         $choices.InstallApps | Should -BeFalse
         $choices.BuildChooser | Should -BeFalse
         $choices.Autostart | Should -BeFalse
-        $choices.SetupNeovim | Should -BeTrue
     }
 
-    It 'leaves an existing Neovim config alone by default' {
-        $preflight = @(
-            (New-Row 'winget' $true $true),
-            (New-Row '.NET 8 SDK' $true $false),
-            (New-Row 'Neovim config' $true $false 'your Neovim config exists and will be left completely untouched')
-        )
-        $choices = New-WinmarchyWizardChoices -Preflight $preflight
-        $choices.SetupNeovim | Should -BeFalse
-        $choices.InstallApps | Should -BeTrue
-        $choices.BuildChooser | Should -BeTrue
-    }
 }
 
 Describe 'Option interlocks' {
     It 'turns autostart off when the chooser is not being built' {
-        $choices = @{ Theme = 'nord'; InstallApps = $true; SetupNeovim = $true; BuildChooser = $false; Autostart = $true }
+        $choices = @{ Theme = 'nord'; InstallApps = $true; BuildChooser = $false; Autostart = $true }
         $resolved = Resolve-WinmarchyWizardChoices -Choices $choices -Preflight @()
         $resolved.Autostart | Should -BeFalse
     }
 
-    It 'never enables Neovim setup over an existing config' {
-        $choices = @{ Theme = 'nord'; InstallApps = $true; SetupNeovim = $true; BuildChooser = $true; Autostart = $true }
-        $preflight = @((New-Row 'Neovim config' $true $false 'your Neovim config exists and will be left completely untouched'))
-        $resolved = Resolve-WinmarchyWizardChoices -Choices $choices -Preflight $preflight
-        $resolved.SetupNeovim | Should -BeFalse
-    }
-
     It 'leaves a valid combination untouched' {
-        $choices = @{ Theme = 'gruvbox'; InstallApps = $true; SetupNeovim = $true; BuildChooser = $true; Autostart = $true }
+        $choices = @{ Theme = 'gruvbox'; InstallApps = $true; BuildChooser = $true; Autostart = $true }
         $resolved = Resolve-WinmarchyWizardChoices -Choices $choices -Preflight @()
         $resolved.Theme | Should -Be 'gruvbox'
         $resolved.Autostart | Should -BeTrue
-        $resolved.SetupNeovim | Should -BeTrue
     }
 }
 
 Describe 'Mapping answers to install.ps1' {
     It 'passes only the theme when everything is wanted' {
-        $choices = @{ Theme = 'kanagawa'; InstallApps = $true; SetupNeovim = $true; BuildChooser = $true; Autostart = $true }
+        $choices = @{ Theme = 'kanagawa'; InstallApps = $true; BuildChooser = $true; Autostart = $true }
         $arguments = New-WinmarchyInstallArguments -Choices $choices
         $arguments.Theme | Should -Be 'kanagawa'
         $arguments.Keys.Count | Should -Be 1
     }
 
     It 'adds a skip switch for each declined component' {
-        $choices = @{ Theme = 'nord'; InstallApps = $false; SetupNeovim = $false; BuildChooser = $false; Autostart = $false }
+        $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $false; Autostart = $false }
         $arguments = New-WinmarchyInstallArguments -Choices $choices
         $arguments.ContainsKey('SkipApps') | Should -BeTrue
-        $arguments.ContainsKey('SkipNeovim') | Should -BeTrue
         $arguments.ContainsKey('SkipChooser') | Should -BeTrue
         $arguments.ContainsKey('NoAutostart') | Should -BeTrue
     }
 
     It 'only ever names parameters install.ps1 actually has' {
         $installParams = @((Get-Command (Join-Path $script:repoRoot 'install.ps1')).Parameters.Keys)
-        $choices = @{ Theme = 'nord'; InstallApps = $false; SetupNeovim = $false; BuildChooser = $false; Autostart = $false }
+        $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $false; Autostart = $false }
         foreach ($key in (New-WinmarchyInstallArguments -Choices $choices).Keys) {
             $installParams | Should -Contain $key
         }
     }
 
     It 'shows an equivalent command line the user could type' {
-        $choices = @{ Theme = 'nord'; InstallApps = $false; SetupNeovim = $true; BuildChooser = $true; Autostart = $true }
+        $choices = @{ Theme = 'nord'; InstallApps = $false; BuildChooser = $true; Autostart = $true }
         Get-WinmarchyInstallCommandLine -Choices $choices | Should -Be '.\install.ps1 -Theme nord -SkipApps'
     }
 }
 
 Describe 'Review summary' {
     It 'describes each decision in plain language and always promises the backup' {
-        $choices = @{ Theme = 'everforest'; InstallApps = $true; SetupNeovim = $false; BuildChooser = $true; Autostart = $false }
+        $choices = @{ Theme = 'everforest'; InstallApps = $true; BuildChooser = $true; Autostart = $false }
         $lines = @(Get-WinmarchyWizardSummary -Choices $choices)
         ($lines -join ' ') | Should -Match 'everforest'
-        ($lines -join ' ') | Should -Match 'install all 16 packages'
-        ($lines -join ' ') | Should -Match 'leave Neovim alone'
+        ($lines -join ' ') | Should -Match 'install all 15 packages'
+        ($lines -join ' ') | Should -Match 'Cursor is themed to match'
         ($lines -join ' ') | Should -Match 'build the login chooser'
         ($lines -join ' ') | Should -Match 'Windows starts as it always has'
         ($lines -join ' ') | Should -Match 'never proceed if that backup fails'
@@ -209,7 +179,7 @@ Describe 'Wizard XAML' {
         }
         $driver = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot 'install-ui.ps1'))
         # The lookup list in install-ui.ps1 is the contract between the two files.
-        foreach ($required in @('BtnNext', 'BtnBack', 'BtnCancel', 'ThemeList', 'ChecksList', 'InstallLog', 'ReviewPlan', 'OptApps', 'OptChooser', 'OptAutostart', 'OptNeovim', 'PageWelcome', 'PageDone')) {
+        foreach ($required in @('BtnNext', 'BtnBack', 'BtnCancel', 'ThemeList', 'ChecksList', 'InstallLog', 'ReviewPlan', 'OptApps', 'OptChooser', 'OptAutostart', 'PageWelcome', 'PageDone')) {
             $names | Should -Contain $required
             $driver | Should -Match ("'" + $required + "'")
         }
@@ -293,7 +263,7 @@ Describe 'Install run and log tail' {
     }
 
     It 'streams a real install line by line and reports success' {
-        $run = Invoke-RunToCompletion -Arguments @{ Theme = 'gruvbox'; SkipApps = $true; SkipNeovim = $true; SkipChooser = $true; NoAutostart = $true }
+        $run = Invoke-RunToCompletion -Arguments @{ Theme = 'gruvbox'; SkipApps = $true; SkipChooser = $true; NoAutostart = $true }
 
         $run.Result.Failed | Should -BeFalse
         $run.Result.ExitCode | Should -Be 0
@@ -340,7 +310,7 @@ Describe 'Install run and log tail' {
     }
 
     It 'exits zero on success so the wizard can trust the exit code' {
-        $run = Invoke-RunToCompletion -Arguments @{ Theme = 'nord'; SkipApps = $true; SkipNeovim = $true; SkipChooser = $true; NoAutostart = $true }
+        $run = Invoke-RunToCompletion -Arguments @{ Theme = 'nord'; SkipApps = $true; SkipChooser = $true; NoAutostart = $true }
         $run.Result.ExitCode | Should -Be 0
         $run.Result.Failed | Should -BeFalse
     }

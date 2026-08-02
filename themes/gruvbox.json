@@ -3,7 +3,6 @@
   "label": "Gruvbox",
   "mode": "dark",
   "wt_scheme": "Winmarchy Gruvbox",
-  "nvim": { "plugin": "ellisonleao/gruvbox.nvim", "name": null, "colorscheme": "gruvbox" },
   "colors": {
     "accent": "#7daea3", "selection": "#504945", "muted": "#665c54",
     "background": "#282828", "dark_background": "#1e1e1e", "darker_background": "#161616", "lighter_background": "#3c3836",

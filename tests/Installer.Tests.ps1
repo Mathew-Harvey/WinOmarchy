@@ -1,15 +1,14 @@
 # Pester tests for install.ps1 and uninstall.ps1 (Phase 4).
 # Runs both scripts for real against throwaway directories (WINMARCHY_HOME,
-# WINMARCHY_USERPROFILE, WINMARCHY_NVIM_DIR and LOCALAPPDATA all point into
-# the TestDrive), so the file-level behaviour is tested end to end while the
-# Windows-only steps skip themselves.
+# WINMARCHY_USERPROFILE and LOCALAPPDATA all point into the TestDrive), so
+# the file-level behaviour is tested end to end while the Windows-only steps
+# skip themselves.
 
 BeforeAll {
     $script:repoRoot = Split-Path -Parent $PSScriptRoot
     . (Join-Path $script:repoRoot (Join-Path 'bin' (Join-Path 'lib' 'common.ps1')))
     $script:savedHome = $env:WINMARCHY_HOME
     $script:savedProfile = $env:WINMARCHY_USERPROFILE
-    $script:savedNvim = $env:WINMARCHY_NVIM_DIR
     $script:savedLocalAppData = $env:LOCALAPPDATA
 
     function Get-FileSnapshot {
@@ -40,8 +39,6 @@ BeforeAll {
 
         $env:WINMARCHY_HOME = Join-Path $Root 'winmarchy-home'
         $env:WINMARCHY_USERPROFILE = $profileDir
-        $env:WINMARCHY_NVIM_DIR = Join-Path $Root 'nvim-existing'
-        $null = New-Item -ItemType Directory -Path $env:WINMARCHY_NVIM_DIR -Force
         $env:LOCALAPPDATA = $localAppData
     }
 }
@@ -49,7 +46,6 @@ BeforeAll {
 AfterAll {
     $env:WINMARCHY_HOME = $script:savedHome
     $env:WINMARCHY_USERPROFILE = $script:savedProfile
-    $env:WINMARCHY_NVIM_DIR = $script:savedNvim
     $env:LOCALAPPDATA = $script:savedLocalAppData
 }
 
@@ -120,9 +116,6 @@ Describe 'install.ps1 real run' {
         $styles = [System.IO.File]::ReadAllText((Join-Path (Join-Path $env:WINMARCHY_USERPROFILE (Join-Path '.config' 'yasb')) 'styles.css'))
         $styles.Contains('{{') | Should -BeFalse
         $styles.Contains('#7aa2f7') | Should -BeTrue
-
-        # Existing Neovim config untouched: no winmarchy files appeared.
-        @(Get-ChildItem -Path $env:WINMARCHY_NVIM_DIR -Recurse -Force).Count | Should -Be 0
 
         # State records the chosen theme.
         (Get-WinmarchyState).theme | Should -Be 'tokyo-night'
@@ -212,9 +205,8 @@ Describe 'uninstall.ps1' {
         $null = New-Item -ItemType Directory -Path $freshRoot -Force
         $env:WINMARCHY_HOME = Join-Path $freshRoot 'winmarchy-home'
         $env:WINMARCHY_USERPROFILE = Join-Path $freshRoot 'profile'
-        $env:WINMARCHY_NVIM_DIR = Join-Path $freshRoot 'nvim-existing'
         $env:LOCALAPPDATA = Join-Path $freshRoot 'localappdata'
-        $null = New-Item -ItemType Directory -Path $env:WINMARCHY_USERPROFILE, $env:WINMARCHY_NVIM_DIR, $env:LOCALAPPDATA -Force
+        $null = New-Item -ItemType Directory -Path $env:WINMARCHY_USERPROFILE, $env:LOCALAPPDATA -Force
 
         $null = & (Join-Path $script:repoRoot 'install.ps1') -SkipApps 2>&1 | Out-String
         $glazeConfig = Join-Path $env:WINMARCHY_USERPROFILE (Join-Path '.glzr' (Join-Path 'glazewm' 'config.yaml'))

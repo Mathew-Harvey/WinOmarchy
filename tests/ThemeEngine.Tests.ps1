@@ -36,8 +36,6 @@ Describe 'Theme loading' {
         $theme.name | Should -Be $_
         $theme.mode | Should -BeIn @('dark', 'light')
         $theme.wt_scheme | Should -Match '^Winmarchy '
-        $theme.nvim.plugin | Should -Not -BeNullOrEmpty
-        $theme.nvim.colorscheme | Should -Not -BeNullOrEmpty
         foreach ($key in $script:paletteKeys) {
             $theme.colors.$key | Should -Match '^#[0-9a-fA-F]{6}$' -Because ('colour key ' + $key + ' must be a hex colour')
         }
@@ -81,26 +79,17 @@ Describe 'Template renderer' {
         { Expand-WinmarchyTemplate -Template 'x {{not_a_real_token}} y' -Tokens $tokens } | Should -Throw '*not_a_real_token*'
     }
 
-    It 'builds the catppuccin nvim plugin spec with its alias name' {
-        $theme = Get-WinmarchyTheme -Name 'catppuccin'
-        $tokens = Get-WinmarchyThemeTokens -Theme $theme
-        $tokens['nvim_plugin_spec'] | Should -Be '"catppuccin/nvim", name = "catppuccin"'
-    }
-
-    It 'builds a plain nvim plugin spec when there is no alias' {
-        $theme = Get-WinmarchyTheme -Name 'tokyo-night'
-        $tokens = Get-WinmarchyThemeTokens -Theme $theme
-        $tokens['nvim_plugin_spec'] | Should -Be '"folke/tokyonight.nvim"'
-    }
-
-    It 'renders the nvim theme template into valid-looking lua for every theme' {
-        $templatePath = Join-Path (Get-WinmarchyTemplatesDir) 'nvim-theme.lua.tpl'
-        $template = [System.IO.File]::ReadAllText($templatePath)
+    It 'renders the Cursor colour template into valid JSON for every theme' {
         foreach ($name in (Get-WinmarchyThemeNames)) {
             $theme = Get-WinmarchyTheme -Name $name
-            $rendered = Expand-WinmarchyTemplate -Template $template -Tokens (Get-WinmarchyThemeTokens -Theme $theme)
-            $rendered.Contains('{{') | Should -BeFalse
-            $rendered | Should -Match 'colorscheme = "'
+            $colours = New-WinmarchyCursorColours -Theme $theme
+            # Every value must be a real colour, and the palette must be used.
+            foreach ($property in $colours.PSObject.Properties) {
+                $property.Value | Should -Match '^#[0-9a-fA-F]{6}$' -Because ($property.Name + ' must be a hex colour')
+            }
+            $colours.'editor.background' | Should -Be $theme.colors.background
+            $colours.'terminal.ansiBrightBlack' | Should -Be $theme.colors.muted
+            $colours.'focusBorder' | Should -Be $theme.colors.accent
         }
     }
 }

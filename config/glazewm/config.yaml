@@ -121,9 +121,9 @@ keybindings:
   - commands: ['shell-exec explorer.exe "https://www.google.com"']
     bindings: ['lwin+shift+enter']
 
-  # Neovim in a new terminal window. wt -w new forces a new window; verify on
-  # the machine (FLAGS.md FLAG-6).
-  - commands: ['shell-exec wt -w new nvim']
+  # Editor. The path is resolved and patched by install.ps1 at the
+  # winmarchy:editor-path marker; the default is where winget puts Cursor.
+  - commands: ['shell-exec %LOCALAPPDATA%\Programs\cursor\Cursor.exe'] # winmarchy:editor-path
     bindings: ['lwin+shift+n']
 
   # File manager.

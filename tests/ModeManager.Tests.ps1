@@ -10,13 +10,11 @@ BeforeAll {
     $script:repoRoot = $repoRoot
     $script:savedHome = $env:WINMARCHY_HOME
     $script:savedProfile = $env:WINMARCHY_USERPROFILE
-    $script:savedNvim = $env:WINMARCHY_NVIM_DIR
 }
 
 AfterAll {
     $env:WINMARCHY_HOME = $script:savedHome
     $env:WINMARCHY_USERPROFILE = $script:savedProfile
-    $env:WINMARCHY_NVIM_DIR = $script:savedNvim
 }
 
 Describe 'Mode manager' {
@@ -26,7 +24,6 @@ Describe 'Mode manager' {
         $testRoot = Join-Path $TestDrive ([System.IO.Path]::GetRandomFileName())
         $env:WINMARCHY_HOME = Join-Path $testRoot 'home'
         $env:WINMARCHY_USERPROFILE = Join-Path $testRoot 'profile'
-        $env:WINMARCHY_NVIM_DIR = Join-Path $testRoot 'nvim'
     }
 
 Describe 'enter-omarchy' {
@@ -162,25 +159,27 @@ Describe 'enter-win11' {
         $null -eq (Get-WinmarchyState).savedAppsUseLightTheme | Should -BeTrue
     }
 
-    It 'restores Windows Terminal and removes the Neovim theme' {
+    It 'restores Windows Terminal and Cursor on the way out' {
         Mock Test-WinmarchyProcessRunning { $true }
         Mock Get-WinmarchyTaskbarAutoHide { $true }
         Mock Get-WinmarchyDesktopIconsVisible { $false }
         Mock Get-WtSettingsPath { 'C:\fake\settings.json' }
         Mock Restore-WtSettingsFile { $true }
-        Mock Remove-WinmarchyNvimTheme { $true }
+        Mock Get-WinmarchyCursorSettingsPath { 'C:\fake\cursor.json' }
+        Mock Restore-CursorSettingsFile { $true }
         Set-WinmarchyStateValue -Name 'savedWtColorScheme' -Value 'Campbell'
         Set-WinmarchyStateValue -Name 'savedWtFontFace' -Value 'Cascadia Mono'
+        Set-WinmarchyStateValue -Name 'savedCursorHadColours' -Value $false
 
         Enter-WinmarchyWin11Mode
 
         Should -Invoke Restore-WtSettingsFile -Times 1 -Exactly -ParameterFilter { $OriginalColorScheme -eq 'Campbell' -and $OriginalFontFace -eq 'Cascadia Mono' }
-        Should -Invoke Remove-WinmarchyNvimTheme -Times 1 -Exactly
+        Should -Invoke Restore-CursorSettingsFile -Times 1 -Exactly
     }
 
     It 'keeps the captured terminal baseline so the next swap can restore again' {
         Mock Get-WtSettingsPath { $null }
-        Mock Remove-WinmarchyNvimTheme { $false }
+        Mock Get-WinmarchyCursorSettingsPath { $null }
         Mock Test-WinmarchyProcessRunning { $false }
         Mock Get-WinmarchyTaskbarAutoHide { $false }
         Mock Get-WinmarchyDesktopIconsVisible { $true }
@@ -269,9 +268,9 @@ Describe 'theme application to real files' {
         $glazeDir = Join-Path $profileDir (Join-Path '.glzr' 'glazewm')
         $null = New-Item -ItemType Directory -Path $glazeDir -Force
         Copy-Item (Join-Path $script:repoRoot (Join-Path 'config' (Join-Path 'glazewm' 'config.yaml'))) (Join-Path $glazeDir 'config.yaml')
-        $null = New-Item -ItemType Directory -Path (Join-Path $env:WINMARCHY_NVIM_DIR (Join-Path 'lua' 'plugins')) -Force
         Mock Test-WinmarchyProcessRunning { $false }
         Mock Get-WtSettingsPath { $null }
+        Mock Get-WinmarchyCursorSettingsPath { $null }
         Mock Set-WinmarchyAppsTheme { }
         Mock Set-WinmarchyWallpaper { }
         Mock New-WinmarchyWallpaperImage { }
@@ -294,21 +293,54 @@ Describe 'theme application to real files' {
         (Get-WinmarchyState).theme | Should -Be 'gruvbox'
 
         # Nothing the user sees in Windows 11 mode is touched.
-        $nvimSpec = Join-Path $env:WINMARCHY_NVIM_DIR (Join-Path 'lua' (Join-Path 'plugins' 'winmarchy-theme.lua'))
-        Test-Path $nvimSpec | Should -BeFalse
         Should -Invoke Set-WinmarchyWallpaper -Times 0 -Exactly
         Should -Invoke Set-WinmarchyAppsTheme -Times 0 -Exactly
     }
 
-    It 'in omarchy mode also writes the nvim spec' {
+    It 'in omarchy mode also themes Cursor' {
+        $cursorPath = Join-Path $env:WINMARCHY_USERPROFILE 'cursor-settings.json'
+        [System.IO.File]::WriteAllText($cursorPath, '{ "editor.fontSize": 14 }', (New-Object System.Text.UTF8Encoding($false)))
+        Mock Get-WinmarchyCursorSettingsPath { $cursorPath }
         Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
 
         Set-WinmarchyTheme -Name 'gruvbox'
 
-        $nvimSpec = Join-Path $env:WINMARCHY_NVIM_DIR (Join-Path 'lua' (Join-Path 'plugins' 'winmarchy-theme.lua'))
-        Test-Path $nvimSpec | Should -BeTrue
-        [System.IO.File]::ReadAllText($nvimSpec) | Should -Match 'gruvbox'
+        $cursor = [System.IO.File]::ReadAllText($cursorPath) | ConvertFrom-Json
+        $cursor.'workbench.colorCustomizations'.'editor.background' | Should -Be '#282828'
+        # Unrelated Cursor settings survive.
+        $cursor.'editor.fontSize' | Should -Be 14
+        # The pre-Winmarchy state is captured for the restore.
+        (Get-WinmarchyState).savedCursorHadColours | Should -BeFalse
         Should -Invoke Set-WinmarchyWallpaper -Times 1 -Exactly
+    }
+
+    It 'puts Cursor back exactly as it was on the way out' {
+        $cursorPath = Join-Path $env:WINMARCHY_USERPROFILE 'cursor-roundtrip.json'
+        $before = '{ "editor.fontSize": 14, "workbench.colorCustomizations": { "editor.background": "#ffffff" } }'
+        [System.IO.File]::WriteAllText($cursorPath, $before, (New-Object System.Text.UTF8Encoding($false)))
+
+        $patch = Update-CursorSettingsFile -Path $cursorPath -Theme (Get-WinmarchyTheme -Name 'nord')
+        $patch.HadCustomisations | Should -BeTrue
+        (([System.IO.File]::ReadAllText($cursorPath) | ConvertFrom-Json).'workbench.colorCustomizations'.'editor.background') | Should -Be '#2e3440'
+
+        $null = Restore-CursorSettingsFile -Path $cursorPath -HadCustomisations $patch.HadCustomisations -OriginalColours $patch.OriginalColours
+
+        $restored = [System.IO.File]::ReadAllText($cursorPath) | ConvertFrom-Json
+        $restored.'workbench.colorCustomizations'.'editor.background' | Should -Be '#ffffff'
+        $restored.'editor.fontSize' | Should -Be 14
+    }
+
+    It 'removes the colour block entirely when Cursor had none before' {
+        $cursorPath = Join-Path $env:WINMARCHY_USERPROFILE 'cursor-fresh.json'
+        [System.IO.File]::WriteAllText($cursorPath, '{ "editor.fontSize": 12 }', (New-Object System.Text.UTF8Encoding($false)))
+
+        $patch = Update-CursorSettingsFile -Path $cursorPath -Theme (Get-WinmarchyTheme -Name 'nord')
+        $patch.HadCustomisations | Should -BeFalse
+        $null = Restore-CursorSettingsFile -Path $cursorPath -HadCustomisations $patch.HadCustomisations -OriginalColours $patch.OriginalColours
+
+        $restored = [System.IO.File]::ReadAllText($cursorPath) | ConvertFrom-Json
+        Test-PsObjectProperty $restored 'workbench.colorCustomizations' | Should -BeFalse
+        $restored.'editor.fontSize' | Should -Be 12
     }
 
     It 'applies wallpaper and app mode only in omarchy mode' {

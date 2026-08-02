@@ -3,7 +3,6 @@
   "label": "Tokyo Night",
   "mode": "dark",
   "wt_scheme": "Winmarchy Tokyo Night",
-  "nvim": { "plugin": "folke/tokyonight.nvim", "name": null, "colorscheme": "tokyonight-night" },
   "colors": {
     "accent": "#7aa2f7", "selection": "#292e42", "muted": "#414868",
     "background": "#1a1b26", "dark_background": "#13141c", "darker_background": "#0e0e14", "lighter_background": "#24283b",

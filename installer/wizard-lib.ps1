@@ -25,16 +25,13 @@ function New-WinmarchyWizardChoices {
     )
     $hasDotnet = $true
     $hasWinget = $true
-    $hasNvim = $false
     foreach ($row in @($Preflight)) {
         if ($row.Name -eq '.NET 8 SDK') { $hasDotnet = $row.Pass }
         if ($row.Name -eq 'winget') { $hasWinget = $row.Pass }
-        if ($row.Name -eq 'Neovim config') { $hasNvim = ($row.Detail -like '*will be left*') }
     }
     return @{
         Theme        = 'tokyo-night'
         InstallApps  = $hasWinget
-        SetupNeovim  = (-not $hasNvim)
         BuildChooser = $hasDotnet
         Autostart    = $hasDotnet
     }
@@ -51,11 +48,6 @@ function Resolve-WinmarchyWizardChoices {
     $resolved = @{}
     foreach ($key in $Choices.Keys) { $resolved[$key] = $Choices[$key] }
     if (-not $resolved.BuildChooser) { $resolved.Autostart = $false }
-    foreach ($row in @($Preflight)) {
-        if ($row.Name -eq 'Neovim config' -and $row.Detail -like '*will be left*') {
-            $resolved.SetupNeovim = $false
-        }
-    }
     return $resolved
 }
 
@@ -67,7 +59,6 @@ function New-WinmarchyInstallArguments {
     )
     $arguments = @{ Theme = $Choices.Theme }
     if (-not $Choices.InstallApps) { $arguments['SkipApps'] = $true }
-    if (-not $Choices.SetupNeovim) { $arguments['SkipNeovim'] = $true }
     if (-not $Choices.BuildChooser) { $arguments['SkipChooser'] = $true }
     if (-not $Choices.Autostart) { $arguments['NoAutostart'] = $true }
     return $arguments
@@ -81,7 +72,7 @@ function Get-WinmarchyInstallCommandLine {
     )
     $arguments = New-WinmarchyInstallArguments -Choices $Choices
     $parts = @('.\install.ps1', '-Theme', $arguments.Theme)
-    foreach ($switchName in @('SkipApps', 'SkipNeovim', 'SkipChooser', 'NoAutostart')) {
+    foreach ($switchName in @('SkipApps', 'SkipChooser', 'NoAutostart')) {
         if ($arguments.ContainsKey($switchName)) { $parts = $parts + ('-' + $switchName) }
     }
     return ($parts -join ' ')
@@ -99,11 +90,7 @@ function Get-WinmarchyWizardSummary {
     } else {
         $lines = $lines + 'Apps: skip the winget installs, deploy configuration only'
     }
-    if ($Choices.SetupNeovim) {
-        $lines = $lines + 'Neovim: set up the LazyVim starter'
-    } else {
-        $lines = $lines + 'Neovim: leave Neovim alone'
-    }
+    $lines = $lines + 'Editor: Cursor is themed to match while Omarchy mode is on'
     if ($Choices.BuildChooser) {
         $lines = $lines + 'Chooser: build the login chooser'
     } else {
@@ -127,7 +114,7 @@ function Get-WinmarchyWingetPackages {
         [pscustomobject]@{ Id = 'AmN.yasb'; Purpose = 'status bar' },
         [pscustomobject]@{ Id = 'Flow-Launcher.Flow-Launcher'; Purpose = 'launcher' },
         [pscustomobject]@{ Id = 'Microsoft.WindowsTerminal'; Purpose = 'terminal' },
-        [pscustomobject]@{ Id = 'Neovim.Neovim'; Purpose = 'editor' },
+        [pscustomobject]@{ Id = 'Anysphere.Cursor'; Purpose = 'editor' },
         [pscustomobject]@{ Id = 'Git.Git'; Purpose = 'version control' },
         [pscustomobject]@{ Id = 'junegunn.fzf'; Purpose = 'fuzzy finder for menus' },
         [pscustomobject]@{ Id = 'BurntSushi.ripgrep.MSVC'; Purpose = 'grep' },
@@ -137,7 +124,6 @@ function Get-WinmarchyWingetPackages {
         [pscustomobject]@{ Id = 'ajeetdsouza.zoxide'; Purpose = 'cd' },
         [pscustomobject]@{ Id = 'JesseDuffield.lazygit'; Purpose = 'git TUI' },
         [pscustomobject]@{ Id = 'aristocratos.btop4win'; Purpose = 'top' },
-        [pscustomobject]@{ Id = 'zig.zig'; Purpose = 'C compiler for nvim-treesitter' },
         [pscustomobject]@{ Id = 'DEVCOM.JetBrainsMonoNerdFont'; Purpose = 'font' }
     )
 }

@@ -4,7 +4,7 @@ Winmarchy gives a Windows 11 machine two personalities. One is stock
 Windows 11, untouched. The other is an Omarchy-inspired desktop: GlazeWM
 tiling driven from the Super key, a slim themed yasb bar instead of the
 taskbar, Flow Launcher on `lwin+space`, a themed Windows Terminal and
-Neovim, and one colour palette driving every surface. A chooser appears at
+Cursor, and one colour palette driving every surface. A chooser appears at
 login with both worlds side by side; you click the one you want, and you
 can hot swap from either side at any time. Omarchy itself is DHH's
 opinionated Arch and Hyprland setup (omarchy.org); this is a port of its
@@ -41,13 +41,14 @@ which walks you through it in seven steps:
    not Winmarchy.
 2. **System check** looks at the machine and tells you what it found:
    Windows version, whether winget and the .NET SDK are there, free space,
-   whether you already have a Neovim config or a previous install. Anything
-   genuinely missing stops the wizard here rather than failing halfway.
+   whether Cursor has run yet, and whether there is a previous install.
+   Anything genuinely missing stops the wizard here rather than failing
+   halfway.
 3. **Theme** lets you pick a palette from the eight that ship, with a live
    preview of the bar, the window borders and the tiling layout in that
    palette.
-4. **Components** is where you choose what to set up: the apps, Neovim, the
-   login chooser, and whether the chooser appears at login. Options whose
+4. **Components** is where you choose what to set up: the apps, the login
+   chooser, and whether the chooser appears at login. Options whose
    prerequisites are missing switch themselves off and say why, so you
    cannot pick something that will fail later.
 5. **Review** shows the decisions in plain language, the equivalent command
@@ -75,10 +76,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
 ```
 
 Add `-WhatIf` to print the full action list without touching anything.
-`-Theme <name>` picks the palette; `-SkipApps`, `-SkipNeovim`,
-`-SkipChooser` and `-NoAutostart` correspond to the wizard's component
-choices. The wizard passes these same switches, so there is only one
-install path either way.
+`-Theme <name>` picks the palette; `-SkipApps`, `-SkipChooser` and
+`-NoAutostart` correspond to the wizard's component choices. The wizard
+passes these same switches, so there is only one install path either way.
 
 However you start it, the installer backs up everything it is about to
 touch into `%LOCALAPPDATA%\winmarchy\backup\<timestamp>\` before its first
@@ -92,6 +92,10 @@ removes only what Winmarchy added rather than reverting the whole file.
 
 ## Daily use
 
+The first time you enter Omarchy mode a tutorial opens in your browser,
+teaching every key in Windows terms and telling you the way out first. Open
+it again any time with `winmarchy tutorial`.
+
 `winmarchy keys` (or `lwin+k` in Omarchy mode) shows the full keymap, read
 live from the GlazeWM config. The spine of it: `lwin+enter` terminal,
 `lwin+space` launcher, `lwin+1` to `lwin+9` workspaces, `lwin+arrows`
@@ -101,7 +105,7 @@ focus, `lwin+shift+arrows` move, `lwin+w` close, `lwin+f` fullscreen,
 
 Eight themes ship: tokyo-night, catppuccin, gruvbox, nord, everforest,
 rose-pine (light), matte-black and kanagawa. `winmarchy theme set <name>`
-recolours the bar, the window borders, the terminal, Neovim, the wallpaper
+recolours the bar, the window borders, the terminal, Cursor, the wallpaper
 and the Windows light or dark app mode in one pass; the bar picks up its
 new stylesheet without restarting.
 
@@ -113,8 +117,8 @@ The swap is symmetric, and that is the point. Windows 11 mode is defined as
 the total absence of Winmarchy: no GlazeWM, no yasb, taskbar and desktop
 icons back, your own wallpaper and light or dark setting restored, your
 Windows Terminal colour scheme and font back to exactly what they were, and
-the Neovim theme file removed so Neovim returns to its own colourscheme.
-Entering Omarchy mode applies all of it again. Installing Winmarchy changes
+Cursor's colours back to whatever they were. Entering Omarchy mode applies
+all of it again. Installing Winmarchy changes
 none of it: until you first enter Omarchy mode, the machine looks and
 behaves exactly as it did before.
 
@@ -131,10 +135,9 @@ UWP dialogs) fight external placement; GlazeWM window rules cover the known
 offenders and more rules can be added over time in
 `~/.glzr/glazewm/config.yaml`.
 
-The chooser needs the WebView2 runtime, which ships with Windows 11. The
-Neovim theming only activates when a LazyVim config exists; the installer
-sets one up only if you have no Neovim config at all, and never touches an
-existing one.
+The chooser needs the WebView2 runtime, which ships with Windows 11. Cursor
+theming only activates once Cursor has been run at least once, because that
+is when it first writes the settings file Winmarchy edits.
 
 ## Uninstall
 

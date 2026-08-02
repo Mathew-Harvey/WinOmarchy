@@ -3,7 +3,6 @@
   "label": "Kanagawa",
   "mode": "dark",
   "wt_scheme": "Winmarchy Kanagawa",
-  "nvim": { "plugin": "rebelot/kanagawa.nvim", "name": null, "colorscheme": "kanagawa" },
   "colors": {
     "accent": "#dcd7ba", "selection": "#363646", "muted": "#54546D",
     "background": "#1f1f28", "dark_background": "#17171e", "darker_background": "#111116", "lighter_background": "#223249",
