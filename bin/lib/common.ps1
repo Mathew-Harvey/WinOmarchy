@@ -818,6 +818,9 @@ namespace Winmarchy
 
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, string pvParam, uint fWinIni);
+
+        [DllImport("user32.dll")]
+        public static extern bool IsWindowVisible(IntPtr hWnd);
     }
 }
 '@
@@ -860,8 +863,46 @@ function Set-WinmarchyTaskbarAutoHide {
     Write-WinmarchyLog -Message ('taskbar auto-hide set to ' + $Enabled)
 }
 
+function Get-WinmarchyDesktopDefView {
+    # The SHELLDLL_DefView window that owns the desktop icon list: a child of
+    # Progman normally, or of a WorkerW in the wallpaper-slideshow window
+    # arrangement. Zero when neither holds it.
+    Initialize-WinmarchyNativeMethods
+    $defView = [IntPtr]::Zero
+    $progman = [Winmarchy.NativeMethods]::FindWindow('Progman', $null)
+    if ($progman -ne [IntPtr]::Zero) {
+        $defView = [Winmarchy.NativeMethods]::FindWindowEx($progman, [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
+    }
+    if ($defView -eq [IntPtr]::Zero) {
+        $worker = [IntPtr]::Zero
+        do {
+            $worker = [Winmarchy.NativeMethods]::FindWindowEx([IntPtr]::Zero, $worker, 'WorkerW', $null)
+            if ($worker -ne [IntPtr]::Zero) {
+                $defView = [Winmarchy.NativeMethods]::FindWindowEx($worker, [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
+            }
+        } while ($defView -eq [IntPtr]::Zero -and $worker -ne [IntPtr]::Zero)
+    }
+    return $defView
+}
+
 function Get-WinmarchyDesktopIconsVisible {
     Assert-WinmarchyWindows -Operation 'Desktop icon state query'
+    Initialize-WinmarchyNativeMethods
+    # The truth, read live: the icons ARE the SysListView32 under the
+    # DefView, and the show/hide toggle shows and hides that window, so
+    # IsWindowVisible on it is the actual state (FindWindowEx and
+    # IsWindowVisible are documented user32 calls). The registry HideIcons
+    # value is only Explorer's startup belief, and trusting it while the
+    # toggle is a blind message once left icons hidden in Windows mode with
+    # the restore convinced there was nothing to do (FLAG-37).
+    $defView = Get-WinmarchyDesktopDefView
+    if ($defView -ne [IntPtr]::Zero) {
+        $listView = [Winmarchy.NativeMethods]::FindWindowEx($defView, [IntPtr]::Zero, 'SysListView32', $null)
+        if ($listView -ne [IntPtr]::Zero) {
+            return [bool][Winmarchy.NativeMethods]::IsWindowVisible($listView)
+        }
+    }
+    # No desktop window found: fall back to Explorer's startup belief.
     # HideIcons DWORD under the Explorer Advanced key; 0 or absent = visible.
     $advancedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
     $value = Get-ItemProperty -Path $advancedKey -Name 'HideIcons' -ErrorAction SilentlyContinue
@@ -874,25 +915,18 @@ function Set-WinmarchyDesktopIcons {
     Assert-WinmarchyWindows -Operation 'Desktop icon toggle'
     Initialize-WinmarchyNativeMethods
     $currentlyVisible = Get-WinmarchyDesktopIconsVisible
-    if ($currentlyVisible -eq $Visible) { return }
+    if ($currentlyVisible -eq $Visible) {
+        # Already right in reality; make sure Explorer's startup belief
+        # agrees so a restart does not undo it.
+        $advancedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        $syncValue = 1
+        if ($Visible) { $syncValue = 0 }
+        Set-ItemProperty -Path $advancedKey -Name 'HideIcons' -Value $syncValue -Type DWord -ErrorAction SilentlyContinue
+        return
+    }
 
     # Live toggle: WM_COMMAND (0x111) with id 0x7402 to SHELLDLL_DefView.
-    # This is a blind toggle, which is why the registry state is read first.
-    $defView = [IntPtr]::Zero
-    $progman = [Winmarchy.NativeMethods]::FindWindow('Progman', $null)
-    if ($progman -ne [IntPtr]::Zero) {
-        $defView = [Winmarchy.NativeMethods]::FindWindowEx($progman, [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
-    }
-    if ($defView -eq [IntPtr]::Zero) {
-        # Wallpaper-slideshow arrangement: the DefView lives under a WorkerW.
-        $worker = [IntPtr]::Zero
-        do {
-            $worker = [Winmarchy.NativeMethods]::FindWindowEx([IntPtr]::Zero, $worker, 'WorkerW', $null)
-            if ($worker -ne [IntPtr]::Zero) {
-                $defView = [Winmarchy.NativeMethods]::FindWindowEx($worker, [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
-            }
-        } while ($defView -eq [IntPtr]::Zero -and $worker -ne [IntPtr]::Zero)
-    }
+    $defView = Get-WinmarchyDesktopDefView
 
     $advancedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
     $hideValue = 1
@@ -902,6 +936,14 @@ function Set-WinmarchyDesktopIcons {
         $null = [Winmarchy.NativeMethods]::SendMessage($defView, 0x111, [IntPtr]0x7402, [IntPtr]::Zero)
         # Persist the state so a later Explorer restart agrees with reality.
         Set-ItemProperty -Path $advancedKey -Name 'HideIcons' -Value $hideValue -Type DWord
+        # Trust nothing: read the live state back, and if the toggle did not
+        # take, fall through to the registry-plus-restart path rather than
+        # walking away with the icons still wrong.
+        Start-Sleep -Milliseconds 200
+        if ((Get-WinmarchyDesktopIconsVisible) -ne $Visible) {
+            Write-WinmarchyLog -Message 'desktop icon toggle did not take; restarting Explorer to apply the registry state' -Level 'WARN'
+            Restart-WinmarchyExplorer
+        }
         Write-WinmarchyLog -Message ('desktop icons toggled live, visible=' + $Visible)
     } else {
         # Fallback from the brief Section 3: registry plus Explorer restart.
