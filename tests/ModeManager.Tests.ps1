@@ -167,6 +167,8 @@ Describe 'enter-win11' {
         Mock Restore-WtSettingsFile { $true }
         Mock Get-WinmarchyCursorSettingsPath { 'C:\fake\cursor.json' }
         Mock Restore-CursorSettingsFile { $true }
+        Mock Get-WinmarchyAlacrittyConfigPath { 'C:\fake\alacritty.toml' }
+        Mock Restore-AlacrittyConfigFile { $true }
         Set-WinmarchyStateValue -Name 'savedWtColorScheme' -Value 'Campbell'
         Set-WinmarchyStateValue -Name 'savedWtFontFace' -Value 'Cascadia Mono'
         Set-WinmarchyStateValue -Name 'savedCursorHadColours' -Value $false
@@ -175,11 +177,13 @@ Describe 'enter-win11' {
 
         Should -Invoke Restore-WtSettingsFile -Times 1 -Exactly -ParameterFilter { $OriginalColorScheme -eq 'Campbell' -and $OriginalFontFace -eq 'Cascadia Mono' }
         Should -Invoke Restore-CursorSettingsFile -Times 1 -Exactly
+        Should -Invoke Restore-AlacrittyConfigFile -Times 1 -Exactly
     }
 
     It 'keeps the captured terminal baseline so the next swap can restore again' {
         Mock Get-WtSettingsPath { $null }
         Mock Get-WinmarchyCursorSettingsPath { $null }
+        Mock Get-WinmarchyAlacrittyConfigPath { $null }
         Mock Test-WinmarchyProcessRunning { $false }
         Mock Get-WinmarchyTaskbarAutoHide { $false }
         Mock Get-WinmarchyDesktopIconsVisible { $true }
@@ -271,6 +275,7 @@ Describe 'theme application to real files' {
         Mock Test-WinmarchyProcessRunning { $false }
         Mock Get-WtSettingsPath { $null }
         Mock Get-WinmarchyCursorSettingsPath { $null }
+        Mock Get-WinmarchyAlacrittyConfigPath { $null }
         Mock Set-WinmarchyAppsTheme { }
         Mock Set-WinmarchyWallpaper { }
         Mock New-WinmarchyWallpaperImage { }
@@ -312,6 +317,39 @@ Describe 'theme application to real files' {
         # The pre-Winmarchy state is captured for the restore.
         (Get-WinmarchyState).savedCursorHadColours | Should -BeFalse
         Should -Invoke Set-WinmarchyWallpaper -Times 1 -Exactly
+    }
+
+    It 'writes the Alacritty config in omarchy mode and removes it on the way out' {
+        $alacrittyPath = Join-Path $env:WINMARCHY_USERPROFILE 'alacritty.toml'
+        Mock Get-WinmarchyAlacrittyConfigPath { $alacrittyPath }
+        Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
+
+        Set-WinmarchyTheme -Name 'gruvbox'
+
+        Test-Path $alacrittyPath | Should -BeTrue
+        $config = [System.IO.File]::ReadAllText($alacrittyPath)
+        $config | Should -Match 'background = "#282828"'
+        # Omarchy's mapping: ANSI black is the background, bright black muted.
+        $config | Should -Match 'black = "#282828"'
+        $config | Should -Match 'black = "#665c54"'
+        $config.Contains('{{') | Should -BeFalse
+
+        # No pre-existing config, so the restore removes ours entirely.
+        (Restore-AlacrittyConfigFile -Path $alacrittyPath) | Should -BeTrue
+        Test-Path $alacrittyPath | Should -BeFalse
+    }
+
+    It 'backs up and restores an Alacritty config the user already had' {
+        $alacrittyPath = Join-Path $env:WINMARCHY_USERPROFILE 'alacritty-existing.toml'
+        $original = "[window]`nopacity = 0.5`n"
+        [System.IO.File]::WriteAllText($alacrittyPath, $original, (New-Object System.Text.UTF8Encoding($false)))
+
+        $result = Update-AlacrittyConfigFile -Path $alacrittyPath -Theme (Get-WinmarchyTheme -Name 'nord')
+        $result.BackupCreated | Should -BeTrue
+        [System.IO.File]::ReadAllText($alacrittyPath) | Should -Match '#2e3440'
+
+        (Restore-AlacrittyConfigFile -Path $alacrittyPath) | Should -BeTrue
+        [System.IO.File]::ReadAllText($alacrittyPath) | Should -Be $original
     }
 
     It 'puts Cursor back exactly as it was on the way out' {

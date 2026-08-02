@@ -52,7 +52,7 @@ Describe 'Keybinding overlay parser' {
         $panic = $rows | Where-Object { $_.Binding -eq 'lwin+shift+x' }
         $panic.Description | Should -Match 'PANIC'
         $terminal = $rows | Where-Object { $_.Binding -eq 'lwin+enter' }
-        $terminal.Description | Should -Be 'Terminal.'
+        $terminal.Description | Should -Match 'Alacritty is the themed terminal'
     }
 
     It 'marks the resize mode rows with their own section' {

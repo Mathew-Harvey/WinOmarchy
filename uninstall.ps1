@@ -111,6 +111,16 @@ if ($KeepTerminalTheme) {
     }
 }
 
+# 5a. Alacritty: put the user's own config back, or remove Winmarchy's.
+Invoke-WinmarchyUninstallStep -Description 'restore the Alacritty config' -Action {
+    $alacrittyPath = Get-WinmarchyAlacrittyConfigPath
+    if ($alacrittyPath) {
+        $null = Restore-AlacrittyConfigFile -Path $alacrittyPath
+        $bak = $alacrittyPath + '.winmarchy-bak'
+        if (Test-Path $bak) { Remove-Item -Path $bak -Force }
+    }
+}
+
 # 5b. Cursor: take the Winmarchy colours back out, leaving other settings.
 Invoke-WinmarchyUninstallStep -Description 'remove the Winmarchy colours from Cursor' -Action {
     $cursorPath = Get-WinmarchyCursorSettingsPath
@@ -179,7 +189,7 @@ if ($RemoveApps) {
     if ((Test-WinmarchyIsWindows) -and (Get-Command winget -ErrorAction SilentlyContinue)) {
         foreach ($packageId in @(
             'glzr-io.glazewm', 'AmN.yasb', 'Flow-Launcher.Flow-Launcher',
-            'junegunn.fzf', 'BurntSushi.ripgrep.MSVC', 'sharkdp.fd', 'sharkdp.bat',
+            'Alacritty.Alacritty', 'junegunn.fzf', 'BurntSushi.ripgrep.MSVC', 'sharkdp.fd', 'sharkdp.bat',
             'eza-community.eza', 'ajeetdsouza.zoxide', 'JesseDuffield.lazygit',
             'aristocratos.btop4win', 'DEVCOM.JetBrainsMonoNerdFont'
         )) {

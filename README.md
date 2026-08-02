@@ -3,7 +3,7 @@
 Winmarchy gives a Windows 11 machine two personalities. One is stock
 Windows 11, untouched. The other is an Omarchy-inspired desktop: GlazeWM
 tiling driven from the Super key, a slim themed yasb bar instead of the
-taskbar, Flow Launcher on `lwin+space`, a themed Windows Terminal and
+taskbar, Flow Launcher on `lwin+space`, a themed Alacritty terminal and
 Cursor, and one colour palette driving every surface. A chooser appears at
 login with both worlds side by side; you click the one you want, and you
 can hot swap from either side at any time. Omarchy itself is DHH's
@@ -85,6 +85,12 @@ touch into `%LOCALAPPDATA%\winmarchy\backup\<timestamp>\` before its first
 mutation and refuses to continue if that backup fails. Apps are installed
 per-user through winget; no admin prompt is expected.
 
+Alacritty is the terminal `Super+Enter` opens, and its config is written
+from the palette, ported verbatim from Omarchy's own Alacritty template. If
+you already have an `alacritty.toml` it is backed up first and restored the
+moment you swap back to Windows 11. Windows Terminal is still themed too,
+so the terminal Windows opens from its own menus matches.
+
 One note on Windows Terminal: its settings.json may contain comments, and
 the first time Winmarchy patches it those comments are lost. The original
 file is preserved beside it as `settings.json.winmarchy-bak`, and uninstall
@@ -105,7 +111,8 @@ focus, `lwin+shift+arrows` move, `lwin+w` close, `lwin+f` fullscreen,
 
 Eight themes ship: tokyo-night, catppuccin, gruvbox, nord, everforest,
 rose-pine (light), matte-black and kanagawa. `winmarchy theme set <name>`
-recolours the bar, the window borders, the terminal, Cursor, the wallpaper
+recolours the bar, the window borders, Alacritty, Windows Terminal, Cursor,
+the wallpaper
 and the Windows light or dark app mode in one pass; the bar picks up its
 new stylesheet without restarting.
 
@@ -116,8 +123,8 @@ from any shell.
 The swap is symmetric, and that is the point. Windows 11 mode is defined as
 the total absence of Winmarchy: no GlazeWM, no yasb, taskbar and desktop
 icons back, your own wallpaper and light or dark setting restored, your
-Windows Terminal colour scheme and font back to exactly what they were, and
-Cursor's colours back to whatever they were. Entering Omarchy mode applies
+your Alacritty config and Windows Terminal colour scheme back to exactly
+what they were, and Cursor's colours back to whatever they were. Entering Omarchy mode applies
 all of it again. Installing Winmarchy changes
 none of it: until you first enter Omarchy mode, the machine looks and
 behaves exactly as it did before.

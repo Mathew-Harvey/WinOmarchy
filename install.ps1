@@ -134,7 +134,8 @@ $wingetPackages = @(
     @{ id = 'glzr-io.glazewm'; purpose = 'tiling window manager' },
     @{ id = 'AmN.yasb'; purpose = 'status bar' },
     @{ id = 'Flow-Launcher.Flow-Launcher'; purpose = 'launcher' },
-    @{ id = 'Microsoft.WindowsTerminal'; purpose = 'terminal' },
+    @{ id = 'Alacritty.Alacritty'; purpose = 'terminal' },
+    @{ id = 'Microsoft.WindowsTerminal'; purpose = 'fallback terminal' },
     @{ id = 'Anysphere.Cursor'; purpose = 'editor' },
     @{ id = 'Git.Git'; purpose = 'version control' },
     @{ id = 'junegunn.fzf'; purpose = 'fuzzy finder for menus' },
@@ -213,6 +214,15 @@ Invoke-WinmarchyInstallStep -Description ('write GlazeWM config to ' + (Get-Winm
         # and Windows paths never contain $, so the path drops in literally.
         $replacement = "commands: ['shell-exec " + $flowExe + "'] # winmarchy:launcher-path"
         $configText = [regex]::Replace($configText, "commands: \['shell-exec [^']*'\] # winmarchy:launcher-path", $replacement)
+    }
+    $alacrittyCandidates = @()
+    if ($env:ProgramFiles) {
+        $alacrittyCandidates = $alacrittyCandidates + (Join-Path $env:ProgramFiles (Join-Path 'Alacritty' 'alacritty.exe'))
+    }
+    $alacrittyExe = Find-WinmarchyExecutable -Name 'alacritty' -FallbackPaths $alacrittyCandidates
+    if ($alacrittyExe) {
+        $terminalReplacement = "commands: ['shell-exec " + $alacrittyExe + "'] # winmarchy:terminal-path"
+        $configText = [regex]::Replace($configText, "commands: \['shell-exec [^']*'\] # winmarchy:terminal-path", $terminalReplacement)
     }
     $cursorCandidates = @()
     if ($env:LOCALAPPDATA) {

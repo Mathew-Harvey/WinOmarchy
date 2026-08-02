@@ -657,6 +657,54 @@ function Get-WinmarchyYasbStylesTemplatePath {
     return (Join-Path (Get-WinmarchyRepoRoot) (Join-Path 'config' (Join-Path 'yasb' 'styles.template.css')))
 }
 
+function Get-WinmarchyAlacrittyConfigPath {
+    # Documented Windows location for Alacritty's config
+    # (alacritty.5 man page: %APPDATA%\alacritty\alacritty.toml).
+    if ($env:WINMARCHY_ALACRITTY_CONFIG) { return $env:WINMARCHY_ALACRITTY_CONFIG }
+    if (-not $env:APPDATA) { return $null }
+    return (Join-Path $env:APPDATA (Join-Path 'alacritty' 'alacritty.toml'))
+}
+
+function Update-AlacrittyConfigFile {
+    # Winmarchy writes the whole config while Omarchy mode is on, backing up
+    # any pre-existing one exactly once. Writing the file rather than editing
+    # it avoids TOML surgery in PowerShell 5.1, and the backup plus the
+    # restore below keep the swap symmetric.
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)]$Theme
+    )
+    $backupPath = $Path + '.winmarchy-bak'
+    $backupCreated = $false
+    if ((Test-Path $Path) -and (-not (Test-Path $backupPath))) {
+        Copy-Item -Path $Path -Destination $backupPath
+        $backupCreated = $true
+    }
+    $templatePath = Join-Path (Get-WinmarchyTemplatesDir) 'alacritty.toml.tpl'
+    $template = [System.IO.File]::ReadAllText($templatePath)
+    $rendered = Expand-WinmarchyTemplate -Template $template -Tokens (Get-WinmarchyThemeTokens -Theme $Theme)
+    Write-WinmarchyTextFile -Path $Path -Content $rendered
+    return [pscustomobject]@{ Path = $Path; BackupCreated = $backupCreated }
+}
+
+function Restore-AlacrittyConfigFile {
+    # A backup beside the config means the user had their own file, so put it
+    # back. No backup means the file is entirely ours, so remove it.
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $backupPath = $Path + '.winmarchy-bak'
+    if (Test-Path $backupPath) {
+        Copy-Item -Path $backupPath -Destination $Path -Force
+        Write-WinmarchyLog -Message 'alacritty config restored from backup'
+        return $true
+    }
+    if (Test-Path $Path) {
+        Remove-Item -Path $Path -Force
+        Write-WinmarchyLog -Message 'alacritty config removed'
+        return $true
+    }
+    return $false
+}
+
 function Get-WinmarchyCursorSettingsPath {
     # Cursor is a Visual Studio Code fork and keeps user settings in the same
     # place under its own product name. Returns $null when Cursor has never
@@ -1206,6 +1254,11 @@ function Get-WinmarchyPreflight {
     $installedDetail = 'no existing install; this will be a fresh setup'
     if ($installed) { $installedDetail = 'Winmarchy is already installed; this run will update it, taking fresh backups first' }
     $rows = $rows + (New-WinmarchyPreflightRow 'Existing install' $true $false $installedDetail)
+
+    $alacrittyPath = Get-WinmarchyAlacrittyConfigPath
+    $alacrittyDetail = 'the themed terminal; its config is written on entering Omarchy mode'
+    if ($alacrittyPath -and (Test-Path $alacrittyPath)) { $alacrittyDetail = 'found; your own config is backed up before Winmarchy writes its own' }
+    $rows = $rows + (New-WinmarchyPreflightRow 'Alacritty' $true $false $alacrittyDetail)
 
     $cursorPath = Get-WinmarchyCursorSettingsPath
     $cursorDetail = 'not set up yet; run Cursor once and it will be themed from then on'
