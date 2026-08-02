@@ -231,4 +231,103 @@ Describe 'Wizard XAML' {
         $pageNames.Count | Should -Be (@(Get-WinmarchyWizardPages).Count)
     }
 }
+
+Describe 'Install run and log tail' {
+    # This is the path that streams install.ps1 into the wizard's log window.
+    # It runs install.ps1 as a child process and tails its log file, so it is
+    # exercisable here even though the window itself is not.
+    BeforeAll {
+        . (Join-Path $script:repoRoot 'install-ui.ps1')
+
+        function Invoke-RunToCompletion {
+            param([hashtable]$Arguments, [switch]$WhatIf)
+            $run = Start-WinmarchyInstallRun -Arguments $Arguments -WhatIf:$WhatIf
+            $lines = @()
+            $deadline = (Get-Date).AddSeconds(120)
+            while (-not $run.Process.HasExited) {
+                $lines = $lines + @(Read-WinmarchyInstallRun -Run $run)
+                if ((Get-Date) -gt $deadline) { throw 'install run did not finish within 120 seconds' }
+                Start-Sleep -Milliseconds 100
+            }
+            $result = Complete-WinmarchyInstallRun -Run $run
+            $lines = $lines + @($result.Lines)
+            return [pscustomobject]@{ Result = $result; Lines = $lines; Text = (($lines | ForEach-Object { $_.Text }) -join [Environment]::NewLine) }
+        }
+    }
+
+    BeforeEach {
+        $script:runRoot = Join-Path $TestDrive ([System.IO.Path]::GetRandomFileName())
+        $null = New-Item -ItemType Directory -Path $script:runRoot -Force
+        $script:savedRunHome = $env:WINMARCHY_HOME
+        $script:savedRunProfile = $env:WINMARCHY_USERPROFILE
+        $script:savedRunLocal = $env:LOCALAPPDATA
+        $env:WINMARCHY_HOME = Join-Path $script:runRoot 'home'
+        $env:WINMARCHY_USERPROFILE = Join-Path $script:runRoot 'profile'
+        $env:LOCALAPPDATA = Join-Path $script:runRoot 'lad'
+    }
+
+    AfterEach {
+        $env:WINMARCHY_HOME = $script:savedRunHome
+        $env:WINMARCHY_USERPROFILE = $script:savedRunProfile
+        $env:LOCALAPPDATA = $script:savedRunLocal
+    }
+
+    It 'streams the plan when asked for a preview and changes nothing' {
+        $before = @(Get-ChildItem -Path $script:runRoot -Recurse -File -Force).Count
+        $run = Invoke-RunToCompletion -Arguments @{ Theme = 'nord'; SkipApps = $true } -WhatIf
+
+        $run.Result.Failed | Should -BeFalse
+        $run.Result.ExitCode | Should -Be 0
+        $run.Text | Should -Match 'whatif: back up everything'
+        $run.Text | Should -Match 'whatif: deploy bin/'
+        @(Get-ChildItem -Path $script:runRoot -Recurse -File -Force).Count | Should -Be $before
+    }
+
+    It 'streams a real install line by line and reports success' {
+        $run = Invoke-RunToCompletion -Arguments @{ Theme = 'gruvbox'; SkipApps = $true; SkipNeovim = $true; SkipChooser = $true; NoAutostart = $true }
+
+        $run.Result.Failed | Should -BeFalse
+        $run.Result.ExitCode | Should -Be 0
+        # The very first line of install.ps1 must reach the log: an empty log
+        # is the symptom this test exists to catch.
+        $run.Lines[0].Text | Should -Match 'winmarchy installer'
+        $run.Text | Should -Match 'install: deploy bin/'
+        $run.Text | Should -Match 'install: apply the gruvbox theme'
+        @($run.Lines).Count | Should -BeGreaterThan 5
+        Test-Path (Join-Path $env:WINMARCHY_HOME 'bin') | Should -BeTrue
+    }
+
+    It 'reports a failed install rather than hanging' {
+        $run = Invoke-RunToCompletion -Arguments @{ Theme = 'no-such-theme'; SkipApps = $true }
+
+        $run.Result.Failed | Should -BeTrue
+        $run.Result.ExitCode | Should -Not -Be 0
+        ($run.Text + ' ') | Should -Match 'Unknown theme'
+    }
+
+    It 'keeps a log file behind for troubleshooting' {
+        $run = Start-WinmarchyInstallRun -Arguments @{ Theme = 'nord'; SkipApps = $true } -WhatIf
+        while (-not $run.Process.HasExited) { Start-Sleep -Milliseconds 100 }
+        $result = Complete-WinmarchyInstallRun -Run $run
+        Test-Path $result.LogPath | Should -BeTrue
+        [System.IO.File]::ReadAllText($result.LogPath) | Should -Match 'winmarchy installer'
+    }
+
+    It 'holds back a partial line until its newline arrives' {
+        $logPath = Join-Path $script:runRoot 'partial.log'
+        $encoding = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($logPath, "first line`nsecond", $encoding)
+        $fake = [pscustomobject]@{ LogPath = $logPath; ErrPath = (Join-Path $script:runRoot 'partial.err'); Offset = [long]0; Partial = '' }
+
+        $first = @(Read-WinmarchyInstallRun -Run $fake)
+        $first.Count | Should -Be 1
+        $first[0].Text | Should -Be 'first line'
+        $fake.Partial | Should -Be 'second'
+
+        [System.IO.File]::AppendAllText($logPath, " half`nthird`n", $encoding)
+        $second = @(Read-WinmarchyInstallRun -Run $fake)
+        $second[0].Text | Should -Be 'second half'
+        $second[1].Text | Should -Be 'third'
+    }
+}
 }

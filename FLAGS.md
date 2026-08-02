@@ -226,3 +226,30 @@ four main pages was produced and shared for the design eyeball. Checklist
 section E covers the run.
 
 Status: deferred-to-machine.
+
+## FLAG-15: install page hung with an empty log; run mechanism replaced
+
+Context: reported from the machine. The wizard reached the Install page and
+sat there with an empty log and no progress. The first line install.ps1
+writes never appeared, so the child never produced output, and because the
+page was shown and the buttons disabled BEFORE the run was started, a
+failure during start-up left the window frozen with nothing to read.
+
+Cause: the run used a background runspace with
+PSDataCollection plus a generic BeginInvoke overload, and nothing wrapped
+it, so any failure setting that up was swallowed by the WPF event handler
+under ErrorActionPreference Stop. The path had no test, which is why it
+shipped broken.
+
+Decision: install.ps1 now runs as a child powershell.exe process with its
+output redirected to a log file that the window tails. That removes the
+generic-overload and cross-thread concerns, gives winget a real console,
+yields an honest exit code, and leaves a log file behind for
+troubleshooting. Start-up and every timer tick are wrapped so any failure
+is written into the log and shown on the summary page: a frozen page with
+an empty log is now impossible. Five tests drive the real path end to end,
+including one asserting the first log line reaches the window, one that a
+failing install reports rather than hangs, and one for partial-line
+handling.
+
+Status: closed.
