@@ -82,8 +82,18 @@ function Set-WinmarchyTheme {
                 # Capture the pre-Winmarchy values once, on the first patch,
                 # so the restore on the way out is exact.
                 if (-not (Get-WinmarchyState).savedWtCaptured) {
-                    Set-WinmarchyStateValue -Name 'savedWtColorScheme' -Value $result.OriginalColorScheme
-                    Set-WinmarchyStateValue -Name 'savedWtFontFace' -Value $result.OriginalFontFace
+                    # Poison guard: if the value already there is Winmarchy's
+                    # own (an old build themed the terminal unconditionally,
+                    # or a swap was interrupted), capturing it as "the user's
+                    # setting" would restore the Omarchy look into Windows
+                    # mode forever. A Winmarchy value is treated as no
+                    # baseline, so the restore strips it instead (FLAG-34).
+                    $originalScheme = $result.OriginalColorScheme
+                    if ($originalScheme -like 'Winmarchy *') { $originalScheme = $null }
+                    $originalFont = $result.OriginalFontFace
+                    if ($originalFont -eq 'JetBrainsMono Nerd Font') { $originalFont = $null }
+                    Set-WinmarchyStateValue -Name 'savedWtColorScheme' -Value $originalScheme
+                    Set-WinmarchyStateValue -Name 'savedWtFontFace' -Value $originalFont
                     Set-WinmarchyStateValue -Name 'savedWtCaptured' -Value $true
                 }
                 Write-WinmarchyLog -Message 'theme-set: windows terminal patched'
@@ -104,8 +114,17 @@ function Set-WinmarchyTheme {
             if ($cursorPath) {
                 $cursorResult = Update-CursorSettingsFile -Path $cursorPath -Theme $theme
                 if (-not (Get-WinmarchyState).savedCursorCaptured) {
-                    Set-WinmarchyStateValue -Name 'savedCursorColours' -Value $cursorResult.OriginalColours
-                    Set-WinmarchyStateValue -Name 'savedCursorHadColours' -Value $cursorResult.HadCustomisations
+                    # Same poison guard as the terminal: colours matching one
+                    # of the shipped themes are Winmarchy's own leftovers,
+                    # not the user's customisation (FLAG-34).
+                    $originalColours = $cursorResult.OriginalColours
+                    $hadColours = $cursorResult.HadCustomisations
+                    if ($hadColours -and (Test-WinmarchyCursorColoursAreOurs -Colours $originalColours)) {
+                        $originalColours = $null
+                        $hadColours = $false
+                    }
+                    Set-WinmarchyStateValue -Name 'savedCursorColours' -Value $originalColours
+                    Set-WinmarchyStateValue -Name 'savedCursorHadColours' -Value $hadColours
                     Set-WinmarchyStateValue -Name 'savedCursorCaptured' -Value $true
                 }
                 Write-WinmarchyLog -Message 'theme-set: cursor colours written'

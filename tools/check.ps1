@@ -143,12 +143,22 @@ if ($SkipPester) {
         $pesterConfig.Run.PassThru = $true
         $pesterConfig.Output.Verbosity = 'Normal'
         $pesterResult = Invoke-Pester -Configuration $pesterConfig
+        # A test FILE that fails to parse or whose setup dies never runs its
+        # tests, so FailedCount alone can report green while a whole container
+        # silently vanished. That happened once, for real.
+        $brokenContainers = @($pesterResult.Containers | Where-Object { $_.Result -eq 'Failed' -and $_.TotalCount -eq 0 })
+        if ($brokenContainers.Count -gt 0) {
+            Write-Failure ($brokenContainers.Count.ToString() + ' Pester test file(s) failed to load, so their tests never ran')
+            foreach ($container in $brokenContainers) {
+                Write-Host ('  broken: ' + $container.Item) -ForegroundColor Red
+            }
+        }
         if ($pesterResult.FailedCount -gt 0) {
             Write-Failure ($pesterResult.FailedCount.ToString() + ' of ' + $pesterResult.TotalCount + ' Pester tests failed')
             foreach ($failed in $pesterResult.Failed) {
                 Write-Host ('  failed: ' + $failed.ExpandedPath) -ForegroundColor Red
             }
-        } else {
+        } elseif ($brokenContainers.Count -eq 0) {
             Write-Pass ($pesterResult.PassedCount.ToString() + ' Pester tests passed')
         }
     }
