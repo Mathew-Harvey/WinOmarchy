@@ -237,3 +237,8 @@ during setup, or run the installer with a bad winget source.
       Winmarchy scheme in Windows mode.
 - [ ] J4. Same round trip for Cursor colours and the Windows light/dark
       setting. Omarchy keeps its theme; Windows keeps yours; neither leaks.
+- [ ] I8. Put pictures in nested subfolders of the wallpaper folder: they
+      all join the rotation.
+- [ ] I9. Set the slider (or winmarchy wallpaper every 5): the wallpaper
+      changes on that pace in BOTH modes, and a new interval takes effect
+      within a minute. winmarchy wallpaper status reports folder and pace.

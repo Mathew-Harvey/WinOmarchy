@@ -10,8 +10,9 @@
 #   ... -SkipChooser   do not build the login chooser
 #   ... -NoAutostart   do not register the chooser to run at login
 #   ... -NoTray        do not add the Winmarchy icon to the notification area
-#   ... -WallpaperDir <path>  cycle random wallpapers from this folder, in
-#                             both modes (leave off for themed wallpapers)
+#   ... -WallpaperDir <path>  cycle random wallpapers from this folder and
+#                             its subfolders, in both modes
+#   ... -WallpaperIntervalMinutes <n>  how often they change (default 30)
 # For a guided setup with the same options, run install-ui.ps1 instead.
 # Compatible with Windows PowerShell 5.1. The backup pass runs before any
 # mutation and the installer refuses to continue if it fails.
@@ -23,7 +24,8 @@ param(
     [switch]$SkipChooser,
     [switch]$NoAutostart,
     [switch]$NoTray,
-    [string]$WallpaperDir = ''
+    [string]$WallpaperDir = '',
+    [int]$WallpaperIntervalMinutes = 30
 )
 
 $ErrorActionPreference = 'Stop'
@@ -438,7 +440,11 @@ if ($WallpaperDir -ne '') {
             return
         }
         Set-WinmarchyStateValue -Name 'wallpaperDir' -Value ((Resolve-Path $WallpaperDir).Path)
-        Write-Output ('install:   ' + $pictures.Count + ' pictures found; both modes will cycle them')
+        $interval = $WallpaperIntervalMinutes
+        if ($interval -lt 1) { $interval = 1 }
+        if ($interval -gt 1440) { $interval = 1440 }
+        Set-WinmarchyStateValue -Name 'wallpaperIntervalMinutes' -Value $interval
+        Write-Output ('install:   ' + $pictures.Count + ' pictures found (subfolders included); both modes cycle them every ' + $interval + ' minute(s)')
         if (Test-WinmarchyIsWindows) {
             $null = Invoke-WinmarchyWallpaperNext
         }

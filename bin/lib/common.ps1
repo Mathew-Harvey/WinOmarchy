@@ -545,6 +545,7 @@ function Get-WinmarchyDefaultState {
         savedLockScreen           = $null
         lockScreenEnabled         = $false
         wallpaperDir              = $null
+        wallpaperIntervalMinutes  = 30
         tutorialSeen              = $false
     }
 }
@@ -1049,17 +1050,34 @@ function Get-WinmarchyWallpaperFolder {
 }
 
 function Get-WinmarchyWallpaperCandidates {
-    # Every usable picture in the folder. The formats are the ones the
-    # SPI_SETDESKWALLPAPER path accepts on Windows 11 (bmp always; jpg and
-    # png are transcoded by the shell).
+    # Every usable picture under the folder, subfolders included: the whole
+    # tree is flattened into one pool, so organising wallpapers into
+    # subfolders costs nothing and new pictures join the rotation the moment
+    # they land. Flattened logically at scan time, never by copying files: a
+    # copy would duplicate the collection and go stale. The formats are the
+    # ones the SPI_SETDESKWALLPAPER path accepts on Windows 11 (bmp always;
+    # jpg and png are transcoded by the shell).
     param([Parameter(Mandatory = $true)][string]$Folder)
     $pictures = @()
-    foreach ($file in @(Get-ChildItem -Path $Folder -File -ErrorAction SilentlyContinue)) {
+    foreach ($file in @(Get-ChildItem -Path $Folder -File -Recurse -ErrorAction SilentlyContinue)) {
         if ($file.Extension -match '^\.(jpg|jpeg|png|bmp)$') {
             $pictures = $pictures + $file.FullName
         }
     }
     return $pictures
+}
+
+function Get-WinmarchyWallpaperIntervalMinutes {
+    # How often the tray deals a fresh picture, in minutes. Clamped to a
+    # sane range; anything unreadable falls back to the default half hour.
+    $value = (Get-WinmarchyState).wallpaperIntervalMinutes
+    $minutes = 30
+    if ($null -ne $value) {
+        try { $minutes = [int]$value } catch { $minutes = 30 }
+    }
+    if ($minutes -lt 1) { $minutes = 1 }
+    if ($minutes -gt 1440) { $minutes = 1440 }
+    return $minutes
 }
 
 function Get-WinmarchyNextWallpaperPath {

@@ -49,6 +49,7 @@ function Show-WinmarchyUsage {
     Write-Output '  winmarchy lockscreen off    put the lock screen back and leave it alone'
     Write-Output '  winmarchy wallpaper next    deal the next random wallpaper from your folder'
     Write-Output '  winmarchy wallpaper dir <path>  cycle wallpapers from this folder, in both modes'
+    Write-Output '  winmarchy wallpaper every <minutes>  how often it changes (1 to 1440)'
     Write-Output '  winmarchy wallpaper off     stop cycling; themes control the wallpaper again'
     Write-Output '  winmarchy stats             system monitor TUI (btop)'
 }
@@ -147,10 +148,17 @@ switch ($Command) {
         } elseif ($Argument -eq 'off') {
             Set-WinmarchyStateValue -Name 'wallpaperDir' -Value $null
             Write-Output 'Wallpaper cycling off. The current wallpaper stays; themes control it again from here.'
+        } elseif ($Argument -eq 'every' -and $Argument2 -match '^\d+$') {
+            $minutes = [int]$Argument2
+            if ($minutes -lt 1 -or $minutes -gt 1440) {
+                throw 'Pick between 1 and 1440 minutes.'
+            }
+            Set-WinmarchyStateValue -Name 'wallpaperIntervalMinutes' -Value $minutes
+            Write-Output ('Wallpaper changes every ' + $minutes + ' minute(s), in both modes. The tray picks the new pace up within a minute.')
         } elseif ($Argument -eq 'status') {
             $dir = (Get-WinmarchyState).wallpaperDir
             if ($dir) {
-                Write-Output ('wallpaper cycling: on, from ' + $dir)
+                Write-Output ('wallpaper cycling: on, from ' + $dir + ' (subfolders included), every ' + (Get-WinmarchyWallpaperIntervalMinutes) + ' minute(s)')
             } else {
                 Write-Output 'wallpaper cycling: off (themed wallpapers in Omarchy mode, yours in Windows 11 mode)'
             }

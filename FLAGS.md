@@ -874,3 +874,22 @@ test name). The gate now fails on broken containers explicitly.
 Status: closed; the on-machine confirmation is one full swap cycle showing
 the Windows terminal scheme, font, colours, wallpaper and light/dark exactly
 as the user left them, with checklist item J covering it.
+
+## FLAG-35: wallpaper recursion and the cycling interval
+
+Context: Mat asked for the wallpaper function to recurse through all
+subfolders, flatten the pictures into one pool, and change on a chosen
+interval (5, 10 or arbitrary minutes, a slider), persisted in both modes.
+
+Decisions: the scan recurses (Get-ChildItem -Recurse) so the whole tree is
+one pool and new pictures join the moment they land; the flattening is
+logical, at scan time, never a physical copy, which would duplicate the
+collection and go stale. The interval is state.wallpaperIntervalMinutes
+(default 30, clamped 1 to 1440), set by the wizard's slider (1 to 120),
+install.ps1 -WallpaperIntervalMinutes, or "winmarchy wallpaper every <n>".
+Both tray hosts tick once a minute and count up to the interval, so a
+changed interval takes effect within a minute instead of after the old
+interval runs out. Folder and interval live in state.json, which is mode
+independent: they persist across swaps, sign-outs and reboots in both modes.
+
+Status: closed.
