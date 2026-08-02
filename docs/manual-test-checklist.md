@@ -48,6 +48,11 @@ Each cycle, note anything slow, flickery or out of place.
       Personalisation), light/dark mode as before, no glazewm or yasb
       process left (check Task Manager).
 - [ ] B7. `winmarchy doctor` reports all green for the current mode.
+- [ ] B8. Symmetry: after B6, open Windows Terminal and confirm the colour
+      scheme and font are exactly what they were before Winmarchy (check
+      Settings > Appearance, and that no "Winmarchy ..." scheme is offered).
+      Open Neovim and confirm it uses its own colourscheme again. Then
+      `winmarchy mode omarchy` and confirm both come back.
 
 ## C. Recovery drills
 

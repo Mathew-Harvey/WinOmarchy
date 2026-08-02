@@ -232,6 +232,51 @@ Describe 'Windows Terminal settings patcher' {
     }
 }
 
+Describe 'Windows Terminal restore' {
+    It 'round-trips a clean settings file back to exactly what it was' {
+        $settingsPath = Join-Path $TestDrive 'roundtrip.json'
+        Copy-Item (Join-Path $script:fixturesDir 'wt-settings-clean.json') $settingsPath
+        $original = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json
+
+        $patch = Update-WtSettingsFile -Path $settingsPath -Theme (Get-WinmarchyTheme -Name 'tokyo-night') -SetFontFace
+        $null = Restore-WtSettingsFile -Path $settingsPath -OriginalColorScheme $patch.OriginalColorScheme -OriginalFontFace $patch.OriginalFontFace
+
+        $restored = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json
+        # No Winmarchy scheme survives, and the original scheme list is intact.
+        @($restored.schemes).Count | Should -Be @($original.schemes).Count
+        $restored.schemes[0].name | Should -Be 'Campbell'
+        # The fixture had no colorScheme or font, so both keys must be gone.
+        Test-PsObjectProperty $restored.profiles.defaults 'colorScheme' | Should -BeFalse
+        $restored.profiles.defaults.padding | Should -Be '8'
+        $restored.defaultProfile | Should -Be $original.defaultProfile
+        @($restored.profiles.list).Count | Should -Be 2
+    }
+
+    It 'puts a pre-existing colour scheme and font face back' {
+        $settingsPath = Join-Path $TestDrive 'roundtrip-existing.json'
+        $before = '{ "profiles": { "defaults": { "colorScheme": "Campbell", "font": { "face": "Cascadia Mono" } }, "list": [] }, "schemes": [] }'
+        [System.IO.File]::WriteAllText($settingsPath, $before, (New-Object System.Text.UTF8Encoding($false)))
+
+        $patch = Update-WtSettingsFile -Path $settingsPath -Theme (Get-WinmarchyTheme -Name 'nord') -SetFontFace
+        $patch.OriginalColorScheme | Should -Be 'Campbell'
+        $patch.OriginalFontFace | Should -Be 'Cascadia Mono'
+        $null = Restore-WtSettingsFile -Path $settingsPath -OriginalColorScheme $patch.OriginalColorScheme -OriginalFontFace $patch.OriginalFontFace
+
+        $restored = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json
+        $restored.profiles.defaults.colorScheme | Should -Be 'Campbell'
+        $restored.profiles.defaults.font.face | Should -Be 'Cascadia Mono'
+        @($restored.schemes).Count | Should -Be 0
+    }
+
+    It 'leaves a file Winmarchy never touched alone' {
+        $settingsPath = Join-Path $TestDrive 'untouched.json'
+        Copy-Item (Join-Path $script:fixturesDir 'wt-settings-clean.json') $settingsPath
+        $before = [System.IO.File]::ReadAllText($settingsPath)
+        (Restore-WtSettingsFile -Path $settingsPath -OriginalColorScheme $null -OriginalFontFace $null) | Should -BeFalse
+        [System.IO.File]::ReadAllText($settingsPath) | Should -Be $before
+    }
+}
+
 Describe 'State' {
     It 'returns defaults when no state file exists' {
         $state = Get-WinmarchyState

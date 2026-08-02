@@ -149,10 +149,24 @@ Describe 'uninstall.ps1' {
         Test-Path $env:WINMARCHY_HOME | Should -BeFalse
     }
 
+    It 'leaves Windows Terminal completely untouched at install time' {
+        $wtPath = Join-Path $env:LOCALAPPDATA (Join-Path 'Microsoft' (Join-Path 'Windows Terminal' 'settings.json'))
+        $originalWt = [System.IO.File]::ReadAllText($wtPath)
+
+        $null = & (Join-Path $script:repoRoot 'install.ps1') -SkipApps 2>&1 | Out-String
+
+        # Installing sets Winmarchy up; it does not reskin Windows. The
+        # terminal only changes on entering Omarchy mode.
+        [System.IO.File]::ReadAllText($wtPath) | Should -Be $originalWt
+    }
+
     It 'surgically removes the Winmarchy additions from Windows Terminal settings' {
         $wtPath = Join-Path $env:LOCALAPPDATA (Join-Path 'Microsoft' (Join-Path 'Windows Terminal' 'settings.json'))
 
         $null = & (Join-Path $script:repoRoot 'install.ps1') -SkipApps 2>&1 | Out-String
+        # Entering Omarchy mode is what themes the terminal, so simulate that.
+        Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
+        $null = Update-WtSettingsFile -Path $wtPath -Theme (Get-WinmarchyTheme -Name 'tokyo-night') -SetFontFace
         $patched = [System.IO.File]::ReadAllText($wtPath) | ConvertFrom-Json
         $patched.profiles.defaults.colorScheme | Should -Be 'Winmarchy Tokyo Night'
 
@@ -168,8 +182,6 @@ Describe 'uninstall.ps1' {
             if ($null -ne $scheme) { $scheme.name | Should -Not -Match '^Winmarchy ' }
         }
         Test-PsObjectProperty $cleaned.profiles.defaults 'colorScheme' | Should -BeFalse
-        # The one-time bak stays beside the file for by-hand recovery.
-        Test-Path ($wtPath + '.winmarchy-bak') | Should -BeTrue
     }
 
     It 'works from a simulated half-failed install' {

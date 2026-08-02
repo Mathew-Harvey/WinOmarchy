@@ -35,6 +35,10 @@ folder, and double-click **install-ui.cmd**. That opens the setup wizard,
 which walks you through it in seven steps:
 
 1. **Welcome** explains what you are about to get and how to get back.
+   Setup needs no administrator rights: everything lands in your own user
+   profile and your own registry hive. Some of the third-party apps winget
+   installs may show their own elevation prompt, which is those installers,
+   not Winmarchy.
 2. **System check** looks at the machine and tells you what it found:
    Windows version, whether winget and the .NET SDK are there, free space,
    whether you already have a Neovim config or a previous install. Anything
@@ -52,6 +56,13 @@ which walks you through it in seven steps:
 6. **Install** runs it with a live log.
 7. **Finish** hands over the ten keybindings worth knowing and offers to
    start Omarchy mode straight away.
+
+You do not need to reboot. Nothing here installs a service or a driver. To
+see the login chooser you need a new logon session, so sign out and back in
+(a reboot works too, but is not required). To try Omarchy mode right now
+without signing out, tick the box on the last page of the wizard, or run
+`winmarchy mode omarchy`. To see the chooser itself immediately, run
+`%LOCALAPPDATA%\winmarchy\chooser\Winmarchy.Chooser.exe`.
 
 If you prefer a text prompt, `install-ui.ps1 -Console` asks the same
 questions in the terminal. That is also the automatic fallback if the
@@ -96,10 +107,16 @@ new stylesheet without restarting.
 
 Swapping back and forth is `winmarchy mode win11` and
 `winmarchy mode omarchy`, from the menu, from the Start menu shortcuts, or
-from any shell. Windows 11 mode is defined as the absence of Winmarchy's
-runtime effects: no GlazeWM, no yasb, taskbar and icons back, your original
-wallpaper and colour mode restored from the values captured before Omarchy
-mode first ran.
+from any shell.
+
+The swap is symmetric, and that is the point. Windows 11 mode is defined as
+the total absence of Winmarchy: no GlazeWM, no yasb, taskbar and desktop
+icons back, your own wallpaper and light or dark setting restored, your
+Windows Terminal colour scheme and font back to exactly what they were, and
+the Neovim theme file removed so Neovim returns to its own colourscheme.
+Entering Omarchy mode applies all of it again. Installing Winmarchy changes
+none of it: until you first enter Omarchy mode, the machine looks and
+behaves exactly as it did before.
 
 ## Honest limitations
 

@@ -287,3 +287,41 @@ tests cover the verdict rules, including unreadable exit codes and warnings
 being distinguished from errors.
 
 Status: closed.
+
+## FLAG-17: mode swap made symmetric; installing no longer changes Windows
+
+Context: Mat's requirement, stated after seeing his terminal reskinned by
+the installer: swapping to Windows 11 must restore every setting Windows
+had, swapping to Omarchy must apply every Winmarchy effect, and neither
+direction may leave a mess.
+
+Two surfaces broke that rule. The Windows Terminal colour scheme and font
+face, and the Neovim theme file, were applied at install time and persisted
+across both modes, because the brief (Sections 5 and 4.4) treats them as
+install-time actions. Everything else was already mode-scoped.
+
+Decision: both are now Omarchy-mode surfaces only.
+  - theme-set writes the terminal scheme, the terminal font and the Neovim
+    plugin file only when Omarchy mode is active (or -AsOmarchy is passed by
+    enter-omarchy, which commits its mode after the health check).
+  - The first terminal patch captures the pre-Winmarchy colorScheme and
+    font.face into state; enter-win11 calls the new Restore-WtSettingsFile,
+    which drops every Winmarchy scheme and puts those two values back,
+    removing the keys entirely if they were absent before. Every other
+    terminal setting, including ones added since, is left alone.
+  - enter-win11 also removes the Neovim theme file, which Winmarchy owns
+    outright, so Neovim returns to its own colourscheme.
+  - The captured terminal baseline is deliberately NOT cleared on the way
+    out, unlike the wallpaper baseline: it records the terminal as it was
+    before Winmarchy ever ran, and the restore has just written those values
+    back, so clearing it would make the next Omarchy entry capture
+    Winmarchy's own settings as the baseline.
+  - install.ps1 therefore no longer reskins anything. Installing sets
+    Winmarchy up; the machine only changes when Omarchy mode is entered.
+
+This is a deliberate deviation from the brief's wording in favour of its
+Section 1 intent, that Windows 11 mode is bone-stock Windows. Seven tests
+cover it, including a terminal patch-then-restore round trip against both a
+file with no colour scheme and one with an existing scheme and font.
+
+Status: closed.
