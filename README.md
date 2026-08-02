@@ -26,7 +26,9 @@ App Installer from the Microsoft Store, present on any current Windows 11),
 and the .NET 8 SDK if you want the login chooser built (without it,
 everything else still works and you swap from the Start menu or the
 command line). Every app Winmarchy uses is installed per-user through
-winget by the installer itself; nothing needs admin rights.
+winget by the installer itself. Winmarchy's own files and settings are
+entirely per-user and need no admin rights, but some of the apps it fetches
+are machine-wide packages and Windows will ask you to approve those.
 
 ## Install
 
@@ -35,10 +37,12 @@ folder, and double-click **install-ui.cmd**. That opens the setup wizard,
 which walks you through it in seven steps:
 
 1. **Welcome** explains what you are about to get and how to get back.
-   Setup needs no administrator rights: everything lands in your own user
-   profile and your own registry hive. Some of the third-party apps winget
-   installs may show their own elevation prompt, which is those installers,
-   not Winmarchy.
+   Setup writes only into your own user profile and your own registry hive,
+   so Winmarchy itself needs no administrator rights. Several of the apps it
+   installs are machine-wide packages, though, so Windows will raise its own
+   approval prompt for those. Approve each one. Dismissing a prompt makes
+   winget report that app as cancelled and skip it, which is exactly how you
+   end up with a working desktop and a dead Super+Enter.
 2. **System check** looks at the machine and tells you what it found:
    Windows version, whether winget and the .NET SDK are there, free space,
    whether Cursor has run yet, and whether there is a previous install.
@@ -91,8 +95,13 @@ either way.
 
 However you start it, the installer backs up everything it is about to
 touch into `%LOCALAPPDATA%\winmarchy\backup\<timestamp>\` before its first
-mutation and refuses to continue if that backup fails. Apps are installed
-per-user through winget; no admin prompt is expected.
+mutation and refuses to continue if that backup fails.
+
+Expect Windows to ask for approval a few times while the apps install:
+Alacritty among others is a machine-wide package. If you dismiss one of
+those prompts, winget reports the app as cancelled and the installer says
+so, names what that app was for, and prints the one command that retries
+it. `winmarchy doctor` will also fail a row for it afterwards.
 
 Alacritty is the terminal `Super+Enter` opens, and its config is written
 from the palette, ported verbatim from Omarchy's own Alacritty template. If

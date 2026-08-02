@@ -153,3 +153,28 @@ login, and it either passes or tells you exactly which link is broken.
       Winmarchy touching it again.
 - [ ] F14. uninstall.ps1: the tray icon disappears, both Run key values are
       gone, and the desktop shortcuts are removed.
+
+## G. A package that fails to install
+
+Simulating this is easy: dismiss the approval prompt when Windows raises one
+during setup, or run the installer with a bad winget source.
+
+- [ ] G1. Dismiss the elevation prompt for one machine-wide package during
+      setup. The live log shows a red line naming the package, winget's own
+      words underneath, and the retry command, at the moment it happens and
+      not after the summary.
+- [ ] G2. The closing summary lists the failed package, what it was for, what
+      it costs, and `winget install -e --id <id>`.
+- [ ] G3. The top-ten keybinding list marks any key whose app did not install
+      as NOT WORKING.
+- [ ] G4. `winmarchy doctor` FAILs a row for the missing app, names the keys
+      that die and gives the winget command.
+- [ ] G5. Install the missing app by hand, re-run install.ps1, and confirm
+      doctor goes green and the key works.
+- [ ] G6. `winmarchy doctor` on a healthy machine passes the nerd font row.
+      If it FAILs while the bar glyphs render correctly, the family-name match
+      is wrong and FLAG-25 needs reopening.
+- [ ] G7. With Alacritty installed under Program Files rather than on PATH,
+      all four of lwin+enter, lwin+k, lwin+escape and lwin+ctrl+shift+space
+      work. Confirm the GlazeWM config at ~/.glzr/glazewm/config.yaml carries
+      the full unquoted path on all four lines.

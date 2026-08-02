@@ -438,6 +438,8 @@ Describe 'doctor' {
         Mock Get-WtSettingsPath { $null }
         Mock Test-WinmarchyWebView2Runtime { $true }
         Mock Test-WinmarchyStartupDisabledByWindows { $false }
+        Mock Test-WinmarchyNerdFontInstalled { $true }
+        Mock Resolve-WinmarchyBindingCriticalApp { 'C:\fake\tool.exe' }
         Mock Get-WinmarchyRunKeyValue { ('"' + $script:fakeChooserExe + '"') }
     }
 
@@ -483,6 +485,25 @@ Describe 'doctor' {
         $row = $rows | Where-Object { $_.check -eq 'startup entry enabled' }
         $row.pass | Should -BeFalse
         $row.detail | Should -Match 'Startup'
+    }
+
+    It 'has a row for every program a keybinding depends on' {
+        $checks = @(@(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json) | ForEach-Object { $_.check })
+        foreach ($app in (Get-WinmarchyBindingCriticalApps)) {
+            $checks | Should -Contain ($app.Name + ' resolvable')
+        }
+        $checks | Should -Contain 'nerd font installed'
+    }
+
+    It 'names the dead keys and the fix when an app a keybinding needs is missing' {
+        # The failure that started this: a winget package failed, doctor said
+        # everything was fine, and lwin+enter did nothing.
+        Mock Resolve-WinmarchyBindingCriticalApp { $null } -ParameterFilter { $App.Name -eq 'alacritty' }
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $row = $rows | Where-Object { $_.check -eq 'alacritty resolvable' }
+        $row.pass | Should -BeFalse
+        $row.detail | Should -Match 'lwin\+enter'
+        $row.detail | Should -Match 'winget install -e --id Alacritty.Alacritty'
     }
 }
 }

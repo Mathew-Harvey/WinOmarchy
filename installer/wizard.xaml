@@ -126,7 +126,7 @@
         <TextBlock Style="{StaticResource Body}"
                    Text="Winmarchy gives this machine a second personality: tiling windows driven from the Super key, a slim themed bar instead of the taskbar, a keyboard launcher, and one colour palette running through the terminal, the editor and the wallpaper. Your normal Windows 11 desktop stays exactly as it is, and you pick between them at login or swap at any time." />
         <TextBlock Style="{StaticResource Body}"
-                   Text="Nothing here needs administrator rights, and nothing is overwritten without a backup taken first. If a backup ever fails, the installer stops rather than continuing." />
+                   Text="Winmarchy itself installs into your own user profile and needs no administrator rights. Some of the apps it fetches are machine-wide, so Windows will ask you to approve those. Approve each one: dismissing a prompt skips that app. Nothing is overwritten without a backup taken first, and if a backup ever fails the installer stops rather than continuing." />
         <Border Background="#1a1b26" CornerRadius="6" Padding="18,14" Margin="0,14,0,0">
           <StackPanel>
             <TextBlock Text="You can always get back" Foreground="#9ece6a" FontSize="13.5" FontWeight="SemiBold" Margin="0,0,0,7" />

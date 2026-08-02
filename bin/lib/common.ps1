@@ -1406,6 +1406,238 @@ function Test-WinmarchyStartupDisabledByWindows {
 }
 
 # ---------------------------------------------------------------------------
+# The apps a keybinding depends on
+# ---------------------------------------------------------------------------
+
+function Get-WinmarchyBindingCriticalApps {
+    # The programs whose absence a user actually feels, in one place, because
+    # three callers need the same answer and used to each carry their own:
+    # install.ps1 resolves them to patch the GlazeWM config, doctor reports on
+    # them, and the preflight lists them. The CLI conveniences (fzf, ripgrep,
+    # fd, bat, eza, zoxide, lazygit, btop) are deliberately absent: nothing in
+    # Winmarchy binds them, so a row for each would be noise.
+    #
+    # Name is what Find-WinmarchyExecutable resolves. Consequence is written
+    # for someone reading a FAIL row, so it names the keys that die.
+    $apps = @()
+
+    $glazeFallbacks = @()
+    if ($env:LOCALAPPDATA) {
+        $glazeFallbacks = $glazeFallbacks + (Join-Path $env:LOCALAPPDATA (Join-Path 'Programs' (Join-Path 'glzr.io' (Join-Path 'GlazeWM' 'glazewm.exe'))))
+    }
+    $apps = $apps + @(, [pscustomobject]@{
+        Name          = 'glazewm'
+        PackageId     = 'glzr-io.glazewm'
+        FallbackPaths = $glazeFallbacks
+        Consequence   = 'Omarchy mode cannot start at all'
+        Marker        = $null
+    })
+
+    $apps = $apps + @(, [pscustomobject]@{
+        Name          = 'yasbc'
+        PackageId     = 'AmN.yasb'
+        FallbackPaths = @()
+        Consequence   = 'the bar cannot start, so entering Omarchy mode fails its health check'
+        Marker        = $null
+    })
+
+    $alacrittyFallbacks = @()
+    if ($env:ProgramFiles) {
+        $alacrittyFallbacks = $alacrittyFallbacks + (Join-Path $env:ProgramFiles (Join-Path 'Alacritty' 'alacritty.exe'))
+    }
+    $apps = $apps + @(, [pscustomobject]@{
+        Name          = 'alacritty'
+        PackageId     = 'Alacritty.Alacritty'
+        FallbackPaths = $alacrittyFallbacks
+        Consequence   = 'lwin+enter, lwin+k, lwin+escape and lwin+ctrl+shift+space all fail'
+        Marker        = 'shell-exec alacritty'
+    })
+
+    $flowFallbacks = @()
+    if ($env:LOCALAPPDATA) {
+        $flowFallbacks = $flowFallbacks + (Join-Path $env:LOCALAPPDATA (Join-Path 'FlowLauncher' 'Flow.Launcher.exe'))
+    }
+    $apps = $apps + @(, [pscustomobject]@{
+        Name          = 'Flow.Launcher'
+        PackageId     = 'Flow-Launcher.Flow-Launcher'
+        FallbackPaths = $flowFallbacks
+        Consequence   = 'lwin+space opens nothing, so there is no launcher'
+        Marker        = $null
+    })
+
+    $cursorFallbacks = @()
+    if ($env:LOCALAPPDATA) {
+        $cursorFallbacks = $cursorFallbacks + (Join-Path $env:LOCALAPPDATA (Join-Path 'Programs' (Join-Path 'cursor' 'Cursor.exe')))
+    }
+    if ($env:ProgramFiles) {
+        $cursorFallbacks = $cursorFallbacks + (Join-Path $env:ProgramFiles (Join-Path 'cursor' 'Cursor.exe'))
+    }
+    $apps = $apps + @(, [pscustomobject]@{
+        Name          = 'Cursor'
+        PackageId     = 'Anysphere.Cursor'
+        FallbackPaths = $cursorFallbacks
+        Consequence   = 'lwin+shift+n opens nothing, and there is no editor to theme'
+        Marker        = $null
+    })
+
+    return , $apps
+}
+
+function Resolve-WinmarchyBindingCriticalApp {
+    # Resolves one row of the table to a full path, or $null.
+    param([Parameter(Mandatory = $true)]$App)
+    return (Find-WinmarchyExecutable -Name $App.Name -FallbackPaths $App.FallbackPaths)
+}
+
+function Update-WinmarchyGlazewmAppPaths {
+    # Rewrites the shipped GlazeWM config so every invocation of a Winmarchy
+    # app names a resolved full path instead of a bare program name. Pure:
+    # text and a name-to-path map in, text out.
+    #
+    # Paths are written UNQUOTED even when they contain spaces. GlazeWM's
+    # parse_command walks the whitespace-separated parts, joining them
+    # cumulatively until one names a real file, so
+    # "C:\Program Files\Alacritty\alacritty.exe --title ..." resolves; its
+    # quoted branch searches for the THIRD double quote in the string and so
+    # mis-parses a command that also carries a quoted argument. Verified in
+    # ref/glazewm/packages/wm/src/commands/general/shell_exec.rs.
+    #
+    # Backslash is not special in .NET regex replacement text, only $ is, and
+    # Windows paths never contain $, so a path drops in literally.
+    param(
+        [Parameter(Mandatory = $true)][string]$ConfigText,
+        [Parameter(Mandatory = $true)][hashtable]$ResolvedPaths
+    )
+    $markers = @{
+        'Flow.Launcher' = 'winmarchy:launcher-path'
+        'alacritty'     = 'winmarchy:terminal-path'
+        'Cursor'        = 'winmarchy:editor-path'
+    }
+    $text = $ConfigText
+    foreach ($app in (Get-WinmarchyBindingCriticalApps)) {
+        if (-not $ResolvedPaths.ContainsKey($app.Name)) { continue }
+        $exePath = $ResolvedPaths[$app.Name]
+        if (-not $exePath) { continue }
+        if ($markers.ContainsKey($app.Name)) {
+            $marker = $markers[$app.Name]
+            $replacement = "commands: ['shell-exec " + $exePath + "'] # " + $marker
+            $text = [regex]::Replace($text, "commands: \['shell-exec [^']*'\] # " + [regex]::Escape($marker), $replacement)
+        }
+        # Alacritty is invoked four times: once bare for lwin+enter (the marker
+        # line above) and three times with arguments, for the keybinding
+        # overlay, the system menu and the theme menu. Those three carry
+        # arguments so they cannot use the whole-line marker form, and leaving
+        # them on the bare name meant a Program Files install worked for
+        # lwin+enter while the other three failed. The marker line has already
+        # been rewritten by this point, so it no longer matches the token.
+        if ($app.Marker) {
+            $text = $text.Replace($app.Marker, 'shell-exec ' + $exePath)
+        }
+    }
+    return $text
+}
+
+function Test-WinmarchyNerdFontInstalled {
+    # The bar's stylesheet asks for JetBrainsMono Nerd Font, and without it
+    # every glyph in the bar renders as a blank box while everything else looks
+    # healthy. Windows records installed fonts under the documented Fonts key
+    # (learn.microsoft.com/windows/win32/gdi/font-installation-and-deletion),
+    # per-machine under HKLM and per-user under HKCU. The VALUE NAME winget's
+    # font package writes is not documented anywhere, so this matches on the
+    # family name and is best effort: see FLAGS.md.
+    if (-not (Test-WinmarchyIsWindows)) { return $false }
+    $fontKeys = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts',
+        'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+    )
+    foreach ($key in $fontKeys) {
+        $entry = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+        if ($null -eq $entry) { continue }
+        foreach ($property in $entry.PSObject.Properties) {
+            if ($property.Name -like '*JetBrains*Mono*') { return $true }
+        }
+    }
+    return $false
+}
+
+# ---------------------------------------------------------------------------
+# winget outcomes
+# ---------------------------------------------------------------------------
+
+function Get-WinmarchyWingetOutcome {
+    # Turns a winget exit code into a decision and a sentence a human can act
+    # on. Only the codes that change what the installer DOES are listed; for
+    # everything else the caller prints winget's own words, which stay correct
+    # as winget changes and need no table here to maintain.
+    #
+    # Every code below is quoted from the generated return code list at
+    # github.com/microsoft/winget-cli, doc/windows/package-manager/winget/returnCodes.md
+    # (that file's header records that it is produced by "winget error", so it
+    # matches the shipping binary).
+    param([Parameter(Mandatory = $true)][int]$ExitCode)
+
+    $hex = '0x{0:X8}' -f $ExitCode
+    $kind = 'failed'
+    $text = 'failed'
+
+    if ($ExitCode -eq 0) {
+        $kind = 'installed'
+        $text = 'installed'
+    } elseif ($ExitCode -eq -1978335135) {
+        # 0x8A150061 APPINSTALLER_CLI_ERROR_PACKAGE_ALREADY_INSTALLED
+        $kind = 'present'
+        $text = 'already installed'
+    } elseif ($ExitCode -eq -1978335189) {
+        # 0x8A15002B APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE
+        $kind = 'present'
+        $text = 'up to date'
+    } elseif ($ExitCode -eq -1978334963) {
+        # 0x8A15010D APPINSTALLER_CLI_ERROR_INSTALL_ALREADY_INSTALLED,
+        # "Another version of this application is already installed."
+        $kind = 'present'
+        $text = 'already installed (a different version)'
+    } elseif ($ExitCode -eq -1978334962) {
+        # 0x8A15010E APPINSTALLER_CLI_ERROR_INSTALL_DOWNGRADE,
+        # "A higher version of this application is already installed."
+        $kind = 'present'
+        $text = 'a newer version is already installed'
+    } elseif ($ExitCode -eq -1978334967) {
+        # 0x8A150109 INSTALL_REBOOT_REQUIRED_TO_FINISH
+        $kind = 'reboot'
+        $text = 'installed, restart your PC to finish it'
+    } elseif ($ExitCode -eq -1978334965) {
+        # 0x8A15010B INSTALL_REBOOT_INITIATED
+        $kind = 'reboot'
+        $text = 'installing, your PC will restart to finish it'
+    } elseif ($ExitCode -eq -1978334966) {
+        # 0x8A15010A INSTALL_REBOOT_REQUIRED_FOR_INSTALL,
+        # "Installation failed. Restart your PC then try again."
+        $kind = 'failed'
+        $text = 'FAILED, restart your PC and run setup again (' + $hex + ')'
+    } elseif ($ExitCode -eq -1978334964) {
+        # 0x8A15010C INSTALL_CANCELLED_BY_USER, "You cancelled the
+        # installation." For an MSI or wix package this is winget's label for
+        # Windows Installer returning 1602 (ERROR_INSTALL_USEREXIT), which a
+        # dismissed elevation prompt produces.
+        $kind = 'failed'
+        $text = 'FAILED, the installation was cancelled, most likely by an approval prompt being dismissed (' + $hex + ')'
+    } elseif ($ExitCode -eq -1978334972) {
+        # 0x8A150104 INSTALL_MISSING_DEPENDENCY
+        $kind = 'failed'
+        $text = 'FAILED, a dependency is missing from this machine (' + $hex + ')'
+    } elseif ($ExitCode -eq -1978334960) {
+        # 0x8A150110 INSTALL_DEPENDENCIES
+        $kind = 'failed'
+        $text = 'FAILED, its dependencies could not be installed (' + $hex + ')'
+    } else {
+        $kind = 'failed'
+        $text = 'FAILED with winget code ' + $hex + ' (' + $ExitCode + ')'
+    }
+
+    return [pscustomobject]@{ Kind = $kind; Text = $text; Hex = $hex; ExitCode = $ExitCode }
+}
+
+# ---------------------------------------------------------------------------
 # Chooser health and launch
 # ---------------------------------------------------------------------------
 
@@ -1541,15 +1773,30 @@ function Get-WinmarchyPreflight {
     if ($installed) { $installedDetail = 'Winmarchy is already installed; this run will update it, taking fresh backups first' }
     $rows = $rows + (New-WinmarchyPreflightRow 'Existing install' $true $false $installedDetail)
 
-    $alacrittyPath = Get-WinmarchyAlacrittyConfigPath
-    $alacrittyDetail = 'the themed terminal; its config is written on entering Omarchy mode'
-    if ($alacrittyPath -and (Test-Path $alacrittyPath)) { $alacrittyDetail = 'found; your own config is backed up before Winmarchy writes its own' }
-    $rows = $rows + (New-WinmarchyPreflightRow 'Alacritty' $true $false $alacrittyDetail)
+    # Alacritty: the EXECUTABLE, not its config file. This row used to test for
+    # alacritty.toml, a file Winmarchy writes itself, so after one swap it read
+    # "found" on a machine with no Alacritty at all (FLAGS.md FLAG-25).
+    $alacrittyExe = $null
+    $cursorExe = $null
+    foreach ($app in (Get-WinmarchyBindingCriticalApps)) {
+        if ($app.Name -eq 'alacritty') { $alacrittyExe = Resolve-WinmarchyBindingCriticalApp -App $app }
+        if ($app.Name -eq 'Cursor') { $cursorExe = Resolve-WinmarchyBindingCriticalApp -App $app }
+    }
+    $alacrittyDetail = 'not installed yet; the app list below installs it'
+    if ($alacrittyExe) { $alacrittyDetail = 'found at ' + $alacrittyExe }
+    if ((-not $alacrittyExe) -and $SkipApps) {
+        $alacrittyDetail = 'not installed, and the app installs are switched off; lwin+enter, lwin+k and lwin+escape will not work'
+    }
+    $rows = $rows + (New-WinmarchyPreflightRow 'Alacritty' ($null -ne $alacrittyExe) $false $alacrittyDetail)
 
     $cursorPath = Get-WinmarchyCursorSettingsPath
-    $cursorDetail = 'not set up yet; run Cursor once and it will be themed from then on'
-    if ($cursorPath) { $cursorDetail = 'found; colours are themed in Omarchy mode and restored on the way out' }
-    $rows = $rows + (New-WinmarchyPreflightRow 'Cursor' $true $false $cursorDetail)
+    $cursorDetail = 'not installed yet; the app list below installs it'
+    if ($cursorExe -and $cursorPath) {
+        $cursorDetail = 'installed and run at least once; colours are themed in Omarchy mode and restored on the way out'
+    } elseif ($cursorExe) {
+        $cursorDetail = 'installed but never run; theming starts once you have opened it once'
+    }
+    $rows = $rows + (New-WinmarchyPreflightRow 'Cursor' ($null -ne $cursorExe) $false $cursorDetail)
 
     $wtPath = Get-WtSettingsPath
     $wtDetail = 'Windows Terminal has never run; terminal theming will be skipped'
