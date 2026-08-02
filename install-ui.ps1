@@ -26,77 +26,135 @@ $script:xamlPath = Join-Path $PSScriptRoot (Join-Path 'installer' 'wizard.xaml')
 # Running install.ps1 without freezing the window
 # ---------------------------------------------------------------------------
 
+function Get-WinmarchyPowerShellPath {
+    # The interpreter used to run install.ps1 as a child process. Windows
+    # PowerShell on the target; whatever is hosting us elsewhere, so the
+    # run-and-tail path can be exercised in a build container.
+    if (Test-WinmarchyIsWindows) { return 'powershell.exe' }
+    $current = (Get-Process -Id $PID).Path
+    if ($current) { return $current }
+    return 'pwsh'
+}
+
 function Start-WinmarchyInstallRun {
-    # Runs install.ps1 on a background runspace and returns the handles the
-    # caller drains for output. PSDataCollection is thread-safe, so the UI
-    # thread can read it while the runspace writes.
+    # Runs install.ps1 as a separate process writing to a log file, which the
+    # window then tails. A child process rather than a background runspace on
+    # purpose: winget wants a real console, and a process gives an honest exit
+    # code plus a log file that survives for troubleshooting.
     param(
         [Parameter(Mandatory = $true)][hashtable]$Arguments,
         [switch]$WhatIf
     )
-    $runspace = [runspacefactory]::CreateRunspace()
-    $runspace.ApartmentState = 'STA'
-    $runspace.ThreadOptions = 'ReuseThread'
-    $runspace.Open()
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'
+    $tempDir = [System.IO.Path]::GetTempPath()
+    $logPath = Join-Path $tempDir ('winmarchy-setup-' + $stamp + '.log')
+    $errPath = Join-Path $tempDir ('winmarchy-setup-' + $stamp + '.err')
 
-    $shell = [powershell]::Create()
-    $shell.Runspace = $runspace
-    $null = $shell.AddCommand($script:installScript)
+    $argumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $script:installScript + '"'))
     foreach ($key in $Arguments.Keys) {
-        $null = $shell.AddParameter($key, $Arguments[$key])
+        $value = $Arguments[$key]
+        if ($value -is [bool]) {
+            if ($value) { $argumentList = $argumentList + ('-' + $key) }
+        } else {
+            $argumentList = $argumentList + ('-' + $key) + ('"' + [string]$value + '"')
+        }
     }
-    if ($WhatIf) { $null = $shell.AddParameter('WhatIf', $true) }
+    if ($WhatIf) { $argumentList = $argumentList + '-WhatIf' }
 
-    $output = New-Object 'System.Management.Automation.PSDataCollection[PSObject]'
-    $handle = $shell.BeginInvoke((New-Object 'System.Management.Automation.PSDataCollection[PSObject]'), $output)
+    # The files must exist before the first tail, even if the child is slow
+    # to start or fails to launch at all.
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($logPath, '', $encoding)
+    [System.IO.File]::WriteAllText($errPath, '', $encoding)
+
+    $process = Start-Process -FilePath (Get-WinmarchyPowerShellPath) -ArgumentList $argumentList `
+        -NoNewWindow -PassThru -RedirectStandardOutput $logPath -RedirectStandardError $errPath
 
     return [pscustomobject]@{
-        Shell    = $shell
-        Runspace = $runspace
-        Output   = $output
-        Handle   = $handle
-        Read     = @{ Output = 0; Warning = 0; Error = 0; Information = 0 }
+        Process = $process
+        LogPath = $logPath
+        ErrPath = $errPath
+        Offset  = [long]0
+        Partial = ''
     }
 }
 
 function Read-WinmarchyInstallRun {
-    # Drains everything written since the last call, newest last. Returns
-    # lines tagged with their stream so the UI can colour them.
+    # Returns the complete lines written since the last call. Opened with a
+    # shared read so tailing never blocks the writing process, and a trailing
+    # partial line is held back until its newline arrives.
     param([Parameter(Mandatory = $true)]$Run)
     $lines = @()
+    if (-not (Test-Path $Run.LogPath)) { return $lines }
 
-    while ($Run.Read.Output -lt $Run.Output.Count) {
-        $item = $Run.Output[$Run.Read.Output]
-        $Run.Read.Output = $Run.Read.Output + 1
-        if ($null -ne $item) { $lines = $lines + @(, [pscustomobject]@{ Kind = 'out'; Text = [string]$item }) }
+    $text = ''
+    $stream = $null
+    try {
+        $stream = New-Object System.IO.FileStream($Run.LogPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        if ($stream.Length -gt $Run.Offset) {
+            $null = $stream.Seek($Run.Offset, [System.IO.SeekOrigin]::Begin)
+            $count = [int]($stream.Length - $Run.Offset)
+            $buffer = New-Object byte[] $count
+            $read = $stream.Read($buffer, 0, $count)
+            $Run.Offset = $Run.Offset + $read
+            $text = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $read)
+        }
+    } catch {
+        return $lines
+    } finally {
+        if ($stream) { $stream.Dispose() }
     }
-    while ($Run.Read.Information -lt $Run.Shell.Streams.Information.Count) {
-        $item = $Run.Shell.Streams.Information[$Run.Read.Information]
-        $Run.Read.Information = $Run.Read.Information + 1
-        if ($null -ne $item) { $lines = $lines + @(, [pscustomobject]@{ Kind = 'out'; Text = [string]$item }) }
-    }
-    while ($Run.Read.Warning -lt $Run.Shell.Streams.Warning.Count) {
-        $item = $Run.Shell.Streams.Warning[$Run.Read.Warning]
-        $Run.Read.Warning = $Run.Read.Warning + 1
-        $lines = $lines + @(, [pscustomobject]@{ Kind = 'warn'; Text = ('warning: ' + [string]$item) })
-    }
-    while ($Run.Read.Error -lt $Run.Shell.Streams.Error.Count) {
-        $item = $Run.Shell.Streams.Error[$Run.Read.Error]
-        $Run.Read.Error = $Run.Read.Error + 1
-        $lines = $lines + @(, [pscustomobject]@{ Kind = 'error'; Text = ('error: ' + [string]$item) })
+    if ($text -eq '') { return $lines }
+
+    $text = $Run.Partial + $text
+    $Run.Partial = ''
+    $parts = $text -split "`r`n|`n"
+    for ($i = 0; $i -lt $parts.Count; $i++) {
+        if ($i -eq ($parts.Count - 1)) {
+            # No trailing newline yet: hold this fragment back.
+            $Run.Partial = $parts[$i]
+            continue
+        }
+        $lines = $lines + @(, [pscustomobject]@{ Kind = 'out'; Text = $parts[$i] })
     }
     return $lines
 }
 
 function Complete-WinmarchyInstallRun {
+    # Called once the process has exited. Flushes whatever is left, folds in
+    # anything on the error stream, and reports the outcome.
     param([Parameter(Mandatory = $true)]$Run)
-    $failed = ($Run.Shell.Streams.Error.Count -gt 0)
-    try { $Run.Shell.EndInvoke($Run.Handle) } catch { $failed = $true }
+    $lines = @(Read-WinmarchyInstallRun -Run $Run)
+    if ($Run.Partial -ne '') {
+        $lines = $lines + @(, [pscustomobject]@{ Kind = 'out'; Text = $Run.Partial })
+        $Run.Partial = ''
+    }
+
     $warnings = @()
-    foreach ($item in $Run.Shell.Streams.Warning) { $warnings = $warnings + [string]$item }
-    $Run.Shell.Dispose()
-    $Run.Runspace.Close()
-    return [pscustomobject]@{ Failed = $failed; Warnings = $warnings }
+    $errors = @()
+    if (Test-Path $Run.ErrPath) {
+        foreach ($line in [System.IO.File]::ReadAllLines($Run.ErrPath)) {
+            if ($line.Trim() -eq '') { continue }
+            # Write-Warning from the child arrives on the error stream.
+            if ($line -like 'WARNING:*') {
+                $warnings = $warnings + $line.Substring(8).Trim()
+                $lines = $lines + @(, [pscustomobject]@{ Kind = 'warn'; Text = $line })
+            } else {
+                $errors = $errors + $line
+                $lines = $lines + @(, [pscustomobject]@{ Kind = 'error'; Text = $line })
+            }
+        }
+    }
+
+    $exitCode = -1
+    try { $exitCode = $Run.Process.ExitCode } catch { $exitCode = -1 }
+    return [pscustomobject]@{
+        Failed   = (($exitCode -ne 0) -or ($errors.Count -gt 0))
+        ExitCode = $exitCode
+        Warnings = $warnings
+        Lines    = $lines
+        LogPath  = $Run.LogPath
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -353,21 +411,35 @@ function Start-WinmarchyWpfWizard {
                 # and collected lines are held in $state because this scope
                 # has exited by the time the first tick fires.
                 $ui.ReviewPlan.Text = 'Working out the plan...'
-                $state.PlanRun = Start-WinmarchyInstallRun -Arguments (New-WinmarchyInstallArguments -Choices $state.Choices) -WhatIf
-                $state.PlanLines = New-Object System.Collections.ArrayList
-                $state.PlanTimer = New-Object System.Windows.Threading.DispatcherTimer
-                $state.PlanTimer.Interval = [TimeSpan]::FromMilliseconds(150)
-                $null = $state.PlanTimer.Add_Tick({
-                    foreach ($line in (Read-WinmarchyInstallRun -Run $state.PlanRun)) {
-                        if ($line.Text.Trim() -ne '') { $null = $state.PlanLines.Add($line.Text) }
-                    }
-                    if (-not $state.PlanRun.Handle.IsCompleted) { return }
-                    $state.PlanTimer.Stop()
-                    $null = Complete-WinmarchyInstallRun -Run $state.PlanRun
-                    $ui.ReviewPlan.Text = ($state.PlanLines -join [Environment]::NewLine)
+                try {
+                    $state.PlanRun = Start-WinmarchyInstallRun -Arguments (New-WinmarchyInstallArguments -Choices $state.Choices) -WhatIf
+                    $state.PlanLines = New-Object System.Collections.ArrayList
+                    $state.PlanTimer = New-Object System.Windows.Threading.DispatcherTimer
+                    $state.PlanTimer.Interval = [TimeSpan]::FromMilliseconds(150)
+                    $null = $state.PlanTimer.Add_Tick({
+                        try {
+                            foreach ($line in (Read-WinmarchyInstallRun -Run $state.PlanRun)) {
+                                if ($line.Text.Trim() -ne '') { $null = $state.PlanLines.Add($line.Text) }
+                            }
+                            if (-not $state.PlanRun.Process.HasExited) { return }
+                            $state.PlanTimer.Stop()
+                            $planResult = Complete-WinmarchyInstallRun -Run $state.PlanRun
+                            foreach ($line in $planResult.Lines) {
+                                if ($line.Text.Trim() -ne '') { $null = $state.PlanLines.Add($line.Text) }
+                            }
+                            $ui.ReviewPlan.Text = ($state.PlanLines -join [Environment]::NewLine)
+                            $state.PlanLoaded = $true
+                        } catch {
+                            $state.PlanTimer.Stop()
+                            $ui.ReviewPlan.Text = ('The plan preview could not be produced: ' + $_.Exception.Message + [Environment]::NewLine + 'Setup can still run; the plan is only a preview.')
+                            $state.PlanLoaded = $true
+                        }
+                    })
+                    $state.PlanTimer.Start()
+                } catch {
+                    $ui.ReviewPlan.Text = ('The plan preview could not be produced: ' + $_.Exception.Message + [Environment]::NewLine + 'Setup can still run; the plan is only a preview.')
                     $state.PlanLoaded = $true
-                })
-                $state.PlanTimer.Start()
+                }
             }
         }
 
@@ -386,23 +458,52 @@ function Start-WinmarchyWpfWizard {
         }
     }
 
+    $failInstall = {
+        param($Message)
+        # Anything that goes wrong here must be visible: a frozen page with an
+        # empty log is the one outcome this wizard must never produce.
+        if ($state.Timer) { $state.Timer.Stop() }
+        & $appendLog $Message 'error'
+        $ui.InstallProgress.IsIndeterminate = $false
+        $state.Installed = $false
+        $ui.DoneTitle.Text = 'Setup did not finish'
+        $ui.DoneTitle.Foreground = ConvertTo-WinmarchyBrush '#f7768e'
+        $ui.DoneSub.Text = ($Message + '  Nothing has been left running. Run uninstall.ps1 to clear away anything partial.')
+        $ui.OptEnterNow.Visibility = 'Collapsed'
+        $ui.BtnNext.IsEnabled = $true
+        $ui.BtnNext.Content = 'Close'
+    }
+
     $startInstall = {
         & $collectChoices
         $ui.InstallLog.Inlines.Clear()
         $ui.InstallStatus.Text = 'Backing up, installing and applying the theme. This can take a few minutes while winget works.'
         $ui.InstallProgress.IsIndeterminate = $true
-        $state.Run = Start-WinmarchyInstallRun -Arguments (New-WinmarchyInstallArguments -Choices $state.Choices)
+
+        try {
+            $state.Run = Start-WinmarchyInstallRun -Arguments (New-WinmarchyInstallArguments -Choices $state.Choices)
+        } catch {
+            & $failInstall ('Setup could not be started: ' + $_.Exception.Message)
+            & $showPage 6
+            return
+        }
+        & $appendLog ('Running ' + (Get-WinmarchyInstallCommandLine -Choices $state.Choices)) 'out'
+        & $appendLog ('Log file: ' + $state.Run.LogPath) 'out'
 
         $state.Timer = New-Object System.Windows.Threading.DispatcherTimer
         $state.Timer.Interval = [TimeSpan]::FromMilliseconds(200)
         $null = $state.Timer.Add_Tick({
+          try {
             foreach ($line in (Read-WinmarchyInstallRun -Run $state.Run)) {
                 if ($line.Text.Trim() -ne '') { & $appendLog $line.Text $line.Kind }
             }
-            if (-not $state.Run.Handle.IsCompleted) { return }
+            if (-not $state.Run.Process.HasExited) { return }
 
             $state.Timer.Stop()
             $result = Complete-WinmarchyInstallRun -Run $state.Run
+            foreach ($line in $result.Lines) {
+                if ($line.Text.Trim() -ne '') { & $appendLog $line.Text $line.Kind }
+            }
             $ui.InstallProgress.IsIndeterminate = $false
             $ui.InstallProgress.Value = 100
             $state.Installed = (-not $result.Failed)
@@ -410,7 +511,7 @@ function Start-WinmarchyWpfWizard {
             if ($result.Failed) {
                 $ui.DoneTitle.Text = 'Setup did not finish'
                 $ui.DoneTitle.Foreground = ConvertTo-WinmarchyBrush '#f7768e'
-                $ui.DoneSub.Text = ('Nothing has been left running. The log above has the detail, and the full log is at ' + (Join-Path (Get-WinmarchyLogDir) 'winmarchy.log') + '. Run uninstall.ps1 to clear away anything partial.')
+                $ui.DoneSub.Text = ('Nothing has been left running. The log above has the detail, and it is saved at ' + $result.LogPath + '. Run uninstall.ps1 to clear away anything partial.')
                 $ui.OptEnterNow.Visibility = 'Collapsed'
             } else {
                 $ui.DoneSub.Text = ('Everything is in place, and your original settings are backed up under ' + (Get-WinmarchyBackupDir) + '.')
@@ -423,6 +524,10 @@ function Start-WinmarchyWpfWizard {
                 }
             }
             & $showPage 6
+          } catch {
+            & $failInstall ('Setup stopped unexpectedly: ' + $_.Exception.Message)
+            & $showPage 6
+          }
         })
         $state.Timer.Start()
     }
@@ -546,6 +651,10 @@ function Start-WinmarchyConsoleWizard {
 # ---------------------------------------------------------------------------
 # Entry point: WPF where possible, console where not
 # ---------------------------------------------------------------------------
+
+# Dot-sourcing loads the functions without launching anything, so the tests
+# can drive the real run-and-tail path.
+if ($MyInvocation.InvocationName -eq '.') { return }
 
 if ($Console) {
     Start-WinmarchyConsoleWizard
