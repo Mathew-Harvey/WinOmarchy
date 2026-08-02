@@ -194,9 +194,14 @@ public static class WinKeyGuard
             if (active && _hook != IntPtr.Zero)
             {
                 // A fresh hook at the moment it matters: if anything removed
-                // the old one along the way, arming re-establishes it.
+                // the old one along the way, arming re-establishes it. Never
+                // silently: a failed re-hook IS the guard being dead.
                 UnhookWindowsHookEx(_hook);
                 _hook = SetWindowsHookExW(WhKeyboardLl, Proc, IntPtr.Zero, 0);
+                if (_hook == IntPtr.Zero)
+                {
+                    Paths.Log("win key guard: RE-HOOK FAILED (error " + Marshal.GetLastWin32Error() + "); the Windows key will open Start");
+                }
             }
         }
         var taps = _maskedTaps;

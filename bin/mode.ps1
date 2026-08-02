@@ -81,6 +81,27 @@ function Enter-WinmarchyOmarchyMode {
             Write-WinmarchyLog -Message 'enter-omarchy: started Flow Launcher'
         }
 
+        # Step: the Windows key guard lives in the exe-hosted tray, so the
+        # swap ENSURES that host is up rather than hoping it is: a stale or
+        # PowerShell-hosted icon looks identical by eye and leaves the key
+        # opening Start (FLAG-38). Never fatal: a failed tray start must not
+        # cost the swap.
+        if (Test-WinmarchyIsWindows) {
+            try {
+                $trayStatus = Get-WinmarchyTrayStatus
+                $chooserPresent = Test-Path (Get-WinmarchyChooserExePath)
+                if ($chooserPresent -and $trayStatus -ne 'exe') {
+                    Stop-WinmarchyTrayProcesses
+                    $null = Start-WinmarchyTrayHost
+                    Write-WinmarchyLog -Message ('enter-omarchy: tray was ' + $(if ($trayStatus) { $trayStatus } else { 'not running' }) + '; started the exe host so the Windows key guard is live')
+                } elseif (-not $chooserPresent) {
+                    Write-Warning 'The chooser exe is not built, so nothing can stop the Windows key opening the Start menu in Omarchy mode. Install the .NET 8 SDK and re-run setup to get the guard.'
+                }
+            } catch {
+                Write-WinmarchyLog -Message ('enter-omarchy: tray ensure failed: ' + $_.Exception.Message) -Level 'WARN'
+            }
+        }
+
         # Step: apply the current theme across every surface, including the
         # Omarchy-only ones (wallpaper, app mode). Both of those mutations
         # get journal entries first; their undo values were captured into
