@@ -107,7 +107,12 @@ public static class TrayApplet
             };
             _wallpaperTimer.Start();
 
-            Paths.Log("tray: icon shown (hosted by the chooser exe, no console)");
+            // The build timestamp in the log is the proof of WHICH tray is
+            // running; four rounds of "the key still opens Start" taught that
+            // an identical-looking icon can be any age of code.
+            var exePath = Environment.ProcessPath;
+            var built = string.IsNullOrEmpty(exePath) ? "unknown" : System.IO.File.GetLastWriteTime(exePath).ToString("yyyy-MM-dd HH:mm:ss");
+            Paths.Log("tray: icon shown (hosted by the chooser exe, built " + built + ")");
             System.Windows.Forms.Application.Run();
             return 0;
         }

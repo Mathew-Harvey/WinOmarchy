@@ -978,3 +978,28 @@ three facts separate "guard not running", "guard not arming" and "guard
 firing but the shell ignoring the mask", which are three different bugs.
 
 Status: closed pending on-machine confirmation (checklist I10 retests).
+
+## FLAG-39: the swap now owns the Windows key guard's liveness
+
+Context: fourth report of the Start menu opening in Omarchy mode, with no
+log or doctor output to separate "guard not running" from "guard not
+arming" from "mask ignored". The masking mechanism itself (vkE8 injected on
+key-down) is AutoHotkey's own default menu mask and is sound when the guard
+is live, so every remaining explanation is a liveness problem: a stale exe,
+a PowerShell-hosted tray, a tray not running at all, or a failed hook.
+
+Decision: entering Omarchy mode now ENSURES the guard instead of hoping.
+If the chooser exe exists and the running tray is not the exe host (or is
+not running), the swap stops whatever icon is up and starts the exe host;
+if the chooser exe does not exist, the swap says plainly that nothing can
+stop the Windows key opening Start and how to fix it. Never fatal to the
+swap. The tray logs its own build timestamp at start, so the log proves
+WHICH build is running; the guard's re-hook path logs failure instead of
+dying silently.
+
+Still open until Mat sends three facts from the machine: doctor's "tray
+running" row, the "win key guard: armed" line, and a "masked N bare
+tap(s)" line. Together they pin the failure to one of the three causes.
+
+Status: closed as to the self-healing; the on-machine confirmation is
+checklist I12.
