@@ -182,7 +182,11 @@ public partial class MainWindow : Window
             ["lastMode"] = _state.LastMode,
             ["theme"] = _state.Theme,
             ["renderTest"] = _renderTest,
-            ["countdownSeconds"] = 5,
+            // 20, not 5: at login the chooser appears while the user is still
+            // arriving at the desk, and a 5 second auto-continue to the last
+            // mode reads as "no chooser ever appeared". Any mouse or key
+            // input still cancels it immediately.
+            ["countdownSeconds"] = 20,
             ["screenshot"] = File.Exists(Paths.ScreenshotFile) ? "https://winmarchy.state/chooser-screenshot.png" : null,
             ["palette"] = LoadPalette(),
         };
@@ -208,7 +212,15 @@ public partial class MainWindow : Window
                 }
                 _choiceMade = true;
                 var mode = message?["mode"]?.GetValue<string>() == "omarchy" ? "omarchy" : "win11";
-                Paths.Log("chooser: user chose " + mode);
+                var wasAuto = message?["auto"]?.GetValue<bool>() ?? false;
+                if (wasAuto)
+                {
+                    Paths.Log("chooser: countdown expired with no input, continuing to " + mode);
+                }
+                else
+                {
+                    Paths.Log("chooser: user chose " + mode);
+                }
                 Topmost = false;
                 var exitCode = await Task.Run(() => Program.RunWinmarchy("mode " + mode, waitForExit: true));
                 if (exitCode != 0)

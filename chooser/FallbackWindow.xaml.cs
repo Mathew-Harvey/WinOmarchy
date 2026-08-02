@@ -26,9 +26,11 @@ public partial class FallbackWindow : Window
 {
     private readonly WinmarchyState _state;
     private readonly DispatcherTimer _countdown;
-    private int _secondsLeft = 10;
+    // Matches the rich chooser's 20 second window; any input stops it.
+    private int _secondsLeft = 20;
     private bool _countdownRunning = true;
     private bool _choiceMade;
+    private bool _autoCommitted;
     private string _selected;
 
     private Brush _accentBrush = Brushes.SteelBlue;
@@ -160,6 +162,7 @@ public partial class FallbackWindow : Window
         if (_secondsLeft <= 0)
         {
             _selected = _state.LastMode == "omarchy" ? "omarchy" : "win11";
+            _autoCommitted = true;
             Commit();
             return;
         }
@@ -202,7 +205,14 @@ public partial class FallbackWindow : Window
             {
                 WinmarchyState.SetChooserDisabled(true);
             }
-            Paths.Log("chooser (plain): user chose " + _selected);
+            if (_autoCommitted)
+            {
+                Paths.Log("chooser (plain): countdown expired with no input, continuing to " + _selected);
+            }
+            else
+            {
+                Paths.Log("chooser (plain): user chose " + _selected);
+            }
             Topmost = false;
             CountdownText.Text = "Starting " + (_selected == "omarchy" ? "Omarchy" : "Windows 11") + "...";
             var exitCode = await System.Threading.Tasks.Task.Run(

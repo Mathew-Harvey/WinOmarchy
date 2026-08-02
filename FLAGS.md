@@ -666,3 +666,103 @@ is not documented anywhere. Confirm the row passes on Mat's machine before
 trusting it.
 
 Status: closed.
+
+## FLAG-26: entering Omarchy mode crashed on the taskbar call, on the real machine only
+
+Context: Mat could watch the bar appear and GlazeWM start tiling, then the
+whole swap rolled back to Windows 11, every time. The log named it:
+"enter-omarchy failed: Cannot convert the "1" value of type "System.UInt64"
+to type "System.IntPtr"".
+
+Root cause: Set-WinmarchyTaskbarAutoHide computed the new appbar state as a
+uint64 (the bit maths casts through uint64) and assigned it with
+"$data.lParam = [IntPtr]$newState". Windows PowerShell 5.1 has no conversion
+from an unsigned integer type to IntPtr, so the assignment throws. PowerShell
+7, which is what the build container runs, converts it happily, and the
+effector is mocked in every test, so the only place this line ever executed
+for real was Mat's machine. The rollback then worked exactly as designed,
+which is why the failure looked like "Omarchy flashes and undoes itself"
+rather than a broken desktop.
+
+Fix: cast through a signed type first, "[IntPtr][int64]$newState". Guard:
+check.ps1's 5.1 compatibility grep now fails any direct [IntPtr] cast of a
+variable anywhere in the repo, with the message telling the author to go
+through [int64]. Literal casts like [IntPtr]0x7402 are Int32 and unaffected.
+
+Lesson recorded for the register: "compatible with 5.1" cannot be fully
+proven from a container that only has PowerShell 7. The grep now covers this
+class; anything of this kind that a grep cannot see remains FLAG-1 territory.
+
+Status: closed; confirmation that the swap completes end to end on the
+machine is part of checklist section H.
+
+## FLAG-27: the tray icon kept a terminal window open
+
+Context: Mat reported a terminal window that stays up and should be hidden.
+The tray was bin/tray.ps1 hosted by powershell.exe, registered with
+-WindowStyle Hidden and backed by a ShowWindow(SW_HIDE) call. On Windows 11
+the default terminal is Windows Terminal, and Windows Terminal does not
+honour either mechanism: ShowWindow on GetConsoleWindow() does not hide the
+window when Terminal is the host (microsoft/terminal issues 12570 and 15311).
+A console process that never exits therefore keeps a visible terminal window
+for the whole session.
+
+Decision: the icon moved into the chooser executable, which is a WinExe with
+no console at all. "Winmarchy.Chooser.exe --tray" runs chooser/TrayApplet.cs:
+same menu, same theme-coloured icon, same single-instance mutex name
+(Local\WinmarchyTray) as the script version, so the two hosts can never both
+show an icon. Menu actions run the dispatcher with CreateNoWindow, which
+never allocates a console, rather than a hidden window, which allocates one
+and asks for it to be concealed. The Keybindings and Theme menu entries are
+console programs on purpose and open a real terminal.
+
+bin/tray.ps1 remains as the fallback for installs without the .NET SDK; the
+installer says plainly that under that host a terminal window will be
+visible, and its own detached launches now use CreateNoWindow too. The
+installer stops any running icon before starting the new one, because the
+old one holds the mutex. Tests pin the label parity between the two hosts
+and the shared mutex name.
+
+Status: closed.
+
+## FLAG-28: the login chooser auto-continued before the user arrived
+
+Context: "when i restart windows it boots straight into windows, not the
+selector". The log shows the opposite of a missing chooser: at 15:42:55 the
+chooser started at login, and at 15:43:02, seven seconds later, "user chose
+win11" was recorded. Nobody chose anything. The chooser's countdown was five
+seconds, auto-continuing to the last mode, and the log line for an expired
+countdown was identical to the line for a real click. Five seconds after the
+desktop appears is before a person has arrived; from the chair it reads as
+"no selector, straight into Windows".
+
+Fix: the countdown is twenty seconds in both faces (rich and plain), any
+mouse movement or key press still cancels it instantly, and an expiry now
+logs "countdown expired with no input, continuing to <mode>" so it can never
+again be mistaken for a choice. The page already cancelled on input; only
+the window length and the logging were wrong.
+
+Status: closed.
+
+## FLAG-29: app installers littered the desktop
+
+Context: "The installed software puts icons on my desk top i don't want
+this". Several of the sixteen winget packages drop a desktop shortcut on
+install. Winmarchy also added two of its own swap shortcuts, which the same
+complaint covers.
+
+Decision: the installer snapshots every .lnk on the user's desktop and the
+shared desktop before the winget loop, and afterwards removes exactly the
+ones that appeared, naming each removal in the log. Shortcuts on the shared
+desktop cannot always be removed without admin rights; those are listed in a
+warning for removal by hand rather than failed over silently. Winmarchy's
+own desktop shortcuts are gone: setup no longer creates them, removes the
+two an earlier install created, and the tray icon plus the Start menu folder
+carry every entry point. The uninstaller keeps its desktop cleanup for old
+installs.
+
+The snapshot-and-diff is deliberately scoped: only shortcuts that appeared
+between the two moments the installer looked are touched, so nothing the
+user placed themselves can ever be swept up.
+
+Status: closed.

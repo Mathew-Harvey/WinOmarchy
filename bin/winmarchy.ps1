@@ -112,11 +112,8 @@ switch ($Command) {
         Write-Output 'chooser launched'
     }
     'tray' {
-        Start-Process -FilePath (Get-WinmarchyPowerShellExe) -ArgumentList @(
-            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
-            '-File', (Join-Path $PSScriptRoot 'tray.ps1')
-        ) | Out-Null
-        Write-Output 'tray started (look in the notification area, under the caret if Windows hid it)'
+        $trayHost = Start-WinmarchyTrayHost
+        Write-Output ('tray started via ' + $trayHost + ' (look in the notification area, under the caret if Windows hid it)')
     }
     'lockscreen' {
         Set-WinmarchyLockScreenMode -Action $Argument

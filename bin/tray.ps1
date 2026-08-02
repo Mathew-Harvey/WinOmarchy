@@ -75,11 +75,22 @@ function Start-WinmarchyDetached {
         [switch]$Visible
     )
     $dispatcher = Join-Path $PSScriptRoot 'winmarchy.ps1'
-    $windowStyle = 'Hidden'
-    if ($Visible) { $windowStyle = 'Normal' }
-    $argumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $dispatcher + '"')) + $Arguments
     Write-WinmarchyLog -Message ('tray: running ' + ($Arguments -join ' '))
-    $null = Start-Process -FilePath (Get-WinmarchyPowerShellExe) -ArgumentList $argumentList -WindowStyle $windowStyle
+    if ($Visible) {
+        $argumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $dispatcher + '"')) + $Arguments
+        $null = Start-Process -FilePath (Get-WinmarchyPowerShellExe) -ArgumentList $argumentList -WindowStyle Normal
+        return
+    }
+    # CreateNoWindow rather than a hidden window: with no console allocated
+    # at all, Windows Terminal (the Windows 11 default terminal, which does
+    # not honour hide requests; microsoft/terminal issues 12570 and 15311)
+    # has nothing to show.
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = Get-WinmarchyPowerShellExe
+    $startInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $dispatcher + '" ' + ($Arguments -join ' ')
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $null = [System.Diagnostics.Process]::Start($startInfo)
 }
 
 function New-WinmarchyTrayIcon {

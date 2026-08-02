@@ -10,6 +10,7 @@ BeforeAll {
     . (Join-Path $script:repoRoot (Join-Path 'bin' 'theme-set.ps1'))
     . (Join-Path $script:repoRoot (Join-Path 'bin' 'mode.ps1'))
     $script:savedHome = $env:WINMARCHY_HOME
+    $script:savedLocalAppData = $env:LOCALAPPDATA
 }
 
 AfterAll {
@@ -39,6 +40,44 @@ Describe 'Tray menu' {
         $labels | Should -Contain 'Hide this icon'
     }
 
+    It 'is mirrored exactly by the C# tray in the chooser exe' {
+        # The icon has two hosts: TrayApplet.cs inside the WinExe (preferred,
+        # because a WinExe has no console for Windows Terminal to keep open)
+        # and this script (fallback when the chooser was never built). Every
+        # label the PowerShell menu offers must appear in the C# source, or
+        # the two menus drift apart.
+        $applet = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'chooser' 'TrayApplet.cs')))
+        foreach ($mode in @('win11', 'omarchy')) {
+            $state = Get-WinmarchyDefaultState
+            $state.mode = $mode
+            foreach ($label in (Get-WinmarchyTrayMenuLabels -State $state)) {
+                if ($label -eq '-') { continue }
+                $applet | Should -BeLike ('*"' + $label + '"*') -Because ('TrayApplet.cs must offer ' + $label)
+            }
+        }
+    }
+
+    It 'shares one single-instance mutex with the C# tray, so only one icon can exist' {
+        $mutexName = 'Local\WinmarchyTray'
+        $applet = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'chooser' 'TrayApplet.cs')))
+        $script = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'bin' 'tray.ps1')))
+        $applet | Should -BeLike ('*' + $mutexName + '*')
+        $script | Should -BeLike ('*' + $mutexName + '*')
+    }
+
+    It 'prefers the exe host and falls back to PowerShell' {
+        # No chooser exe under this WINMARCHY_HOME: PowerShell fallback.
+        $command = Get-WinmarchyTrayCommand
+        $command.Host | Should -Be 'powershell'
+        $command.RunKeyValue | Should -BeLike '*tray.ps1*'
+
+        # Now the exe exists: it wins, with --tray.
+        Write-WinmarchyTextFile -Path (Get-WinmarchyChooserExePath) -Content 'exe'
+        $command = Get-WinmarchyTrayCommand
+        $command.Host | Should -Be 'exe'
+        $command.RunKeyValue | Should -BeLike '*Winmarchy.Chooser.exe" --tray'
+    }
+
     It 'only shows labels that something knows how to run' {
         # Anything the tray does not own itself is delegated to the shared menu
         # action, so it has to be a label the system menu also offers. This is
@@ -57,6 +96,51 @@ Describe 'Tray menu' {
                 $systemEntries | Should -Contain $label -Because ('the system menu must know how to run ' + $label)
             }
         }
+    }
+}
+
+Describe 'Desktop shortcut cleanup' {
+    BeforeEach {
+        $script:desktopA = Join-Path $TestDrive ('desk-' + [System.IO.Path]::GetRandomFileName())
+        $script:desktopB = Join-Path $TestDrive ('shared-' + [System.IO.Path]::GetRandomFileName())
+        $null = New-Item -ItemType Directory -Path $script:desktopA, $script:desktopB -Force
+        $env:WINMARCHY_DESKTOP_DIRS = $script:desktopA + ';' + $script:desktopB
+    }
+
+    AfterEach {
+        $env:WINMARCHY_DESKTOP_DIRS = $null
+    }
+
+    It 'removes only the shortcuts that appeared after the snapshot' {
+        Write-WinmarchyTextFile -Path (Join-Path $script:desktopA 'Mine.lnk') -Content 'users own'
+        $snapshot = @(Get-WinmarchyDesktopShortcutSnapshot)
+
+        # The app installers drop their icons.
+        Write-WinmarchyTextFile -Path (Join-Path $script:desktopA 'Alacritty.lnk') -Content 'dropped'
+        Write-WinmarchyTextFile -Path (Join-Path $script:desktopB 'Flow.Launcher.lnk') -Content 'dropped'
+
+        $result = Remove-WinmarchyNewDesktopShortcuts -Snapshot $snapshot
+        @($result.Removed).Count | Should -Be 2
+        Test-Path (Join-Path $script:desktopA 'Mine.lnk') | Should -BeTrue
+        Test-Path (Join-Path $script:desktopA 'Alacritty.lnk') | Should -BeFalse
+        Test-Path (Join-Path $script:desktopB 'Flow.Launcher.lnk') | Should -BeFalse
+    }
+
+    It 'touches nothing when nothing new appeared' {
+        Write-WinmarchyTextFile -Path (Join-Path $script:desktopA 'Mine.lnk') -Content 'users own'
+        $snapshot = @(Get-WinmarchyDesktopShortcutSnapshot)
+        $result = Remove-WinmarchyNewDesktopShortcuts -Snapshot $snapshot
+        @($result.Removed).Count | Should -Be 0
+        @($result.Stuck).Count | Should -Be 0
+        Test-Path (Join-Path $script:desktopA 'Mine.lnk') | Should -BeTrue
+    }
+
+    It 'copes with an empty snapshot from an empty desktop' {
+        $snapshot = @(Get-WinmarchyDesktopShortcutSnapshot)
+        $snapshot.Count | Should -Be 0
+        Write-WinmarchyTextFile -Path (Join-Path $script:desktopA 'New.lnk') -Content 'dropped'
+        $result = Remove-WinmarchyNewDesktopShortcuts -Snapshot $snapshot
+        @($result.Removed).Count | Should -Be 1
     }
 }
 

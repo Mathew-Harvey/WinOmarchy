@@ -21,6 +21,16 @@ public static class Program
         // --plain forces the WebView2-free chooser. Useful for checking that
         // the standby face renders on a machine where the rich one works.
         bool forcePlain = Array.IndexOf(args, "--plain") >= 0;
+        // --show means a person asked for the chooser (tray, winmarchy
+        // chooser), so the "do not ask at login" flag must not swallow it.
+        bool forceShow = Array.IndexOf(args, "--show") >= 0;
+        // --tray runs the notification area icon instead of the chooser.
+        // Hosted here because this is a WinExe with no console for Windows
+        // Terminal to keep open; see TrayApplet.cs for the why.
+        if (Array.IndexOf(args, "--tray") >= 0)
+        {
+            return TrayApplet.Run();
+        }
         Paths.Log("chooser: starting, base " + Paths.BaseDir);
         try
         {
@@ -34,7 +44,7 @@ public static class Program
             // The "don't ask at login" flag: honour it and go straight to the
             // last chosen mode without showing any UI.
             var state = WinmarchyState.Load();
-            if (state.ChooserDisabled && !renderTest && !forcePlain)
+            if (state.ChooserDisabled && !renderTest && !forcePlain && !forceShow)
             {
                 Paths.Log("chooser: chooserDisabled is set, going straight to " + state.LastMode);
                 if (state.LastMode == "omarchy")

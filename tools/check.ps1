@@ -254,6 +254,11 @@ $orChain = -join ($bar, $bar)
 $ternaryPattern = ('\s\' + $qm + '\s.+\s:\s')
 $outFilePattern = ('Out-' + 'File\b.*-Encoding\s+utf8')
 $parallelPattern = ('ForEach-' + 'Object\s+-Parallel')
+# Casting a VARIABLE straight to IntPtr: 5.1 cannot convert unsigned integer
+# types to IntPtr (PowerShell 7 can, so only the real machine crashes). Cast
+# through [int64] first: [IntPtr][int64]$value. Literals ([IntPtr]0x7402) are
+# Int32 and are fine. Assembled so this file does not flag itself.
+$intPtrCastPattern = ('\[' + 'IntPtr\]\s*\$')
 
 $compatHits = 0
 foreach ($psFile in $psFiles) {
@@ -268,6 +273,7 @@ foreach ($psFile in $psFiles) {
         if ($line -match $ternaryPattern) { $problems = $problems + 'possible ternary operator' }
         if ($line -match $outFilePattern) { $problems = $problems + 'Out-File with utf8 encoding (writes a BOM)' }
         if ($line -match $parallelPattern) { $problems = $problems + 'parallel foreach (PowerShell 7 only)' }
+        if ($line -match $intPtrCastPattern) { $problems = $problems + 'direct [IntPtr] cast of a variable (5.1 cannot convert unsigned types; go through [int64] first)' }
         foreach ($problem in $problems) {
             Write-Failure ('5.1 compat: ' + $problem + ' in ' + $psFile.FullName + ' line ' + ($i + 1))
             $compatHits = $compatHits + 1
