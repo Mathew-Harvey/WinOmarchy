@@ -1822,6 +1822,33 @@ function Stop-WinmarchyTrayProcesses {
     }
 }
 
+function Get-WinmarchyTrayStatus {
+    # Which host is showing the icon right now: 'exe', 'powershell', or
+    # $null for none. Doctor uses it because the Windows key guard only
+    # exists inside the exe host, so "the guard does nothing" and "the tray
+    # is not the exe" are the same finding.
+    if (-not (Test-WinmarchyIsWindows)) { return $null }
+    foreach ($process in @(Get-Process -Name 'Winmarchy.Chooser' -ErrorAction SilentlyContinue)) {
+        $commandLine = ''
+        try {
+            $commandLine = [string](Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId = ' + $process.Id) -ErrorAction SilentlyContinue).CommandLine
+        } catch {
+            $commandLine = ''
+        }
+        if ($commandLine -like '*--tray*') { return 'exe' }
+    }
+    foreach ($process in @(Get-Process -Name 'powershell' -ErrorAction SilentlyContinue)) {
+        $commandLine = ''
+        try {
+            $commandLine = [string](Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId = ' + $process.Id) -ErrorAction SilentlyContinue).CommandLine
+        } catch {
+            $commandLine = ''
+        }
+        if ($commandLine -like '*tray.ps1*' -and $commandLine -like '*winmarchy*') { return 'powershell' }
+    }
+    return $null
+}
+
 function Start-WinmarchyTrayHost {
     # Starts the icon now, in this session, using whichever host this
     # machine has. (Named Host to stay clear of Start-WinmarchyTray in

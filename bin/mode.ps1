@@ -497,6 +497,21 @@ function Invoke-WinmarchyDoctor {
     if ($trayValue) { $trayDetail = $trayValue }
     $rows = $rows + (New-DoctorRow 'tray autostart' ([bool]$trayValue) $trayDetail)
 
+    # The RUNNING tray, not just the registration, because the Windows key
+    # guard and the wallpaper timer live inside the tray process, and only
+    # the exe host carries the guard. "The Windows key still opens Start"
+    # with this row failing is one finding, not two.
+    $trayStatus = Get-WinmarchyTrayStatus
+    $trayRunDetail = 'not running; no Windows key guard and no wallpaper timer. Start it with: winmarchy tray'
+    $trayRunOk = $false
+    if ($trayStatus -eq 'exe') {
+        $trayRunDetail = 'running in the chooser exe (Windows key guard active in Omarchy mode)'
+        $trayRunOk = $true
+    } elseif ($trayStatus -eq 'powershell') {
+        $trayRunDetail = 'running under PowerShell: no Windows key guard there. Build the chooser (install the .NET 8 SDK, re-run setup) to get it'
+    }
+    $rows = $rows + (New-DoctorRow 'tray running' $trayRunOk $trayRunDetail)
+
     if ($state.lockScreenEnabled) {
         $lockDetail = 'on, original captured: ' + $state.savedLockScreen
         $lockOk = [bool]$state.savedLockScreen

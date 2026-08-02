@@ -942,3 +942,39 @@ because the live read sees the truth. By hand, right-clicking the desktop,
 View, Show desktop icons does the same.
 
 Status: closed; the live read and the self-heal are checklist items.
+
+## FLAG-38: the Windows key guard could be silently killed by its own mode check
+
+Context: third report of the same symptom after FLAG-36's two fixes: "the
+windows key still triggers in omarchy mode".
+
+The structural defect found on re-reading: the mode check ran INSIDE the
+low-level hook callback. It was throttled to once a second, but that once
+did a file read plus a JSON parse plus, on failure, a log append, and the
+first call also paid the cold JIT of the whole parse path. Windows gives a
+low-level hook callback a hard time budget (LowLevelHooksTimeout, described
+under the LowLevelKeyboardProc documentation), and a callback that overruns
+can have its hook silently removed. One slow first read and the guard is
+dead for the entire session, with nothing in any log, which matches the
+report exactly and would have kept matching it no matter how correct the
+arming logic became.
+
+Fix: the callback now touches nothing but a volatile flag, a struct read
+and SendInput; the marshalling path is pre-warmed at install so no
+first-call JIT lands inside it. The mode lives on a one-second WinForms
+timer on the tray's message loop: it parses state.json, flips the flag,
+logs "armed" and "disarmed" transitions, re-establishes the hook whenever
+the mode turns to omarchy (a fresh hook at the moment it matters, in case
+anything removed the old one), and reports a masked-tap count so the log
+finally carries evidence of the guard firing. Doctor gained a "tray
+running" row that names the host, because the guard only exists in the exe
+host and a PowerShell-hosted tray showing the icon is indistinguishable
+from a working guard by looking at the notification area.
+
+What the next report needs if the symptom survives even this: the doctor
+output (the tray running row), and whether the log shows "win key guard:
+armed" and any "masked N bare tap(s)" lines while in Omarchy mode. Those
+three facts separate "guard not running", "guard not arming" and "guard
+firing but the shell ignoring the mask", which are three different bugs.
+
+Status: closed pending on-machine confirmation (checklist I10 retests).

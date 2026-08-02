@@ -19,8 +19,10 @@
 // the Windows key to stock behaviour instantly. Recoverability beats beauty.
 
 using System;
-using System.IO;
 using System.Runtime.InteropServices;
+// The mode-watch timer must be the WinForms one: its ticks run on the tray's
+// message loop thread, which is also the thread that owns the hook.
+using Timer = System.Windows.Forms.Timer;
 
 namespace Winmarchy.Chooser;
 
@@ -102,10 +104,14 @@ public static class WinKeyGuard
     // garbage collector frees the callback under it and the process dies.
     private static readonly HookProc Proc = Callback;
 
-    // The mode is re-read from state.json at most once a second, so a swap
-    // takes effect on the next keystroke without a filesystem read per key.
-    private static bool _omarchyActive;
-    private static long _modeCheckedAtTick;
+    // Maintained by the timer below, read by the hook. Volatile because the
+    // two never share a lock: the hook must only ever read a ready-made flag.
+    private static volatile bool _omarchyActive;
+    private static Timer? _modeTimer;
+    // Incremented by the hook, reported by the timer, so the log carries
+    // evidence of the guard actually firing without the hook ever logging.
+    private static int _maskedTaps;
+    private static int _reportedTaps;
 
     public static void Install()
     {
@@ -113,6 +119,34 @@ public static class WinKeyGuard
         {
             return;
         }
+
+        // Warm the marshalling path before the first real keystroke ever
+        // reaches the callback, so no first-call JIT cost lands inside it.
+        var warm = Marshal.AllocHGlobal(Marshal.SizeOf<KbdLlHookStruct>());
+        try
+        {
+            Marshal.StructureToPtr(new KbdLlHookStruct(), warm, false);
+            var _ = Marshal.PtrToStructure<KbdLlHookStruct>(warm);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(warm);
+        }
+
+        // The mode lives on this timer, OUTSIDE the hook, and that is load
+        // bearing: Windows gives a low-level hook callback a hard time
+        // budget (the LowLevelHooksTimeout described under
+        // learn.microsoft.com/windows/win32/winmsg/lowlevelkeyboardproc),
+        // and a callback that overruns can have its hook silently removed,
+        // after which every tap opens Start again with nothing in any log.
+        // Earlier versions read and parsed state.json inside the callback;
+        // one slow cold read there could kill the guard for the whole
+        // session (FLAG-38). The callback now touches nothing but this flag.
+        _modeTimer = new Timer { Interval = 1000 };
+        _modeTimer.Tick += (_, _) => RefreshMode();
+        _modeTimer.Start();
+        RefreshMode();
+
         // A module handle of zero is valid for WH_KEYBOARD_LL hooks in
         // managed code; the hook runs in this process's message loop.
         _hook = SetWindowsHookExW(WhKeyboardLl, Proc, IntPtr.Zero, 0);
@@ -121,11 +155,12 @@ public static class WinKeyGuard
             Paths.Log("win key guard: hook failed to install (error " + Marshal.GetLastWin32Error() + "); the Windows key keeps its stock behaviour");
             return;
         }
-        Paths.Log("win key guard: active (a bare Windows key tap opens nothing while Omarchy mode is on)");
+        Paths.Log("win key guard: hook installed; arms and disarms with the mode");
     }
 
     public static void Uninstall()
     {
+        _modeTimer?.Stop();
         if (_hook == IntPtr.Zero)
         {
             return;
@@ -134,33 +169,49 @@ public static class WinKeyGuard
         _hook = IntPtr.Zero;
     }
 
-    private static bool OmarchyModeActive()
+    private static void RefreshMode()
     {
-        var now = Environment.TickCount64;
-        if (now - _modeCheckedAtTick > 1000)
+        bool active;
+        try
         {
-            _modeCheckedAtTick = now;
-            try
+            // A real JSON parse, not a text sniff: the first version
+            // searched the raw file for "mode": "omarchy" with one space,
+            // and Windows PowerShell 5.1's ConvertTo-Json writes two spaces
+            // after the colon, so the guard never armed on the real machine
+            // (FLAG-36).
+            active = WinmarchyState.Load().Mode == "omarchy";
+        }
+        catch
+        {
+            active = false;
+        }
+        if (active != _omarchyActive)
+        {
+            _omarchyActive = active;
+            Paths.Log(active
+                ? "win key guard: armed (omarchy mode; a bare Windows key tap opens nothing)"
+                : "win key guard: disarmed (the Windows key is stock again)");
+            if (active && _hook != IntPtr.Zero)
             {
-                // A real JSON parse, not a text sniff. The first version
-                // searched the raw file for the substring "mode": "omarchy"
-                // with one space, and Windows PowerShell 5.1's ConvertTo-Json
-                // writes TWO spaces after the colon, so the guard never armed
-                // on the real machine while passing everywhere PowerShell 7
-                // had written the file (FLAG-36).
-                _omarchyActive = WinmarchyState.Load().Mode == "omarchy";
-            }
-            catch
-            {
-                _omarchyActive = false;
+                // A fresh hook at the moment it matters: if anything removed
+                // the old one along the way, arming re-establishes it.
+                UnhookWindowsHookEx(_hook);
+                _hook = SetWindowsHookExW(WhKeyboardLl, Proc, IntPtr.Zero, 0);
             }
         }
-        return _omarchyActive;
+        var taps = _maskedTaps;
+        if (taps != _reportedTaps)
+        {
+            _reportedTaps = taps;
+            Paths.Log("win key guard: masked " + taps + " bare tap(s) so far this session");
+        }
     }
 
     private static IntPtr Callback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0)
+        // NOTHING slow in here, ever: no file reads, no parsing, no logging.
+        // See the LowLevelHooksTimeout note in Install.
+        if (nCode >= 0 && _omarchyActive)
         {
             try
             {
@@ -173,15 +224,16 @@ public static class WinKeyGuard
                     // Inject on the DOWN, not the up. The shell opens Start
                     // when a Win key-up arrives with no other key seen since
                     // the down; an injection made during the up's own hook
-                    // callback is queued BEHIND that in-flight up and lands
-                    // too late, so Start opened anyway (the first version did
-                    // exactly that; FLAG-36). Injected during the down, the
-                    // unassigned key is seen while Win is held, the tap is
-                    // cancelled up front, and every real combo still works
-                    // because 0xE8 is bound to nothing.
-                    if (isWinKey && (message == WmKeydown || message == WmSyskeydown) && OmarchyModeActive())
+                    // callback queues BEHIND that in-flight up and lands too
+                    // late (the first version did exactly that; FLAG-36).
+                    // Injected during the down, the unassigned key is seen
+                    // while Win is held, the tap is cancelled up front, and
+                    // every real combo still works because 0xE8 is bound to
+                    // nothing.
+                    if (isWinKey && (message == WmKeydown || message == WmSyskeydown))
                     {
                         InjectUnassignedKey();
+                        _maskedTaps = _maskedTaps + 1;
                     }
                 }
             }
