@@ -6,13 +6,26 @@
 //
 // Mechanism: a low-level keyboard hook (SetWindowsHookExW, WH_KEYBOARD_LL,
 // documented under learn.microsoft.com/windows/win32/api/winuser/) watches
-// the Windows keys. When one goes down and comes back up with no other key
-// in between, and the recorded mode is omarchy, a press of the unassigned
-// virtual key 0xE8 (documented as unassigned in the winuser.h VK table) is
-// injected via SendInput before the key-up passes through. The shell then
-// sees Win+unassigned rather than a bare tap and does not open Start. This
-// is the long-standing technique AutoHotkey users apply for the same
-// problem; nothing is swallowed, so no key can ever stick.
+// the Windows keys. The shell opens Start on the Windows key UP when no
+// other key arrived since the down, so the guard SWALLOWS that bare up and
+// replays it behind a mask key:
+//
+//     real Win up  ->  swallowed (the hook returns 1)
+//     injected     ->  vkE8 down, vkE8 up, Win up
+//
+// Swallowing is what makes the ordering certain. SendInput only ever
+// appends to the input queue, so a mask injected while the real up is in
+// flight lands AFTER it (guard v1, too late) and one injected during the
+// down lands BEFORE it (v2, so the up still looked bare). Neither could
+// separate the down from the up. Removing the real up and replaying the
+// whole sequence puts the mask between them by construction. It also works
+// if the shell ignores injected input entirely: then it sees a down and no
+// up at all, and a tap that never completes opens nothing.
+//
+// The Windows key can never stick: the replay is attempted FIRST, and the
+// real up is only swallowed once SendInput has accepted it. Only the bare
+// tap is touched; the moment any other key arrives the whole combo passes
+// through untouched, which is what keeps every GlazeWM binding working.
 //
 // Living in the tray process gives the guard the right lifetime for free:
 // it dies with the tray, and killing the tray (or "Hide this icon") returns
@@ -108,6 +121,9 @@ public static class WinKeyGuard
     // two never share a lock: the hook must only ever read a ready-made flag.
     private static volatile bool _omarchyActive;
     private static Timer? _modeTimer;
+    // Bare-tap tracking. Touched only by the hook, on one thread.
+    private static bool _winDown;
+    private static bool _otherKeySeen;
     // Incremented by the hook, reported by the timer, so the log carries
     // evidence of the guard actually firing without the hook ever logging.
     private static int _maskedTaps;
@@ -226,19 +242,40 @@ public static class WinKeyGuard
                 {
                     var message = (int)wParam;
                     var isWinKey = info.vkCode == VkLwin || info.vkCode == VkRwin;
-                    // Inject on the DOWN, not the up. The shell opens Start
-                    // when a Win key-up arrives with no other key seen since
-                    // the down; an injection made during the up's own hook
-                    // callback queues BEHIND that in-flight up and lands too
-                    // late (the first version did exactly that; FLAG-36).
-                    // Injected during the down, the unassigned key is seen
-                    // while Win is held, the tap is cancelled up front, and
-                    // every real combo still works because 0xE8 is bound to
-                    // nothing.
-                    if (isWinKey && (message == WmKeydown || message == WmSyskeydown))
+                    var isDown = message == WmKeydown || message == WmSyskeydown;
+                    var isUp = message == WmKeyup || message == WmSyskeyup;
+
+                    if (isDown)
                     {
-                        InjectUnassignedKey();
-                        _maskedTaps = _maskedTaps + 1;
+                        if (isWinKey)
+                        {
+                            // Autorepeat sends further downs while the key is
+                            // held; only a FRESH press resets the combo flag,
+                            // or holding Win through a combo would read as a
+                            // bare tap again.
+                            if (!_winDown)
+                            {
+                                _otherKeySeen = false;
+                            }
+                            _winDown = true;
+                        }
+                        else if (_winDown)
+                        {
+                            // A combo: hands off from here to the up.
+                            _otherKeySeen = true;
+                        }
+                    }
+                    else if (isUp && isWinKey)
+                    {
+                        var bareTap = _winDown && !_otherKeySeen;
+                        _winDown = false;
+                        if (bareTap && ReplayMaskedWinUp(info.vkCode))
+                        {
+                            // Swallow the real up: the replay above already
+                            // queued the mask and a fresh up behind it.
+                            _maskedTaps = _maskedTaps + 1;
+                            return (IntPtr)1;
+                        }
                     }
                 }
             }
@@ -251,14 +288,23 @@ public static class WinKeyGuard
         return CallNextHookEx(_hook, nCode, wParam, lParam);
     }
 
-    private static void InjectUnassignedKey()
+    private static bool ReplayMaskedWinUp(uint winVkCode)
     {
-        var inputs = new Input[2];
+        // vkE8 down, vkE8 up, then the Windows key up. 0xE8 is unassigned in
+        // the winuser.h virtual key table, so nothing can act on it; its only
+        // job is to sit between the down and the up.
+        var inputs = new Input[3];
         inputs[0].type = 1; // INPUT_KEYBOARD
         inputs[0].u.ki.wVk = VkUnassigned;
         inputs[1].type = 1;
         inputs[1].u.ki.wVk = VkUnassigned;
         inputs[1].u.ki.dwFlags = 2; // KEYEVENTF_KEYUP
-        SendInput(2, inputs, Marshal.SizeOf<Input>());
+        inputs[2].type = 1;
+        inputs[2].u.ki.wVk = (ushort)winVkCode;
+        inputs[2].u.ki.dwFlags = 2; // KEYEVENTF_KEYUP
+        // Only report success when the whole sequence was accepted. A partial
+        // or failed send must leave the real up alone, or the Windows key
+        // would be left logically held down with no way back.
+        return SendInput(3, inputs, Marshal.SizeOf<Input>()) == 3;
     }
 }

@@ -1003,3 +1003,45 @@ tap(s)" line. Together they pin the failure to one of the three causes.
 
 Status: closed as to the self-healing; the on-machine confirmation is
 checklist I12.
+
+## FLAG-40: the Windows key guard, third mechanism, and the reason the first two could not work
+
+Context: fifth report. Doctor now proves the tray runs in the exe host with
+the guard installed, so the mechanism itself was the last suspect standing,
+and on analysis both earlier mechanisms were geometrically incapable of
+working: SendInput only ever APPENDS to the input queue, so a mask injected
+during the key-up's hook callback lands after the up (v1), and one injected
+during the down lands before the up but after the down has already been
+delivered, leaving the up still bare from the shell's point of view on any
+build that checks the up itself (v2). Neither could put the mask BETWEEN
+the down and the up, which is the only place it counts.
+
+Mat, mid-round, proposed a Scancode Map script (HKLM Keyboard Layout,
+remap-to-null). Declined with reasons: it kills the key at the driver, so
+every lwin binding dies with it including lwin+shift+x, the panic key; it
+needs admin, which this project has avoided throughout; and it only applies
+at reboot, so it cannot follow a hot swap at all. It solves the Start menu
+by deleting the keymap.
+
+The third mechanism controls ordering by construction: on a bare Windows
+key UP in omarchy mode, the hook SWALLOWS the physical up (returns 1) and
+replays the tail as injected input: mask down, mask up, Windows key up.
+The mask now sits between the down and the up because the up the system
+delivers IS part of the replay. It also degrades safely if a future build
+ignores injected input entirely: the shell then sees a down with no up,
+and a tap that never completes opens nothing. The key cannot stick: the
+replay is sent FIRST and the real up is only swallowed when SendInput
+accepted all three events; on any failure the real up passes untouched.
+Autorepeat of a held Windows key no longer resets the combo flag. Combos
+are passed through entirely.
+
+Also added: a doctor row for the "do not ask at login" flag, because a
+ticked box routes every login straight to the last mode and is
+indistinguishable from a broken chooser without looking at state. That is
+the leading explanation for "on restart i don't get the selector": the
+chooser logs "chooserDisabled is set, going straight to <mode>" when it
+happens, and the row now names the fix.
+
+Status: closed pending the machine; if a "masked N bare tap(s)" line
+appears AND Start still opens, the shell is not seeing our swallow, which
+would point at another agent re-injecting the up, and the log will say so.

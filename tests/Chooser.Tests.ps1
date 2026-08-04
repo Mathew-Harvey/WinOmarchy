@@ -114,20 +114,32 @@ Describe 'Never shows nothing' {
         $guard | Should -Match 'WH_KEYBOARD_LL|WhKeyboardLl'
         $guard | Should -Match 'omarchy'
         $guard | Should -Match 'SendInput'
-        # The three defects earlier versions shipped: a text sniff of the
-        # state file that never matched 5.1's two-space JSON; an injection at
-        # key-up time that queued behind the in-flight up; and file reads
-        # INSIDE the hook callback, which can blow the LowLevelHooksTimeout
-        # and get the hook silently removed for the whole session.
+        # The defects earlier versions shipped, each pinned so it cannot
+        # return: a text sniff of the state file that never matched 5.1's
+        # two-space JSON; file reads INSIDE the hook callback, which can blow
+        # the LowLevelHooksTimeout and get the hook silently removed; and a
+        # mask injected on the down or the up, neither of which can land
+        # BETWEEN them, because SendInput only ever appends to the queue.
         $guard | Should -Match 'WinmarchyState\.Load\(\)'
         $guard | Should -Not -Match 'ReadAllText\(Paths\.StateFile\)'
         $guard | Should -Match 'volatile bool _omarchyActive'
         $callback = ($guard -split 'private static IntPtr Callback')[1]
         $callback | Should -Not -Match 'WinmarchyState'
         $callback | Should -Not -Match 'Paths\.Log'
-        # Written with character classes so the 5.1 compat grep does not
-        # mistake the C# operators inside this pattern for PowerShell ones.
-        $guard | Should -Match ('WmKeydown [|]{2} message == WmSyskeydown')
+        # The bare up is swallowed and the whole sequence replayed, which is
+        # the only ordering that puts the mask between the down and the up.
+        $guard | Should -Match 'ReplayMaskedWinUp'
+        $callback | Should -Match 'return \(IntPtr\)1;'
+    }
+
+    It 'replays a Windows key up for every one it swallows, so the key cannot stick' {
+        $guard = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'WinKeyGuard.cs'))
+        $replay = ($guard -split 'ReplayMaskedWinUp\(uint winVkCode\)')[1]
+        # Three events: mask down, mask up, and the Windows key up itself.
+        $replay | Should -Match 'new Input\[3\]'
+        $replay | Should -Match 'winVkCode'
+        # Swallowing is conditional on the replay being accepted in full.
+        $replay | Should -Match 'SendInput\(3, inputs, Marshal\.SizeOf<Input>\(\)\) == 3'
         $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
         $applet | Should -Match 'WinKeyGuard\.Install\(\)'
         $applet | Should -Match 'WinKeyGuard\.Uninstall\(\)'

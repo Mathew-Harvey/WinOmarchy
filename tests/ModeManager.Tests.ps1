@@ -507,7 +507,7 @@ Describe 'doctor' {
     It 'checks every link in the chain between install and a chooser at login' {
         $json = Invoke-WinmarchyDoctor -Json
         $checks = @(@($json | ConvertFrom-Json) | ForEach-Object { $_.check })
-        foreach ($required in @('chooser installed', 'run key autostart', 'startup entry enabled', 'webview2 runtime', 'tray autostart', 'tray running')) {
+        foreach ($required in @('chooser installed', 'run key autostart', 'startup entry enabled', 'chooser at login', 'webview2 runtime', 'tray autostart', 'tray running')) {
             $checks | Should -Contain $required
         }
     }
@@ -526,6 +526,14 @@ Describe 'doctor' {
         $row = $rows | Where-Object { $_.check -eq 'run key autostart' }
         $row.pass | Should -BeFalse
         $row.detail | Should -Match 'does not exist'
+    }
+
+    It 'fails the chooser-at-login row when "do not ask" was ticked' {
+        Set-WinmarchyStateValue -Name 'chooserDisabled' -Value $true
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $row = $rows | Where-Object { $_.check -eq 'chooser at login' }
+        $row.pass | Should -BeFalse
+        $row.detail | Should -Match 'do not ask at login'
     }
 
     It 'fails the startup row when Windows has the entry switched off' {
