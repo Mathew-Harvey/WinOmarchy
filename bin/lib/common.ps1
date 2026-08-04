@@ -1822,6 +1822,53 @@ function Stop-WinmarchyTrayProcesses {
     }
 }
 
+function Get-WinmarchyWinKeyGuardHeartbeat {
+    # The guard's heartbeat file, written once a second by the tray exe:
+    # pid, armed, maskedTaps, tickUtc. $null when it has never been written.
+    $path = Join-Path (Get-WinmarchyStateDir) 'winkey-guard.json'
+    if (-not (Test-Path $path)) { return $null }
+    try {
+        return ([System.IO.File]::ReadAllText($path) | ConvertFrom-Json)
+    } catch {
+        return $null
+    }
+}
+
+function Test-WinmarchyWallpaperIsOurs {
+    # Whether a wallpaper path is one Winmarchy generated: anything under the
+    # winmarchy wallpapers directory. Used by the poison guards so a themed
+    # wallpaper left behind by an earlier failure can never be captured as
+    # "the user's wallpaper" and then restored into Windows mode (FLAG-42,
+    # the same disease FLAG-34 fixed for the terminal).
+    param([string]$Path)
+    if (-not $Path) { return $false }
+    $ours = Get-WinmarchyWallpaperDir
+    return $Path.StartsWith($ours, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-WinmarchyInstallManifestWallpaper {
+    # The wallpaper recorded by the OLDEST install backup manifest: the
+    # machine as it was before Winmarchy ever touched it. $null when no
+    # manifest carries one.
+    $backupRoot = Get-WinmarchyBackupDir
+    if (-not (Test-Path $backupRoot)) { return $null }
+    foreach ($set in @(Get-ChildItem -Path $backupRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        $manifestPath = Join-Path $set.FullName 'manifest.json'
+        if (-not (Test-Path $manifestPath)) { continue }
+        try {
+            $manifest = [System.IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
+            foreach ($entry in @($manifest.entries)) {
+                if ($entry.label -eq 'wallpaper' -and $entry.value -and -not (Test-WinmarchyWallpaperIsOurs -Path $entry.value)) {
+                    return $entry.value
+                }
+            }
+        } catch {
+            continue
+        }
+    }
+    return $null
+}
+
 function Get-WinmarchyTrayStatus {
     # Which host is showing the icon right now: 'exe', 'powershell', or
     # $null for none. Doctor uses it because the Windows key guard only

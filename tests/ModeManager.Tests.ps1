@@ -96,6 +96,18 @@ Describe 'enter-omarchy' {
         $actions | Should -Contain 'icons-hidden'
     }
 
+    It 'refuses to capture a Winmarchy wallpaper as the user baseline' {
+        Mock Wait-WinmarchyOmarchyHealthy { $true }
+        $ourWallpaper = Join-Path (Get-WinmarchyWallpaperDir) 'rose-pine.png'
+        Mock Get-WinmarchyCurrentWallpaper { $ourWallpaper }
+        Mock Get-WinmarchyInstallManifestWallpaper { 'C:\pre\install.jpg' }
+
+        Enter-WinmarchyOmarchyMode
+
+        # The pre-install record wins over the poisoned current value.
+        (Get-WinmarchyState).savedWallpaper | Should -Be 'C:\pre\install.jpg'
+    }
+
     It 'does not recapture the wallpaper when one is already saved' {
         Mock Wait-WinmarchyOmarchyHealthy { $true }
         Set-WinmarchyStateValue -Name 'savedWallpaper' -Value 'C:\already\saved.jpg'
@@ -157,6 +169,20 @@ Describe 'enter-win11' {
         # entry recaptures the user's then-current settings.
         $null -eq (Get-WinmarchyState).savedWallpaper | Should -BeTrue
         $null -eq (Get-WinmarchyState).savedAppsUseLightTheme | Should -BeTrue
+    }
+
+    It 'never restores a Winmarchy wallpaper into Windows mode' {
+        Mock Test-WinmarchyProcessRunning { $true }
+        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        Mock Get-WinmarchyDesktopIconsVisible { $false }
+        Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
+        # A poisoned capture from before the guard existed.
+        Set-WinmarchyStateValue -Name 'savedWallpaper' -Value (Join-Path (Get-WinmarchyWallpaperDir) 'tokyo-night.png')
+        Mock Get-WinmarchyInstallManifestWallpaper { 'C:\pre\install.jpg' }
+
+        Enter-WinmarchyWin11Mode
+
+        Should -Invoke Set-WinmarchyWallpaper -Times 1 -Exactly -ParameterFilter { $Path -eq 'C:\pre\install.jpg' }
     }
 
     It 'restores Windows Terminal and Cursor on the way out' {
@@ -488,6 +514,7 @@ Describe 'doctor' {
         Mock Test-WinmarchyStartupDisabledByWindows { $false }
         Mock Test-WinmarchyNerdFontInstalled { $true }
         Mock Get-WinmarchyTrayStatus { 'exe' }
+        Mock Get-WinmarchyWinKeyGuardHeartbeat { [pscustomobject]@{ pid = 123; armed = $false; maskedTaps = 0; tickUtc = ((Get-Date).ToUniversalTime().ToString('o')) } }
         Mock Resolve-WinmarchyBindingCriticalApp { 'C:\fake\tool.exe' }
         Mock Get-WinmarchyRunKeyValue { ('"' + $script:fakeChooserExe + '"') }
     }
@@ -507,7 +534,7 @@ Describe 'doctor' {
     It 'checks every link in the chain between install and a chooser at login' {
         $json = Invoke-WinmarchyDoctor -Json
         $checks = @(@($json | ConvertFrom-Json) | ForEach-Object { $_.check })
-        foreach ($required in @('chooser installed', 'run key autostart', 'startup entry enabled', 'chooser at login', 'webview2 runtime', 'tray autostart', 'tray running')) {
+        foreach ($required in @('chooser installed', 'run key autostart', 'startup entry enabled', 'chooser at login', 'webview2 runtime', 'tray autostart', 'tray running', 'win key guard')) {
             $checks | Should -Contain $required
         }
     }
@@ -526,6 +553,30 @@ Describe 'doctor' {
         $row = $rows | Where-Object { $_.check -eq 'run key autostart' }
         $row.pass | Should -BeFalse
         $row.detail | Should -Match 'does not exist'
+    }
+
+    It 'fails the guard row on a dead heartbeat, and shows the masked count on a live one' {
+        Mock Get-WinmarchyWinKeyGuardHeartbeat { $null }
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        ($rows | Where-Object { $_.check -eq 'win key guard' }).pass | Should -BeFalse
+
+        Mock Get-WinmarchyWinKeyGuardHeartbeat { [pscustomobject]@{ pid = 5; armed = $true; maskedTaps = 7; tickUtc = ((Get-Date).ToUniversalTime().ToString('o')) } }
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $row = $rows | Where-Object { $_.check -eq 'win key guard' }
+        $row.pass | Should -BeTrue
+        $row.detail | Should -Match '7 bare tap'
+    }
+
+    It 'fails the guard row when it is alive but unarmed in omarchy mode' {
+        Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
+        Mock Test-WinmarchyProcessRunning { $true }
+        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        Mock Get-WinmarchyDesktopIconsVisible { $false }
+        Mock Get-WinmarchyWinKeyGuardHeartbeat { [pscustomobject]@{ pid = 5; armed = $false; maskedTaps = 0; tickUtc = ((Get-Date).ToUniversalTime().ToString('o')) } }
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $row = $rows | Where-Object { $_.check -eq 'win key guard' }
+        $row.pass | Should -BeFalse
+        $row.detail | Should -Match 'NOT armed'
     }
 
     It 'fails the chooser-at-login row when "do not ask" was ticked' {
