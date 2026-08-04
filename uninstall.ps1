@@ -44,9 +44,15 @@ Invoke-WinmarchyUninstallStep -Description 'return to Windows 11 mode' -Action {
 }
 
 # 2. Autostart, for both the chooser and the notification area icon.
-Invoke-WinmarchyUninstallStep -Description 'remove the chooser and tray Run keys' -Action {
+Invoke-WinmarchyUninstallStep -Description 'remove the Run keys Winmarchy added' -Action {
     Remove-WinmarchyRunKey
     Remove-WinmarchyRunKey -Name 'WinmarchyTray'
+    # The Everything startup entry is only removed when the installer put it
+    # there; one the user (or the voidtools setup) created is not ours to take.
+    $state = Get-WinmarchyState
+    if ($state['everythingRunKey'] -eq 'winmarchy') {
+        Remove-WinmarchyRunKey -Name 'Everything'
+    }
 }
 
 # 3. The running tray icon, if there is one: leaving it up would keep a
@@ -205,7 +211,7 @@ Invoke-WinmarchyUninstallStep -Description ('remove ' + $installRoot) -Action {
 if ($RemoveApps) {
     if ((Test-WinmarchyIsWindows) -and (Get-Command winget -ErrorAction SilentlyContinue)) {
         foreach ($packageId in @(
-            'glzr-io.glazewm', 'AmN.yasb', 'Flow-Launcher.Flow-Launcher',
+            'glzr-io.glazewm', 'AmN.yasb', 'Flow-Launcher.Flow-Launcher', 'voidtools.Everything',
             'Alacritty.Alacritty', 'junegunn.fzf', 'BurntSushi.ripgrep.MSVC', 'sharkdp.fd', 'sharkdp.bat',
             'eza-community.eza', 'ajeetdsouza.zoxide', 'JesseDuffield.lazygit',
             'aristocratos.btop4win', 'DEVCOM.JetBrainsMonoNerdFont'

@@ -140,7 +140,10 @@ widgets:
         on_left: "toggle_volume_menu"
         on_right: "toggle_mute"
 
-  # Shape from ref/yasb/docs/widgets/(Widget)-Systray.md.
+  # Shape from ref/yasb/docs/widgets/(Widget)-Systray.md. show_unpinned
+  # false keeps the unpinned icon clutter collapsed behind the arrow button
+  # by default (the doc's "Whether to show unpinned container on startup");
+  # alt+click an icon to pin the few worth keeping visible.
   systray:
     type: "yasb.systray.SystrayWidget"
     options:
@@ -150,7 +153,7 @@ widgets:
       label_position: "left"
       icon_size: 16
       pin_click_modifier: "alt"
-      show_unpinned: true
+      show_unpinned: false
       show_unpinned_button: true
       show_battery: false
       show_volume: false

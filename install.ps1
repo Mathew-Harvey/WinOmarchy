@@ -144,6 +144,7 @@ $wingetPackages = @(
     @{ id = 'glzr-io.glazewm'; purpose = 'tiling window manager' },
     @{ id = 'AmN.yasb'; purpose = 'status bar' },
     @{ id = 'Flow-Launcher.Flow-Launcher'; purpose = 'launcher' },
+    @{ id = 'voidtools.Everything'; purpose = 'file search for the launcher' },
     @{ id = 'Alacritty.Alacritty'; purpose = 'terminal' },
     @{ id = 'Microsoft.WindowsTerminal'; purpose = 'fallback terminal' },
     @{ id = 'Anysphere.Cursor'; purpose = 'editor' },
@@ -175,6 +176,17 @@ if ($SkipApps) {
         $packageId = $package.id
         $packagePurpose = $package.purpose
         Invoke-WinmarchyInstallStep -Description ('winget install ' + $packageId + ' (' + $packagePurpose + ')') -Action {
+            # Skip what the machine already has: each attempt is slow, and a
+            # machine-scope package raises an elevation prompt even when
+            # there is nothing to do. The presence probe is winget's own
+            # installed list, so software installed by hand counts too. The
+            # price is that setup never upgrades a present package; that is
+            # what "winget upgrade" is for.
+            if (Test-WinmarchyWingetPackagePresent -PackageId $packageId) {
+                Write-Output 'install:   already present, skipped'
+                $script:wingetResults = $script:wingetResults + @(, @{ id = $packageId; outcome = 'already present (skipped)' })
+                return
+            }
             $savedPreference = $ErrorActionPreference
             $ErrorActionPreference = 'Continue'
             $output = @()
@@ -223,6 +235,61 @@ if ($SkipApps) {
             $names = @()
             foreach ($path in $cleanup.Stuck) { $names = $names + (Split-Path -Leaf $path) }
             Add-WinmarchyInstallWarning ('These installer shortcuts are on the shared desktop, which needs admin rights to clean: ' + ($names -join ', ') + '. Delete them by hand if unwanted.')
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 3b. Everything, so the launcher's file search works
+# ---------------------------------------------------------------------------
+# Flow Launcher's "Everything service is not running" warning means no
+# running Everything client answered its IPC query. Installing the package
+# is not enough: the 'Everything' service must exist so an unprivileged
+# client can index NTFS volumes, and the client must actually run, now and
+# at every login. This step runs even with -SkipApps, so a configs-only
+# re-run still repairs a broken search.
+
+if (Test-WinmarchyIsWindows) {
+    Invoke-WinmarchyInstallStep -Description 'configure Everything so the launcher can search files' -Action {
+        $everything = Get-WinmarchyEverythingStatus
+        if (-not $everything.ExePath) {
+            if ($SkipApps) {
+                Write-Output 'install:   Everything is not installed; nothing to configure (-SkipApps)'
+            } else {
+                Add-WinmarchyInstallWarning 'Everything is not installed, so Flow Launcher file search stays dead. Fix with: winget install -e --id voidtools.Everything, then re-run this installer.'
+            }
+            return
+        }
+        if ($everything.ServiceStatus -eq 'missing') {
+            # Without the service an unprivileged Everything cannot read the
+            # NTFS index and nags for admin rights at every start. Installing
+            # it takes one elevation prompt (see Install-WinmarchyEverythingService).
+            Write-Output 'install:   the Everything service is missing; Windows will ask for approval to add it'
+            if (Install-WinmarchyEverythingService -ExePath $everything.ExePath) {
+                Write-Output 'install:   Everything service installed and running'
+            } else {
+                Add-WinmarchyInstallWarning 'The Everything service could not be installed (the approval prompt was probably dismissed), so file search will demand admin rights at every login. Re-run this installer to try again.'
+            }
+        } elseif ($everything.ServiceStatus -ne 'Running') {
+            try {
+                Start-Service -Name 'Everything' -ErrorAction Stop
+                Write-Output 'install:   Everything service started'
+            } catch {
+                Add-WinmarchyInstallWarning ('The Everything service is ' + $everything.ServiceStatus + ' and could not be started (' + $_.Exception.Message + '). Start it from services.msc; it is set to start with Windows once running.')
+            }
+        }
+        if (-not $everything.Autorun) {
+            # A per-user Run entry needs no admin rights, unlike Everything's
+            # own -install-run-on-system-startup, which the voidtools command
+            # line reference marks "Requires administrative privileges".
+            Set-WinmarchyRunKey -Name 'Everything' -Command ('"' + $everything.ExePath + '" -startup')
+            Set-WinmarchyStateValue -Name 'everythingRunKey' -Value 'winmarchy'
+            Write-Output 'install:   Everything will start in the background at every login'
+        }
+        if (Start-WinmarchyEverythingClient) {
+            Write-Output 'install:   Everything is running; Flow Launcher can search files'
+        } else {
+            Add-WinmarchyInstallWarning 'Everything did not start, so Flow Launcher file search stays dead until it runs. Start it once from the Start menu; after that it stays in the background.'
         }
     }
 }

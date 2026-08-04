@@ -93,6 +93,20 @@ function Enter-WinmarchyOmarchyMode {
             Write-WinmarchyLog -Message 'enter-omarchy: started Flow Launcher'
         }
 
+        # Step: the file search behind the launcher. Flow Launcher asks
+        # Everything over IPC, so the swap makes sure a client is up to
+        # answer; without one every file search shows "Everything service
+        # is not running". Best effort, never fatal to the swap.
+        if ((Test-WinmarchyIsWindows) -and -not (Test-WinmarchyProcessRunning -Name 'Everything')) {
+            try {
+                if (Start-WinmarchyEverythingClient) {
+                    Write-WinmarchyLog -Message 'enter-omarchy: started Everything in the background for launcher file search'
+                }
+            } catch {
+                Write-WinmarchyLog -Message ('enter-omarchy: Everything start failed: ' + $_.Exception.Message) -Level 'WARN'
+            }
+        }
+
         # Step: the Windows key guard lives in the exe-hosted tray, so the
         # swap ENSURES that host is up rather than hoping it is: a stale or
         # PowerShell-hosted icon looks identical by eye and leaves the key
@@ -477,6 +491,14 @@ function Invoke-WinmarchyDoctor {
         $fontDetail = 'not found; the bar draws its glyphs as empty boxes. Fix with: winget install -e --id DEVCOM.JetBrainsMonoNerdFont'
     }
     $rows = $rows + (New-DoctorRow 'nerd font installed' $hasNerdFont $fontDetail)
+
+    # The launcher's file search backend. Flow Launcher's "Everything
+    # service is not running" warning means no running Everything client
+    # answered its IPC query, so this row checks every leg at once:
+    # installed, service running, client running, and the startup entry
+    # that keeps it alive over a reboot.
+    $everythingRow = Get-WinmarchyEverythingDoctorRow -Status (Get-WinmarchyEverythingStatus)
+    $rows = $rows + (New-DoctorRow 'file search (Everything)' $everythingRow.Pass $everythingRow.Detail)
 
     $expectedProcesses = ($state.mode -eq 'omarchy')
     $rows = $rows + (New-DoctorRow ('glazewm ' + $(if ($expectedProcesses) { 'running' } else { 'stopped' })) ((Test-WinmarchyProcessRunning -Name 'glazewm') -eq $expectedProcesses) ('mode is ' + $state.mode))

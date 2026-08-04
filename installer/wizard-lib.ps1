@@ -145,6 +145,7 @@ function Get-WinmarchyWingetPackages {
         [pscustomobject]@{ Id = 'glzr-io.glazewm'; Purpose = 'tiling window manager' },
         [pscustomobject]@{ Id = 'AmN.yasb'; Purpose = 'status bar' },
         [pscustomobject]@{ Id = 'Flow-Launcher.Flow-Launcher'; Purpose = 'launcher' },
+        [pscustomobject]@{ Id = 'voidtools.Everything'; Purpose = 'file search for the launcher' },
         [pscustomobject]@{ Id = 'Alacritty.Alacritty'; Purpose = 'terminal' },
         [pscustomobject]@{ Id = 'Microsoft.WindowsTerminal'; Purpose = 'fallback terminal' },
         [pscustomobject]@{ Id = 'Anysphere.Cursor'; Purpose = 'editor' },

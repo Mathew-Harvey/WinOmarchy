@@ -547,6 +547,10 @@ function Get-WinmarchyDefaultState {
         wallpaperDir              = $null
         wallpaperIntervalMinutes  = 30
         tutorialSeen              = $false
+        # 'winmarchy' when the installer added the per-user Run entry that
+        # starts Everything at login, so the uninstaller knows the entry is
+        # ours to remove and leaves anyone else's alone.
+        everythingRunKey          = $null
     }
 }
 
@@ -1982,6 +1986,172 @@ function Get-WinmarchyWingetOutcome {
     }
 
     return [pscustomobject]@{ Kind = $kind; Text = $text; Hex = $hex; ExitCode = $ExitCode }
+}
+
+function Test-WinmarchyWingetPackagePresent {
+    # True when the machine already has the package, so the installer can
+    # skip the install instead of re-running it: every attempt is slow, and
+    # a machine-scope package raises an elevation prompt even when there is
+    # nothing to do. "winget list" reads Add or Remove Programs as well as
+    # winget's own records, so software the user installed by hand counts as
+    # present too, which is the point.
+    # Flags verified against learn.microsoft.com/windows/package-manager/
+    # winget/list: --id, -e (--exact) and --accept-source-agreements are all
+    # documented options of the list command. Exit codes: 0 when a package
+    # matched; -1978335212 (0x8A150014, APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND,
+    # "No packages found" in winget-cli's returnCodes.md) when nothing did.
+    # Any other code means the probe itself broke, and the caller should
+    # attempt the install rather than trust a broken check.
+    param([Parameter(Mandatory = $true)][string]$PackageId)
+    if (-not (Test-WinmarchyIsWindows)) { return $false }
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { return $false }
+    $savedPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $null = & winget list -e --id $PackageId --accept-source-agreements 2>&1
+    } finally {
+        $ErrorActionPreference = $savedPreference
+    }
+    return ($LASTEXITCODE -eq 0)
+}
+
+# ---------------------------------------------------------------------------
+# Everything, the launcher's file search backend
+# ---------------------------------------------------------------------------
+# Flow Launcher's file search queries Everything over IPC, and its
+# "Everything service is not running" warning really means no running
+# Everything client answered. Working search therefore takes three things:
+# the program installed, the 'Everything' Windows service present so an
+# unprivileged client can index NTFS volumes, and the client itself running
+# in the background, now and again at every login.
+
+function Get-WinmarchyEverythingExePath {
+    # PATH first, then the voidtools setup's default folders. The winget
+    # package (voidtools.Everything) ships machine-scope installers whose
+    # default location is <Program Files>\Everything (verified against the
+    # manifest under manifests/v/voidtools/Everything in
+    # github.com/microsoft/winget-pkgs).
+    $fallbacks = @()
+    if ($env:ProgramFiles) {
+        $fallbacks = $fallbacks + (Join-Path $env:ProgramFiles (Join-Path 'Everything' 'Everything.exe'))
+    }
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    if ($programFilesX86) {
+        $fallbacks = $fallbacks + (Join-Path $programFilesX86 (Join-Path 'Everything' 'Everything.exe'))
+    }
+    return Find-WinmarchyExecutable -Name 'Everything' -FallbackPaths $fallbacks
+}
+
+function Get-WinmarchyEverythingStatus {
+    # One read-only snapshot of the facts that decide whether file search
+    # works, gathered in one place so doctor and the installer cannot
+    # disagree about them.
+    $exePath = $null
+    $serviceStatus = 'missing'
+    $clientRunning = $false
+    $autorun = $null
+    if (Test-WinmarchyIsWindows) {
+        $exePath = Get-WinmarchyEverythingExePath
+        # The service is named 'Everything': the voidtools command line
+        # reference (voidtools.com/support/everything/command_line_options)
+        # documents -install-service as installing "the 'Everything' service".
+        $service = Get-Service -Name 'Everything' -ErrorAction SilentlyContinue
+        if ($null -ne $service) { $serviceStatus = [string]$service.Status }
+        $clientRunning = Test-WinmarchyProcessRunning -Name 'Everything'
+        # The voidtools installer's own run-on-startup entry is machine-wide
+        # (HKLM Run); Winmarchy's fallback entry is per-user (HKCU Run).
+        # Either keeps the client alive over a reboot.
+        $machineEntry = Get-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Everything' -ErrorAction SilentlyContinue
+        if ($null -ne $machineEntry) {
+            $autorun = 'machine'
+        } elseif (Get-WinmarchyRunKeyValue -Name 'Everything') {
+            $autorun = 'user'
+        }
+    }
+    return [pscustomobject]@{
+        ExePath       = $exePath
+        ServiceStatus = $serviceStatus
+        ClientRunning = $clientRunning
+        Autorun       = $autorun
+    }
+}
+
+function Get-WinmarchyEverythingDoctorRow {
+    # Pure verdict over a status snapshot, so tests can cover every shape
+    # without a Windows box. Pass means every leg stands: installed, service
+    # running, client running, and a startup entry so it survives a reboot.
+    param([Parameter(Mandatory = $true)]$Status)
+    if (-not $Status.ExePath) {
+        return [pscustomobject]@{
+            Pass   = $false
+            Detail = 'not installed; the launcher cannot search files. Fix with: winget install -e --id voidtools.Everything, then re-run install.ps1'
+        }
+    }
+    $defects = @()
+    if ($Status.ServiceStatus -ne 'Running') {
+        $defects = $defects + ('the Everything service is ' + $Status.ServiceStatus + ', so indexing needs admin rights')
+    }
+    if (-not $Status.ClientRunning) {
+        $defects = $defects + 'the client is not running, so the launcher gets no answers'
+    }
+    if (-not $Status.Autorun) {
+        $defects = $defects + 'no startup entry, so it dies again at the next reboot'
+    }
+    if ($defects.Count -eq 0) {
+        return [pscustomobject]@{
+            Pass   = $true
+            Detail = 'client running, service running, starts at login'
+        }
+    }
+    return [pscustomobject]@{
+        Pass   = $false
+        Detail = (($defects -join '; ') + '. Fix with: re-run install.ps1')
+    }
+}
+
+function Start-WinmarchyEverythingClient {
+    # Starts Everything in the background when it is installed and not
+    # already running. "-startup" is the documented option for exactly this:
+    # "Run Everything in the background."
+    # (voidtools.com/support/everything/command_line_options). Returns
+    # whether a client is running once it is done.
+    if (-not (Test-WinmarchyIsWindows)) { return $false }
+    if (Test-WinmarchyProcessRunning -Name 'Everything') { return $true }
+    $exePath = Get-WinmarchyEverythingExePath
+    if (-not $exePath) { return $false }
+    Start-Process -FilePath $exePath -ArgumentList '-startup'
+    Start-Sleep -Milliseconds 500
+    return (Test-WinmarchyProcessRunning -Name 'Everything')
+}
+
+function Install-WinmarchyEverythingService {
+    # Installs the 'Everything' service with the documented option:
+    # "-install-service: Install or uninstall the 'Everything' service. The
+    # service is started automatically." marked "Requires administrative
+    # privileges" (voidtools.com/support/everything/command_line_options).
+    # Because of that last sentence this raises one elevation prompt, the
+    # same kind the machine-scope winget packages raise; declining it is not
+    # an error here, just $false, and the caller says what is lost.
+    param([Parameter(Mandatory = $true)][string]$ExePath)
+    if (-not (Test-WinmarchyIsWindows)) { return $false }
+    try {
+        $null = Start-Process -FilePath $ExePath -ArgumentList '-install-service' -Verb RunAs -PassThru -Wait -ErrorAction Stop
+    } catch {
+        # A dismissed elevation prompt lands here (ERROR_CANCELLED).
+        Write-WinmarchyLog -Message ('Everything service install declined or failed: ' + $_.Exception.Message) -Level 'WARN'
+        return $false
+    }
+    # Judge by the outcome rather than an exit code: the docs promise the
+    # service starts automatically, so give it a few seconds to appear.
+    $deadline = (Get-Date).AddSeconds(5)
+    while ((Get-Date) -lt $deadline) {
+        $service = Get-Service -Name 'Everything' -ErrorAction SilentlyContinue
+        if ($null -ne $service) {
+            if (([string]$service.Status) -eq 'Running') { return $true }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
 }
 
 # ---------------------------------------------------------------------------

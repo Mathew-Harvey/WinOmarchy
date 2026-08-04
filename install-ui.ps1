@@ -301,7 +301,7 @@ function Start-WinmarchyWpfWizard {
 
     # --- components page ---
     $ui.OptApps.IsChecked = $state.Choices.InstallApps
-    $ui.OptAppsNote.Text = ('The ' + (@(Get-WinmarchyWingetPackages).Count) + ' packages Winmarchy uses: the window manager, bar, launcher, terminal, Cursor, the Nerd Font and a handful of command line tools. Windows will ask you to approve the machine-wide ones; dismissing a prompt skips that app.')
+    $ui.OptAppsNote.Text = ('The ' + (@(Get-WinmarchyWingetPackages).Count) + ' packages Winmarchy uses: the window manager, bar, launcher and its file search (Everything), terminal, Cursor, the Nerd Font and a handful of command line tools. Apps already on the machine are skipped. Windows will ask you to approve the machine-wide ones; dismissing a prompt skips that app.')
     $ui.OptChooser.IsChecked = $state.Choices.BuildChooser
     $ui.OptAutostart.IsChecked = $state.Choices.Autostart
     $ui.OptTray.IsChecked = $state.Choices.Tray

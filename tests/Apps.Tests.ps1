@@ -71,6 +71,58 @@ Describe 'The dependency table' {
     }
 }
 
+Describe 'Everything, the file search backend' {
+    It 'never reinstalls: the presence probe runs before winget install in the loop' {
+        # Round two of every install used to re-run all the machine-scope
+        # installers, each one slow and each raising an elevation prompt for
+        # software already on the machine.
+        $installText = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot 'install.ps1'))
+        $probeIndex = $installText.IndexOf('Test-WinmarchyWingetPackagePresent')
+        $installIndex = $installText.IndexOf('& winget install')
+        $probeIndex | Should -BeGreaterThan 0
+        $installIndex | Should -BeGreaterThan $probeIndex
+        $installText | Should -Match 'already present, skipped'
+    }
+
+    It 'is in every package table: installer, wizard and uninstaller' {
+        foreach ($file in @('install.ps1', (Join-Path 'installer' 'wizard-lib.ps1'), 'uninstall.ps1')) {
+            $text = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot $file))
+            $text | Should -BeLike '*voidtools.Everything*' -Because ($file + ' must know the package')
+        }
+    }
+
+    It 'fails the doctor verdict with the winget fix when it is not installed' {
+        $verdict = Get-WinmarchyEverythingDoctorRow -Status ([pscustomobject]@{
+            ExePath = $null; ServiceStatus = 'missing'; ClientRunning = $false; Autorun = $null
+        })
+        $verdict.Pass | Should -BeFalse
+        $verdict.Detail | Should -Match 'winget install -e --id voidtools.Everything'
+    }
+
+    It 'names each broken leg: service, client, startup entry' {
+        $verdict = Get-WinmarchyEverythingDoctorRow -Status ([pscustomobject]@{
+            ExePath = 'C:\Program Files\Everything\Everything.exe'; ServiceStatus = 'Stopped'; ClientRunning = $false; Autorun = $null
+        })
+        $verdict.Pass | Should -BeFalse
+        $verdict.Detail | Should -Match 'service is Stopped'
+        $verdict.Detail | Should -Match 'client is not running'
+        $verdict.Detail | Should -Match 'startup entry'
+    }
+
+    It 'passes only when installed, service running, client running and autorun set' {
+        $verdict = Get-WinmarchyEverythingDoctorRow -Status ([pscustomobject]@{
+            ExePath = 'C:\Program Files\Everything\Everything.exe'; ServiceStatus = 'Running'; ClientRunning = $true; Autorun = 'machine'
+        })
+        $verdict.Pass | Should -BeTrue
+        $verdict.Detail | Should -Match 'client running, service running'
+
+        $verdict = Get-WinmarchyEverythingDoctorRow -Status ([pscustomobject]@{
+            ExePath = 'C:\Program Files\Everything\Everything.exe'; ServiceStatus = 'Running'; ClientRunning = $true; Autorun = $null
+        })
+        $verdict.Pass | Should -BeFalse -Because 'without a startup entry the search dies at the next reboot'
+    }
+}
+
 Describe 'GlazeWM path patching' {
     It 'patches every Alacritty invocation, not just the one with a marker' {
         # lwin+enter carries the terminal-path marker; the keybinding overlay,
