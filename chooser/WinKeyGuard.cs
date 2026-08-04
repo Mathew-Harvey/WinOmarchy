@@ -187,6 +187,7 @@ public static class WinKeyGuard
 
     private static void RefreshMode()
     {
+        WriteHeartbeat();
         bool active;
         try
         {
@@ -225,6 +226,29 @@ public static class WinKeyGuard
         {
             _reportedTaps = taps;
             Paths.Log("win key guard: masked " + taps + " bare tap(s) so far this session");
+        }
+    }
+
+    private static void WriteHeartbeat()
+    {
+        // One small JSON file, rewritten every tick, read by winmarchy
+        // doctor. Five rounds of "the key still opens Start" were spent
+        // unable to tell a dead guard from a disarmed one from a firing one;
+        // this file answers all three in a single doctor run: a stale tick
+        // means dead, armed says whether the mode reached the guard, and
+        // maskedTaps counts the taps it actually intercepted. Runs on the
+        // timer thread, never in the hook.
+        try
+        {
+            var json = "{\"pid\": " + Environment.ProcessId
+                + ", \"armed\": " + (_omarchyActive ? "true" : "false")
+                + ", \"maskedTaps\": " + _maskedTaps
+                + ", \"tickUtc\": \"" + DateTime.UtcNow.ToString("o") + "\"}";
+            System.IO.File.WriteAllText(System.IO.Path.Combine(Paths.StateDir, "winkey-guard.json"), json);
+        }
+        catch
+        {
+            // A missed heartbeat write must never hurt the guard itself.
         }
     }
 

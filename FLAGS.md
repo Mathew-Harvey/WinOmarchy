@@ -1045,3 +1045,53 @@ happens, and the row now names the fix.
 Status: closed pending the machine; if a "masked N bare tap(s)" line
 appears AND Start still opens, the shell is not seeing our swallow, which
 would point at another agent re-injecting the up, and the log will say so.
+
+## FLAG-41: the GlazeWM-native Windows key option, investigated and ruled out
+
+Context: "go hard" on the sixth round of the Start menu. The obvious
+question finally asked properly: can GlazeWM itself own the bare Windows
+key? Its hook already suppresses bound combos, and a bare ['lwin'] binding
+would be mode-scoped for free.
+
+Answer from its source: no. GlazeWM fires a binding when the combo's LAST
+key goes down and suppresses that keystroke
+(wm-platform/src/keybinding_listener.rs, trigger_key and the hook closure
+returning true). A bare lwin binding therefore swallows the Windows key
+DOWN. But combo matching tests held modifiers through GetKeyState
+(platform_impl/windows/keyboard_hook.rs, is_key_down_raw), which is OS
+keyboard state, and a suppressed keystroke never updates OS state. Swallow
+the down and GetKeyState reports the key up, so every lwin combo dies with
+the Start menu. Not viable, recorded so nobody walks this path again.
+
+What shipped instead: the guard's heartbeat. The tray guard now writes
+state/winkey-guard.json once a second (pid, armed, maskedTaps, tick time),
+and doctor gained a "win key guard" row that reads it: no heartbeat is a
+dead guard, a stale tick is a dead timer, armed=false in omarchy mode is a
+guard that cannot see the mode, and maskedTaps is the count of taps it
+actually intercepted. Tap the key three times, run doctor, and the row
+either shows the count rising or names which link is broken. The
+uncertainty that ate five rounds is now one command.
+
+Status: closed.
+
+## FLAG-42: a Winmarchy wallpaper captured as the user's own
+
+Context: "the theme for omarchy pollutes the windows again". The wallpaper
+baseline is captured on entering Omarchy mode; if a Winmarchy wallpaper was
+still up at that moment, left behind by any earlier failed round on this
+machine, the capture records it as "the user's wallpaper" and every return
+to Windows faithfully restores the Omarchy look. The same poisoned-baseline
+disease FLAG-34 fixed for the terminal, one surface over.
+
+Fix, both ends: at capture, a wallpaper under the winmarchy wallpapers
+directory is never accepted as a baseline; the pre-install truth from the
+OLDEST backup manifest is captured instead (the installer has recorded the
+wallpaper there since Phase 4). At restore, the same test runs against
+whatever is already in state, so an old poisoned capture heals on the next
+swap to Windows 11 mode. The light/dark app mode cannot be guarded the same
+way, because dark is dark whoever set it; if the pollution Mat sees
+includes the app mode, the manifest holds the pre-install values and the
+same substitution can be added there.
+
+Status: closed; on-machine confirmation is one swap cycle showing the
+user's own wallpaper back in Windows mode.

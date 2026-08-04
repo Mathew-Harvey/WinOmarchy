@@ -18,7 +18,19 @@ function Enter-WinmarchyOmarchyMode {
     # anything changes, so enter-win11 can restore them exactly.
     if (-not $state.savedWallpaper) {
         $currentWallpaper = Get-WinmarchyCurrentWallpaper
-        if ($currentWallpaper) {
+        if (Test-WinmarchyWallpaperIsOurs -Path $currentWallpaper) {
+            # Poison guard: a Winmarchy wallpaper still up from an earlier
+            # failure must not be captured as the user's own, or the swap
+            # back would restore the Omarchy look into Windows forever. The
+            # install-time manifest holds the pre-Winmarchy truth (FLAG-42).
+            $manifestWallpaper = Get-WinmarchyInstallManifestWallpaper
+            if ($manifestWallpaper) {
+                Set-WinmarchyStateValue -Name 'savedWallpaper' -Value $manifestWallpaper
+                Write-WinmarchyLog -Message ('enter-omarchy: current wallpaper is Winmarchy''s own; captured the pre-install wallpaper instead: ' + $manifestWallpaper) -Level 'WARN'
+            } else {
+                Write-WinmarchyLog -Message 'enter-omarchy: current wallpaper is Winmarchy''s own and no pre-install record exists; nothing captured' -Level 'WARN'
+            }
+        } elseif ($currentWallpaper) {
             Set-WinmarchyStateValue -Name 'savedWallpaper' -Value $currentWallpaper
             Write-WinmarchyLog -Message ('enter-omarchy: captured wallpaper ' + $currentWallpaper)
         }
@@ -206,8 +218,18 @@ function Enter-WinmarchyWin11Mode {
     try {
         if (Get-WinmarchyWallpaperFolder) {
             $null = Invoke-WinmarchyWallpaperNext
-        } elseif ($state.savedWallpaper) {
-            Set-WinmarchyWallpaper -Path $state.savedWallpaper
+        } else {
+            # Restore-side poison guard, in case a poisoned capture is already
+            # sitting in state from before the guard existed: never restore a
+            # Winmarchy wallpaper into Windows mode (FLAG-42).
+            $restoreWallpaper = $state.savedWallpaper
+            if (Test-WinmarchyWallpaperIsOurs -Path $restoreWallpaper) {
+                $restoreWallpaper = Get-WinmarchyInstallManifestWallpaper
+                Write-WinmarchyLog -Message 'enter-win11: the captured wallpaper is Winmarchy''s own; using the pre-install record instead' -Level 'WARN'
+            }
+            if ($restoreWallpaper) {
+                Set-WinmarchyWallpaper -Path $restoreWallpaper
+            }
         }
     } catch {
         $failures = $failures + ('wallpaper: ' + $_.Exception.Message)
@@ -543,6 +565,32 @@ function Invoke-WinmarchyDoctor {
         $trayRunDetail = 'running under PowerShell: no Windows key guard there. Build the chooser (install the .NET 8 SDK, re-run setup) to get it'
     }
     $rows = $rows + (New-DoctorRow 'tray running' $trayRunOk $trayRunDetail)
+
+    # The guard's own pulse, straight from the heartbeat file it writes once
+    # a second. This one row separates the three failures that used to look
+    # identical: no heartbeat is a dead guard, armed=false in omarchy mode is
+    # a guard that cannot see the mode, and maskedTaps counts the taps it
+    # actually intercepted. Tap the Windows key a few times and run doctor:
+    # the count must rise.
+    $heartbeat = Get-WinmarchyWinKeyGuardHeartbeat
+    $guardOk = $false
+    $guardDetail = 'no heartbeat; the guard has never run. Is the tray the exe host?'
+    if ($null -ne $heartbeat) {
+        $age = 999
+        try { $age = [int]((Get-Date).ToUniversalTime() - [datetime]::Parse($heartbeat.tickUtc).ToUniversalTime()).TotalSeconds } catch { $age = 999 }
+        $inOmarchy = ($state.mode -eq 'omarchy')
+        if ($age -gt 10) {
+            $guardDetail = 'heartbeat stopped ' + $age + 's ago; the guard is dead. Restart the tray: winmarchy tray'
+        } elseif ($inOmarchy -and -not $heartbeat.armed) {
+            $guardDetail = 'alive but NOT armed while in omarchy mode; the guard cannot read the mode'
+        } else {
+            $guardOk = $true
+            $armedText = 'disarmed (win11 mode, key is stock)'
+            if ($heartbeat.armed) { $armedText = 'armed' }
+            $guardDetail = $armedText + ', ' + $heartbeat.maskedTaps + ' bare tap(s) masked this session'
+        }
+    }
+    $rows = $rows + (New-DoctorRow 'win key guard' $guardOk $guardDetail)
 
     if ($state.lockScreenEnabled) {
         $lockDetail = 'on, original captured: ' + $state.savedLockScreen
