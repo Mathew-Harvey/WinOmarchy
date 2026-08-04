@@ -508,6 +508,17 @@ function Invoke-WinmarchyDoctor {
     if ($startupDisabled) { $startupDetail = 'switched OFF in Settings > Apps > Startup; turn Winmarchy back on there' }
     $rows = $rows + (New-DoctorRow 'startup entry enabled' (-not $startupDisabled) $startupDetail)
 
+    # The one switch that makes a healthy chooser show nothing at login:
+    # the "do not ask at login" box, ticked once, silently routes every
+    # login straight to the last mode. Anyone running doctor because "the
+    # selector did not appear" needs this row more than any other.
+    $chooserOff = [bool]$state.chooserDisabled
+    $chooserAtLoginDetail = 'on; the chooser appears at every login'
+    if ($chooserOff) {
+        $chooserAtLoginDetail = 'OFF: "do not ask at login" was ticked, so login goes straight to the last mode. Turn it back on from the system menu (Chooser at login) or the chooser itself (winmarchy chooser)'
+    }
+    $rows = $rows + (New-DoctorRow 'chooser at login' (-not $chooserOff) $chooserAtLoginDetail)
+
     $hasWebView2 = Test-WinmarchyWebView2Runtime
     $webViewDetail = 'Evergreen runtime found'
     if (-not $hasWebView2) { $webViewDetail = 'not found; the chooser falls back to its plain window. Install from https://developer.microsoft.com/microsoft-edge/webview2/' }
