@@ -297,15 +297,36 @@ if ((Test-WinmarchyIsWindows) -and (-not $SkipChooser)) {
         }
         $chooserProject = Join-Path $PSScriptRoot (Join-Path 'chooser' 'Winmarchy.Chooser.csproj')
         $chooserOut = Join-Path $installRoot 'chooser'
+
+        # The RUNNING tray and chooser hold a Windows lock on the very exe
+        # this publish must overwrite. With them alive, publish fails, the
+        # warning scrolls past, and every "reinstall" keeps running the old
+        # build forever: five rounds of Windows key guard fixes never reached
+        # the machine this way (FLAG-43). Stop them FIRST; the tray step
+        # later restarts the fresh build.
+        Stop-WinmarchyTrayProcesses
+        foreach ($chooserProcess in @(Get-Process -Name 'Winmarchy.Chooser' -ErrorAction SilentlyContinue)) {
+            Stop-Process -Id $chooserProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Milliseconds 500
+
+        $buildStarted = Get-Date
         $savedPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
+        $publishOutput = @()
         try {
-            & dotnet publish $chooserProject -c Release -o $chooserOut 2>&1 | Out-Null
+            $publishOutput = @(& dotnet publish $chooserProject -c Release -o $chooserOut 2>&1)
         } finally {
             $ErrorActionPreference = $savedPreference
         }
         if ($LASTEXITCODE -ne 0) {
-            Add-WinmarchyInstallWarning 'chooser build failed; login chooser unavailable. Swap with the Start menu shortcuts or "winmarchy mode".'
+            # The build's own words, because a bare "failed" cost a real
+            # diagnosis once already (FLAG-25).
+            foreach ($line in @($publishOutput | Select-Object -Last 5)) {
+                $trimmed = ([string]$line).Trim()
+                if ($trimmed) { Write-Output ('install:   build said: ' + $trimmed) }
+            }
+            Add-WinmarchyInstallWarning 'chooser build FAILED; the OLD chooser and tray keep running, so nothing you just pulled is live. Fix the error above and re-run setup.'
             return
         }
         # A publish that returns 0 but drops the ui folder produces an exe that
@@ -314,6 +335,17 @@ if ((Test-WinmarchyIsWindows) -and (-not $SkipChooser)) {
         $payload = Test-WinmarchyChooserPayload
         if (-not $payload.Ok) {
             Add-WinmarchyInstallWarning ('chooser build reported success but these are missing from ' + (Join-Path $installRoot 'chooser') + ': ' + ($payload.Missing -join ', ') + '. Run "winmarchy doctor" after install.')
+        }
+        # Trust nothing: the exe on disk must actually be the one just built,
+        # or the locked-file failure has happened again in a new shape.
+        $builtExe = Get-WinmarchyChooserExePath
+        if (Test-Path $builtExe) {
+            $exeTime = (Get-Item $builtExe).LastWriteTime
+            if ($exeTime -lt $buildStarted) {
+                Add-WinmarchyInstallWarning ('The chooser exe was NOT refreshed (it dates from ' + $exeTime.ToString('yyyy-MM-dd HH:mm:ss') + '); something still held it locked. Close every Winmarchy window and re-run setup.')
+            } else {
+                Write-Output ('install:   chooser exe fresh, built ' + $exeTime.ToString('yyyy-MM-dd HH:mm:ss'))
+            }
         }
     }
 

@@ -49,6 +49,23 @@ AfterAll {
     $env:LOCALAPPDATA = $script:savedLocalAppData
 }
 
+Describe 'Chooser build cannot fight a running tray' {
+    It 'stops the tray and chooser processes BEFORE dotnet publish, and verifies freshness after' {
+        # Windows locks executing binaries. With the old tray alive, publish
+        # failed to overwrite the exe, the warning scrolled past, and five
+        # rounds of Windows key guard fixes never actually reached the
+        # machine: every reinstall kept running the original build (FLAG-43).
+        $installText = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot 'install.ps1'))
+        $stopIndex = $installText.IndexOf('Stop-WinmarchyTrayProcesses')
+        $publishIndex = $installText.IndexOf('dotnet publish')
+        $stopIndex | Should -BeGreaterThan 0
+        $publishIndex | Should -BeGreaterThan $stopIndex
+        # And the freshness check afterwards, so a lock failure can never
+        # again masquerade as a successful install.
+        $installText | Should -Match 'NOT refreshed'
+    }
+}
+
 Describe 'Installer and uninstaller' {
     BeforeEach {
         $script:testRoot = Join-Path $TestDrive ([System.IO.Path]::GetRandomFileName())

@@ -1095,3 +1095,36 @@ same substitution can be added there.
 
 Status: closed; on-machine confirmation is one swap cycle showing the
 user's own wallpaper back in Windows mode.
+
+## FLAG-43: every reinstall kept running the original chooser exe
+
+Context: the doctor output that finally broke the case open. "tray running:
+in the chooser exe" alongside "win key guard: no heartbeat; the guard has
+never run" can only mean the running exe predates the guard entirely, and
+the reason is mechanical: Windows locks executing binaries, the installer
+ran dotnet publish into the chooser directory while the OLD tray exe from
+that directory was still running, publish failed to overwrite the locked
+file, the "chooser build failed" warning scrolled past among sixteen
+winget lines, and the tray restart step then dutifully relaunched the OLD
+exe. Every pull-and-reinstall round repeated the cycle, which is why five
+generations of Windows key guard fixes changed nothing on the machine: not
+one of them ever executed there. The mechanism fixes were fixing code that
+was never run.
+
+Fix, three layers: the build step now STOPS the tray and any running
+chooser before publishing (the tray step later restarts the fresh build);
+a failed publish prints the build tool's own last lines and says plainly
+that the OLD code keeps running; and after a "successful" publish the exe's
+timestamp is compared against the build start, so a lock failure can never
+again masquerade as a completed install. A test pins the ordering: the
+process stop must precede dotnet publish in install.ps1.
+
+Lesson for the register, the third of its kind: FLAG-25 was "trust the exit
+code", FLAG-26 and 36 were "trust the container to behave like 5.1", and
+this is "trust that deploying replaced what was running". The register rule
+generalises: an installer must verify what is on disk and running after it
+acts, never infer it from the steps having reported success.
+
+Status: closed; the on-machine confirmation is the very next reinstall
+printing "chooser exe fresh, built <today>", followed by doctor's guard
+row showing "armed" and a rising masked-tap count.
