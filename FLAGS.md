@@ -1128,3 +1128,54 @@ acts, never infer it from the steps having reported success.
 Status: closed; the on-machine confirmation is the very next reinstall
 printing "chooser exe fresh, built <today>", followed by doctor's guard
 row showing "armed" and a rising masked-tap count.
+
+## FLAG-44: Everything is configured after the fact, not through installer switches
+
+Context: Flow Launcher's file search asks Everything over IPC, and its
+"Everything service is not running" warning really means no running
+Everything client answered. Everything was never in the package table, so
+the warning was guaranteed. Adding the package (voidtools.Everything,
+verified in microsoft/winget-pkgs) is not enough on its own: search only
+works when the 'Everything' Windows service exists (so an unprivileged
+client can index NTFS volumes) and the client itself is running, now and
+at every login.
+
+Judgement call: the winget manifest passes no install options, and which
+default the silent MSI or Setup path applies to the "install service" and
+"run on system startup" choices could not be verified off-machine. Rather
+than guess, install.ps1 configures the end state itself afterwards, using
+only options documented in the voidtools command line reference: it
+installs the service with -install-service when missing (one elevation
+prompt, the same kind the machine-scope winget packages raise; declining
+it downgrades to a warning), writes a per-user Run entry running the
+client with -startup (the official -install-run-on-system-startup is
+machine-wide and needs admin, so it is not used), and starts the client.
+The uninstaller removes that Run entry only when state records Winmarchy
+created it. Doctor gets a "file search (Everything)" row checking all
+legs at once.
+
+Deferred to the machine: whether the winget install's own defaults already
+install the service (in which case the elevation prompt never appears),
+and Flow Launcher search returning results after one reinstall.
+
+Status: open until a reinstall on the machine shows the row passing and a
+Flow search returning files.
+
+## FLAG-45: presence pre-check means setup never upgrades a package again
+
+Context: Mat asked the installer to check whether software is already
+present before trying to reinstall it. The check is "winget list -e --id",
+which reads Add or Remove Programs as well as winget's records, so
+software installed by hand counts as present too. Every present package is
+skipped with an "already present, skipped" line before winget install is
+ever invoked, which removes the repeated elevation prompts and most of the
+reinstall wait.
+
+Known limitation, accepted: a skipped package is never upgraded by setup;
+"winget upgrade" is the path for that, and README says so. The probe adds
+roughly a second per package, far cheaper than the installs it avoids. If
+winget itself breaks, the probe returns "not present" and the install is
+attempted, which is the safe direction.
+
+Status: closed; on-machine confirmation is a reinstall run showing
+seventeen "already present, skipped" lines and no elevation prompts.

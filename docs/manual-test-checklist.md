@@ -251,3 +251,27 @@ during setup, or run the installer with a bad winget source.
 - [ ] I12. After a swap to Omarchy, the log shows "win key guard: armed",
       and after a few bare Windows key taps a "masked N bare tap(s)" line.
       doctor's "tray running" row says the chooser exe hosts the icon.
+
+## K. Round: presence skips, Everything, tray icons, hover focus
+
+- [ ] K1. Re-run install.ps1 on a machine that already has the apps: each
+      winget step prints "already present, skipped", no elevation prompts
+      appear for present packages, and the whole run is minutes faster.
+- [ ] K2. First install (or after removing Everything): the installer adds
+      voidtools.Everything, then the configure step reports the service
+      running and "Everything is running; Flow Launcher can search files".
+      One approval prompt for the service install is expected at most.
+- [ ] K3. In Omarchy mode, open the launcher and search for a file by
+      name: results appear and the "Everything service is not running"
+      warning is gone. After a reboot and a fresh login, it still works
+      (the client autostarts).
+- [ ] K4. winmarchy doctor: the "file search (Everything)" row passes.
+      Quit Everything from its tray icon and run doctor again: the row
+      fails naming the dead client. Swap into Omarchy mode: the swap
+      restarts the client and doctor passes again.
+- [ ] K5. The bar's tray area shows only the collapse arrow (and any icons
+      you pinned); the unpinned icon clutter is hidden until the arrow is
+      clicked. alt+click an icon pins it so it stays visible.
+- [ ] K6. In Omarchy mode, moving the mouse over another window focuses it
+      without a click (tiles and floats alike). In Windows 11 mode, focus
+      still needs a click, as stock Windows behaves.

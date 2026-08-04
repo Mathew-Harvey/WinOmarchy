@@ -180,6 +180,12 @@ Describe 'GlazeWM config vocabulary' {
         }
         $found | Should -BeTrue
     }
+
+    It 'focuses the window under the cursor without a click, like Omarchy' {
+        # Key verified against ref/glazewm/resources/assets/sample-config.yaml
+        # and ref/glazewm/packages/wm/src/events/handle_mouse_move.rs.
+        $script:glazeConfig['general']['focus_follows_cursor'] | Should -BeTrue
+    }
 }
 
 Describe 'yasb config structure' {
@@ -226,6 +232,15 @@ Describe 'yasb config structure' {
         foreach ($widgetName in $script:yasbConfig['widgets'].Keys) {
             $validTypes | Should -Contain $script:yasbConfig['widgets'][$widgetName]['type']
         }
+    }
+
+    It 'keeps the unpinned systray icons collapsed by default, with the expand button available' {
+        # show_unpinned is "Whether to show unpinned container on startup"
+        # per ref/yasb/docs/widgets/(Widget)-Systray.md; hidden by default so
+        # the bar shows only what the user has pinned (alt+click to pin).
+        $options = $script:yasbConfig['widgets']['systray']['options']
+        $options['show_unpinned'] | Should -BeFalse
+        $options['show_unpinned_button'] | Should -BeTrue
     }
 }
 

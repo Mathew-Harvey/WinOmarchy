@@ -517,6 +517,7 @@ Describe 'doctor' {
         Mock Get-WinmarchyWinKeyGuardHeartbeat { [pscustomobject]@{ pid = 123; armed = $false; maskedTaps = 0; tickUtc = ((Get-Date).ToUniversalTime().ToString('o')) } }
         Mock Resolve-WinmarchyBindingCriticalApp { 'C:\fake\tool.exe' }
         Mock Get-WinmarchyRunKeyValue { ('"' + $script:fakeChooserExe + '"') }
+        Mock Get-WinmarchyEverythingStatus { [pscustomobject]@{ ExePath = 'C:\fake\Everything.exe'; ServiceStatus = 'Running'; ClientRunning = $true; Autorun = 'machine' } }
     }
 
     It 'emits a JSON health table whose only failure is the absent WT settings' {
@@ -601,6 +602,17 @@ Describe 'doctor' {
             $checks | Should -Contain ($app.Name + ' resolvable')
         }
         $checks | Should -Contain 'nerd font installed'
+        $checks | Should -Contain 'file search (Everything)'
+    }
+
+    It 'fails the file search row when the Everything client is dead' {
+        # The failure from the screenshot that started this: Flow Launcher
+        # showing "Everything service is not running" on every file search.
+        Mock Get-WinmarchyEverythingStatus { [pscustomobject]@{ ExePath = 'C:\fake\Everything.exe'; ServiceStatus = 'Running'; ClientRunning = $false; Autorun = 'machine' } }
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $row = $rows | Where-Object { $_.check -eq 'file search (Everything)' }
+        $row.pass | Should -BeFalse
+        $row.detail | Should -Match 'client is not running'
     }
 
     It 'names the dead keys and the fix when an app a keybinding needs is missing' {

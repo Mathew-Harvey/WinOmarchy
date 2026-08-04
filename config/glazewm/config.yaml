@@ -15,7 +15,11 @@ general:
   startup_commands: []
   shutdown_commands: []
   config_reload_commands: []
-  focus_follows_cursor: false
+  # Hover focuses: moving the cursor onto a window activates it without a
+  # click, like Omarchy. Key verified against
+  # ref/glazewm/resources/assets/sample-config.yaml and its handling in
+  # ref/glazewm/packages/wm/src/events/handle_mouse_move.rs.
+  focus_follows_cursor: true
   toggle_workspace_on_refocus: false
   cursor_jump:
     enabled: true

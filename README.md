@@ -63,7 +63,9 @@ which walks you through it in seven steps:
 7. **Finish** hands over the ten keybindings worth knowing and offers to
    start Omarchy mode straight away.
 
-You do not need to reboot. Nothing here installs a service or a driver.
+You do not need to reboot. The one Windows service involved belongs to
+Everything, the file search behind the launcher; setup adds it through a
+normal approval prompt, and everything else is plain per-user programs.
 
 Three ways to swap, available the moment setup finishes:
 
@@ -103,6 +105,13 @@ either way.
 However you start it, the installer backs up everything it is about to
 touch into `%LOCALAPPDATA%\winmarchy\backup\<timestamp>\` before its first
 mutation and refuses to continue if that backup fails.
+
+Running setup again is cheap. Every app already on the machine is skipped
+with an "already present, skipped" line before winget is asked to do
+anything, so a re-run raises no approval prompts for what is already
+there, however it got installed. The flip side is that setup never
+upgrades an app; `winget upgrade` is the command for that, whenever you
+choose.
 
 Expect Windows to ask for approval a few times while the apps install:
 Alacritty among others is a machine-wide package. If you dismiss one of
@@ -150,10 +159,23 @@ actions, all one click from anywhere. `lwin+escape` opens the same menu from
 the keyboard, and `lwin+ctrl+t` opens btop in a floating terminal, the same
 key Omarchy uses for its Activity view.
 
+Typing a file's name into the launcher searches the whole disk instantly.
+That is Everything (voidtools) answering underneath: setup installs it,
+adds its indexing service, and keeps its client running in the background
+from login onwards, so Flow Launcher's "Everything service is not running"
+warning stays gone. If search ever goes quiet, `winmarchy doctor` has a
+"file search (Everything)" row that names the broken link and the fix.
+
 While Omarchy mode is on, tapping the Windows key does not open the Start
 menu: the key belongs to the tiling layer, exactly like Super on Omarchy.
 Every combo still works, Windows 11 mode is untouched, and the guard dies
 with the tray icon, so killing the icon returns the key to stock instantly.
+
+Two more Omarchy habits carry over. Focus follows the mouse: moving the
+cursor onto a window activates it, no click needed (a GlazeWM setting, so
+Windows 11 mode keeps click-to-focus). And the bar's tray area stays
+clean: unpinned icons hide behind the arrow button by default; alt+click
+an icon to pin the few you want always visible.
 
 Eight themes ship: tokyo-night, catppuccin, gruvbox, nord, everforest,
 rose-pine (light), matte-black and kanagawa. `winmarchy theme set <name>`
