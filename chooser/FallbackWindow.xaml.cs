@@ -43,18 +43,10 @@ public partial class FallbackWindow : Window
         InitializeComponent();
 
         ApplyPalette();
-        // This is the chooser now, not a stand-in, so it says nothing about
-        // itself unless something actually went wrong on the way here.
-        if (string.IsNullOrEmpty(reason))
-        {
-            ReasonText.Visibility = System.Windows.Visibility.Collapsed;
-            Paths.Log("chooser: showing the chooser");
-        }
-        else
-        {
-            ReasonText.Text = reason;
-            Paths.Log("chooser: showing the chooser (" + reason + ")");
-        }
+        ReasonText.Text = "The rich chooser could not start (" + reason
+            + "), so this plain one is standing in. Everything below works the same. "
+            + "Run \"winmarchy doctor\" for the details.";
+        Paths.Log("chooser: showing the plain WPF chooser because " + reason);
 
         UpdateSelection();
 

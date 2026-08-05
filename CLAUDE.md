@@ -22,7 +22,7 @@ defined as the absence of all Winmarchy runtime effects.
 2. Least parts, most basic tech. No frameworks where vanilla works, no service where
    a script works, no abstraction with one implementation.
 3. Stack: PowerShell for system automation, C# (.NET 8) only for the chooser host,
-   WPF and WinForms for the chooser, bar and menu. No npm build step, no Electron,
+   plain HTML/CSS/JS in WebView2 for chooser UI. No npm build step, no Electron,
    no Tailwind.
 4. All PowerShell must run on stock Windows PowerShell 5.1. Forbidden: ternary
    operator, null-coalescing (`??`), pipeline chain operators (`&&`, `||`),

@@ -241,9 +241,9 @@ paths can reach. Recoverability beats beauty, so Winmarchy themes the
 sign-in backdrop and leaves the sign-in box to Windows; you choose your
 desktop a second later, at the chooser.
 
-The chooser draws itself, with no browser engine involved. It used to render
-a web page in WebView2, which meant carrying roughly 100MB of browser to show
-two panels and a countdown, and made it the slowest thing at login. Cursor theming only activates
+The chooser draws with the WebView2 runtime, which ships with Windows 11. If
+it is missing or fails, the chooser falls back to a plain window with the
+same two options rather than showing nothing. Cursor theming only activates
 once Cursor has been run at least once, because that is when it first writes
 the settings file Winmarchy edits.
 

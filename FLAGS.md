@@ -1681,3 +1681,38 @@ Start Menu shortcuts, a fuzzy match and that query, which is a day's work
 with no unknowns left in it.
 
 Status: open, deliberately not started.
+
+## FLAG-60: the WebView2 removal is reverted, on Mat's verdict
+
+Context: FLAG-58 removed WebView2 and promoted the plain WPF window to be
+the only chooser face, on the reasoning that it saved roughly 100MB and the
+slowest step at login. Mat's verdict on the result: "the chooser is crap,
+slow and the ui is now less good than before". Reverted in full.
+
+Where the reasoning went wrong. The WPF window was written as a STANDBY, to
+be correct rather than handsome, on the principle that a plain chooser beats
+no chooser. Promoting it to the only face silently changed what it had to
+be, and it was never redesigned for the job. The memory argument was also
+weaker than it looked: the chooser exits the moment a mode is chosen, so its
+footprint is transient, unlike the bar and the launcher where resident
+memory is the whole point. Trading a surface the user sees at every single
+login for a saving that lasts a few seconds was a bad trade, and the
+"slower" half of the verdict says the saving may not even have materialised.
+
+Lesson for the register, and it generalises: performance work that a user
+can SEE is not the same as performance work they can only measure. The bar
+and the wallpaper path were invisible plumbing, so making them cheaper was
+pure gain. The chooser is a designed surface; there, cost is only worth
+paying down if the result still looks like it was meant.
+
+What survives from that round: the native system menu (FLAG-57), which
+replaced a terminal running fzf with a window and is a strict improvement on
+both axes. Only the chooser change is reverted.
+
+Open question for the next round: "slow" is unexplained. Removing a browser
+engine should have made a cold start faster, not slower, so either the WPF
+window has its own cost worth finding, or something else at login is being
+blamed on the chooser. Worth one measurement before anyone touches this
+again.
+
+Status: reverted; the chooser is as it was.
