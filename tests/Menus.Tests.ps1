@@ -95,6 +95,35 @@ Describe 'System menu entries' {
         (Get-WinmarchyState).chooserDisabled | Should -BeFalse
     }
 
+    It 'shows the same entries in the native window as in the PowerShell list' {
+        # The native menu owns only what the list LOOKS like; every action
+        # stays here. These two lists are the seam, so they are pinned
+        # together the way the tray's labels are (FLAGS.md FLAG-57).
+        $menuCs = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'chooser' 'MenuWindow.cs')))
+        $entries = ($menuCs -split 'return new List<string>')[1]
+        foreach ($label in (Get-WinmarchySystemMenuEntries)) {
+            # The two dynamic labels are built the same way on both sides.
+            if ($label -like 'Swap to*' -or $label -like 'Chooser at login*') { continue }
+            $entries | Should -BeLike ('*"' + $label + '"*') -Because ($label + ' must appear in the native menu too')
+        }
+        $menuCs | Should -Match 'Swap to Windows 11 mode'
+        $menuCs | Should -Match 'Swap to Omarchy mode'
+        $menuCs | Should -Match 'Chooser at login: on \(toggle\)'
+    }
+
+    It 'gives the console entries a terminal when the caller is a window' {
+        # btop, lazygit, the keybinding overlay and the fzf theme menu all
+        # need a console. Run from the native menu there is none, so they get
+        # their own rather than failing invisibly.
+        Mock Start-Process { }
+        Mock Resolve-WinmarchyBindingCriticalApp { 'C:\fake\alacritty.exe' }
+        Mock Find-WinmarchyExecutable { 'C:\fake\lazygit.exe' }
+        foreach ($label in @('System stats (btop)', 'Keybindings', 'Theme menu', 'Git TUI (lazygit)')) {
+            $null = Invoke-WinmarchyMenuAction -Label $label -InOwnTerminal
+        }
+        Should -Invoke Start-Process -Times 4 -Exactly -ParameterFilter { $FilePath -eq 'C:\fake\alacritty.exe' }
+    }
+
     It 'launches a mode swap detached, so the menu window does not outlive the swap' {
         # The menu used to run the swap in-process, which made it the PARENT
         # of the teardown: its floating terminal sat on screen for the whole

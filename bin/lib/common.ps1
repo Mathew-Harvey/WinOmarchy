@@ -1797,9 +1797,15 @@ function Update-WinmarchyGlazewmAppPaths {
     # passes an exe it has confirmed exists, so an install without the
     # chooser keeps the dispatcher route and a working key.
     if ($ChooserExePath) {
-        $wallpaperMarker = 'winmarchy:wallpaper-next'
-        $wallpaperReplacement = "commands: ['shell-exec " + $ChooserExePath + " --wallpaper-next'] # " + $wallpaperMarker
-        $text = [regex]::Replace($text, "commands: \['shell-exec [^']*'\] # " + [regex]::Escape($wallpaperMarker), $wallpaperReplacement)
+        # Both markers take the same treatment: the exe does the job in a
+        # window or in process, where the shipped line starts a shell.
+        foreach ($fastPath in @(
+            @{ Marker = 'winmarchy:wallpaper-next'; Argument = ' --wallpaper-next' },
+            @{ Marker = 'winmarchy:system-menu'; Argument = ' --menu' }
+        )) {
+            $replacement = "commands: ['shell-exec " + $ChooserExePath + $fastPath.Argument + "'] # " + $fastPath.Marker
+            $text = [regex]::Replace($text, "commands: \['shell-exec [^']*'\] # " + [regex]::Escape($fastPath.Marker), $replacement)
+        }
     }
     return $text
 }

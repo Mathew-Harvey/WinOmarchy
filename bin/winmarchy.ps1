@@ -94,6 +94,13 @@ switch ($Command) {
     }
     'menu' {
         if ($Argument -eq 'popup') {
+            # The native menu window when the chooser exe is built, which is
+            # a window rather than a terminal running fzf.
+            $chooserExe = Get-WinmarchyChooserExePath
+            if (Test-Path $chooserExe) {
+                $null = Start-Process -FilePath $chooserExe -ArgumentList '--menu'
+                return
+            }
             # A floating menu window, for launchers that are not themselves a
             # console: the bar's top-left button and anything like it. Uses
             # the same Alacritty float the lwin+escape binding uses; without
@@ -169,6 +176,17 @@ switch ($Command) {
             Show-WinmarchyUsage
             exit 1
         }
+    }
+    'menu-action' {
+        # One entry of the system menu, by label. The native menu window
+        # displays the list and calls this, so what an entry DOES has exactly
+        # one implementation and it is this one.
+        if ($Argument -eq '') {
+            Show-WinmarchyUsage
+            exit 1
+        }
+        . (Join-Path $PSScriptRoot 'menu.ps1')
+        Invoke-WinmarchyMenuAction -Label $Argument -InOwnTerminal
     }
     'bar' {
         # Which bar draws the top strip: yasb, or the native one inside the

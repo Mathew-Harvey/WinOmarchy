@@ -1599,3 +1599,30 @@ up on the machine for a while, that is the cleanup to make.
 
 Status: open until the machine confirms a bar appears at all after a swap
 into Omarchy mode.
+
+## FLAG-57: the system menu is a window, not a terminal running fzf
+
+Context: lwin+escape started Alacritty, which started PowerShell, which ran
+fzf, to show a list of eighteen fixed items. Three processes and a visible
+wait for the most frequently used surface after the launcher.
+
+chooser/MenuWindow.cs draws the same list in a window the chooser executable
+opens. The split is the same one the tray uses and is the whole point: the
+C# owns only what the list LOOKS like, and every action stays in
+bin/menu.ps1, reached through "winmarchy menu-action <label>". A test pins
+the two label lists together so they cannot drift.
+
+One thing a window changes that a terminal did not: four entries ARE console
+programs (btop, lazygit, the keybinding overlay and the fzf theme menu), and
+run from a window they have nowhere to draw. Invoke-WinmarchyMenuAction
+takes -InOwnTerminal for exactly this and gives those four a terminal of
+their own; without it they would have failed invisibly, which is the kind of
+silent breakage this project keeps writing flags about.
+
+fzf is still installed and still used: the theme menu, and the whole menu on
+an install with no chooser exe, still go through it. Dropping the dependency
+would mean porting the theme picker too, which is worth doing only once the
+native menu has held up.
+
+Status: open until the machine confirms lwin+escape opens a window promptly
+and every entry in it still does its job.

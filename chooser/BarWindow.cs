@@ -503,7 +503,27 @@ public sealed class BarWindow : Form
 
     private static void OpenMenu()
     {
-        Program.RunWinmarchy("menu popup", waitForExit: false);
+        // Straight to the menu window in a fresh copy of this executable.
+        // The old route started a shell to start a terminal to start fzf.
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe))
+            {
+                Program.RunWinmarchy("menu popup", waitForExit: false);
+                return;
+            }
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = "--menu",
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Paths.Log("bar: could not open the menu: " + ex.Message);
+        }
     }
 
     private static void OpenVolumeMixer()

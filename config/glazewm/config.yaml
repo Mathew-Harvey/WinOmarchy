@@ -264,8 +264,10 @@ keybindings:
   - commands: ['shell-exec alacritty --title "Winmarchy Keys" -e powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\keybindings.ps1']
     bindings: ['lwin+k']
 
-  # System menu.
-  - commands: ['shell-exec alacritty --title "Winmarchy Menu" -e powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\menu.ps1 system']
+  # System menu. install.ps1 repoints this at the chooser exe (--menu) when
+  # that exe is built: the menu is a window there, where this route starts a
+  # terminal, a shell and fzf to show eighteen fixed items.
+  - commands: ['shell-exec alacritty --title "Winmarchy Menu" -e powershell -NoProfile -ExecutionPolicy Bypass -File %LOCALAPPDATA%\winmarchy\bin\menu.ps1 system'] # winmarchy:system-menu
     bindings: ['lwin+escape']
 
   # Theme menu.

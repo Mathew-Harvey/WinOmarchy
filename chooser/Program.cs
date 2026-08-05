@@ -38,6 +38,11 @@ public static class Program
         {
             return BarApp.Run();
         }
+        // --menu is the system menu, which used to be fzf inside a terminal.
+        if (Array.IndexOf(args, "--menu") >= 0)
+        {
+            return MenuApp.Run();
+        }
         // --wallpaper-next does the whole wallpaper change in this process.
         // The GlazeWM binding points here when this exe exists, because the
         // dispatcher route costs a powershell.exe start and a 2600 line

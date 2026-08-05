@@ -86,8 +86,52 @@ function Get-WinmarchySystemMenuEntries {
 function Invoke-WinmarchyMenuAction {
     # Executes one system menu entry. Commands for lock, restart, shutdown
     # and sign out are the ones named in the brief Section 7.4.
-    param([Parameter(Mandatory = $true)][string]$Label)
+    #
+    # -InOwnTerminal is passed when the caller is the native menu window
+    # rather than a terminal: three entries are console programs, and from a
+    # window there is no console for them to draw in, so they get one.
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [switch]$InOwnTerminal
+    )
     $dispatcher = Join-Path $PSScriptRoot 'winmarchy.ps1'
+    if ($InOwnTerminal) {
+        # The entries that ARE console programs. Each names the script the
+        # terminal should run; lazygit is the exception because it is the
+        # program itself rather than a script of ours.
+        $consoleScripts = @{
+            'System stats (btop)' = @(('"' + $dispatcher + '"'), 'stats')
+            'Keybindings'         = @(('"' + (Join-Path $PSScriptRoot 'keybindings.ps1') + '"'))
+            'Theme menu'          = @(('"' + (Join-Path $PSScriptRoot 'menu.ps1') + '"'), 'theme')
+        }
+        $isLazygit = ($Label -eq 'Git TUI (lazygit)')
+        if ($consoleScripts.ContainsKey($Label) -or $isLazygit) {
+            $alacritty = $null
+            foreach ($app in (Get-WinmarchyBindingCriticalApps)) {
+                if ($app.Name -eq 'alacritty') { $alacritty = Resolve-WinmarchyBindingCriticalApp -App $app }
+            }
+            if ($isLazygit) {
+                $lazygit = Find-WinmarchyExecutable -Name 'lazygit'
+                if (-not $lazygit) {
+                    Write-Output 'lazygit is not installed. Fix with: winget install -e --id JesseDuffield.lazygit'
+                    return
+                }
+                if ($alacritty) {
+                    $null = Start-Process -FilePath $alacritty -ArgumentList @('--title', '"Winmarchy Menu"', '-e', $lazygit)
+                } else {
+                    $null = Start-Process -FilePath $lazygit
+                }
+                return
+            }
+            $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File') + $consoleScripts[$Label]
+            if ($alacritty) {
+                $null = Start-Process -FilePath $alacritty -ArgumentList (@('--title', '"Winmarchy Menu"', '-e', 'powershell') + $arguments)
+            } else {
+                $null = Start-Process -FilePath (Get-WinmarchyPowerShellExe) -ArgumentList $arguments
+            }
+            return
+        }
+    }
     switch -Wildcard ($Label) {
         'Theme menu' { Show-WinmarchyThemeMenu }
         'Next theme' { & $dispatcher theme next }
