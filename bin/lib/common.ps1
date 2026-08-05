@@ -1558,6 +1558,21 @@ function Stop-WinmarchyBar {
     }
 }
 
+function Invoke-WinmarchyGatherWindows {
+    # Asks the chooser exe to move every workspace's windows onto the visible
+    # one, over GlazeWM's own IPC, before the window manager stops. Returns
+    # whether it ran; the caller warns rather than failing when it did not,
+    # since a swap back to Windows 11 must never be blocked by this.
+    if (-not (Test-WinmarchyIsWindows)) { return $false }
+    $exe = Get-WinmarchyChooserExePath
+    if (-not (Test-Path $exe)) { return $false }
+    $process = Start-Process -FilePath $exe -ArgumentList '--consolidate-windows' -PassThru
+    # It talks to a socket and issues a handful of commands; well inside this,
+    # and the swap carries on regardless if it hangs.
+    $null = $process.WaitForExit(20000)
+    return $true
+}
+
 function Start-WinmarchyFlowLauncher {
     $candidates = @()
     if ($env:LOCALAPPDATA) {

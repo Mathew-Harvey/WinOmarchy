@@ -149,6 +149,36 @@ Describe 'enter-win11' {
         (Get-WinmarchyState).mode | Should -Be 'win11'
     }
 
+    It 'gathers the other workspaces'' windows back BEFORE stopping GlazeWM' {
+        # GlazeWM hides inactive workspaces by cloaking their windows and
+        # nothing reliably uncloaks them on the way out, so this has to happen
+        # while the window manager is still alive to do it (FLAGS.md FLAG-61).
+        Mock Test-WinmarchyProcessRunning { $true }
+        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        Mock Get-WinmarchyDesktopIconsVisible { $false }
+        Mock Invoke-WinmarchyGatherWindows { $true }
+        Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
+
+        Enter-WinmarchyWin11Mode
+
+        Should -Invoke Invoke-WinmarchyGatherWindows -Times 1 -Exactly
+    }
+
+    It 'still completes the swap when the windows cannot be gathered' {
+        # A swap back to Windows 11 is the panic path; nothing in it may be
+        # blocked by a tidy-up step.
+        Mock Test-WinmarchyProcessRunning { $true }
+        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        Mock Get-WinmarchyDesktopIconsVisible { $false }
+        Mock Invoke-WinmarchyGatherWindows { throw 'no IPC' }
+        Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
+
+        Enter-WinmarchyWin11Mode
+
+        Should -Invoke Stop-WinmarchyGlazewm -Times 1 -Exactly
+        (Get-WinmarchyState).mode | Should -Be 'win11'
+    }
+
     It 'tears down a full omarchy state and restores the captured baseline' {
         Mock Test-WinmarchyProcessRunning { $true }
         Mock Get-WinmarchyTaskbarAutoHide { $true }

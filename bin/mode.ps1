@@ -186,6 +186,23 @@ function Enter-WinmarchyWin11Mode {
     $state = Get-WinmarchyState
     $failures = @()
 
+    # Step: gather every workspace's windows onto the visible one BEFORE
+    # GlazeWM goes. It hides inactive workspaces by cloaking their windows,
+    # and nothing reliably uncloaks them on the way out, so anything on
+    # workspaces 2 to 9 could be left invisible with no taskbar button and no
+    # way back to it (FLAGS.md FLAG-61). Best effort and never fatal: a swap
+    # to Windows 11 must complete even if this cannot.
+    try {
+        if (Test-WinmarchyProcessRunning -Name 'glazewm') {
+            $consolidated = Invoke-WinmarchyGatherWindows
+            if (-not $consolidated) {
+                Write-WinmarchyLog -Message 'enter-win11: could not gather windows from the other workspaces; any that were there may need Alt+Tab to find' -Level 'WARN'
+            }
+        }
+    } catch {
+        Write-WinmarchyLog -Message ('enter-win11: gathering windows failed: ' + $_.Exception.Message) -Level 'WARN'
+    }
+
     # Step: stop GlazeWM (graceful wm-exit, then force).
     try {
         if (Test-WinmarchyProcessRunning -Name 'glazewm') {

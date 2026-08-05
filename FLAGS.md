@@ -1716,3 +1716,48 @@ blamed on the chooser. Worth one measurement before anyone touches this
 again.
 
 Status: reverted; the chooser is as it was.
+
+## FLAG-61: windows on other workspaces could be left invisible
+
+Context: Mat asked that swapping back to Windows 11 put every window from
+every Omarchy workspace onto the one Windows desktop. That is not a
+convenience, it is a recoverability hole: GlazeWM hides inactive workspaces
+by CLOAKING their windows, and a cloaked window has no taskbar button and
+cannot be Alt+Tabbed to, so anything on workspaces 2 to 9 could survive the
+swap as an invisible process.
+
+Two things in the reference confirm nothing was going to fix this by itself.
+The watchdog restores windows only when the WM died UNEXPECTEDLY; on a clean
+exit it logs "Skipping watcher cleanup" and does nothing
+(wm-watcher/src/main.rs). And the WM's own exit path emits events, unpauses
+and runs shutdown commands without touching window visibility (wm/src/wm.rs,
+cleanup). A graceful wm-exit, which is exactly what Winmarchy asks for, is
+the case neither of them covers.
+
+Uncloaking the windows ourselves was ruled out twice over. GlazeWM does it
+through an undocumented shell COM interface whose vtable it matches with
+filler methods (platform_impl/windows/com.rs); writing that from memory is
+what rule 8 forbids, and copying the layout out of a GPL-3.0 project into
+this MIT one is a licence problem rather than a technical one.
+
+So the windows are gathered by GlazeWM itself, while it is still running,
+using the two commands the shipped keybindings already use and which are
+therefore already verified: "focus --workspace <name>" to bring a workspace
+up, then "move --workspace <target>" once per window to drain it. It runs
+over the IPC client the bar already speaks, in the chooser exe, before
+Stop-WinmarchyGlazewm. Everything lands on the workspace that was on screen,
+so the user finds their windows where they were looking.
+
+Bounded and never fatal: 40 moves per workspace, a 15 second budget inside
+the exe and a 20 second wait outside it, and any failure logs a warning and
+lets the swap continue. A swap to Windows 11 is the panic path and nothing
+in it may be blocked by a tidy-up step; a test pins that.
+
+Deferred to the machine: whether one move command per window is the right
+count in practice. If a workspace holds windows in split containers the
+count comes from a recursive walk, but the moves are issued blind, so a
+mismatch would leave a window behind. The count is logged, so the log will
+say.
+
+Status: open until the machine confirms windows opened on lwin+2 and lwin+3
+are all present after a swap back.

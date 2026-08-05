@@ -424,3 +424,19 @@ during setup, or run the installer with a bad winget source.
       and there should be no "plain chooser standing in" banner.
 - [ ] S6. winmarchy doctor: no "webview2 runtime" row any more, and
       "chooser installed" still passes.
+
+## T. Round: no window left hidden on a swap back
+
+- [ ] T1. In Omarchy mode open a window on workspace 1, two on workspace 2
+      and one on workspace 3. Swap to Windows 11 mode. All four are on the
+      desktop, all four have taskbar buttons, and Alt+Tab reaches all four.
+- [ ] T2. winmarchy.log has a "consolidate: brought N window(s) back" line
+      with N matching what was on the other workspaces.
+- [ ] T3. Do the same with a workspace holding a split layout (open three
+      windows on workspace 2 so they tile): all of them come back, not just
+      the first.
+- [ ] T4. Swap back to Omarchy: the windows are all on one workspace now,
+      which is expected; move them about again and repeat T1 once.
+- [ ] T5. Kill glazewm.exe from Task Manager while in Omarchy mode, then
+      swap to Windows 11: the swap still completes and the log warns that
+      the windows could not be gathered.

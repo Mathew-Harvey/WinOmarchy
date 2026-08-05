@@ -38,6 +38,12 @@ public static class Program
         {
             return BarApp.Run();
         }
+        // --consolidate-windows gathers every workspace's windows onto the
+        // visible one, so leaving Omarchy mode cannot hide any of them.
+        if (Array.IndexOf(args, "--consolidate-windows") >= 0)
+        {
+            return GlazewmConsolidate.Run();
+        }
         // --menu is the system menu, which used to be fzf inside a terminal.
         if (Array.IndexOf(args, "--menu") >= 0)
         {
