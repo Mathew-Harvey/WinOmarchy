@@ -60,7 +60,9 @@ Describe 'The dependency table' {
     It 'covers every program the GlazeWM config launches by name' {
         $names = @()
         foreach ($app in (Get-WinmarchyBindingCriticalApps)) { $names = $names + $app.Name }
-        foreach ($required in @('glazewm', 'yasbc', 'alacritty', 'Flow.Launcher', 'Cursor')) {
+        # yasbc is deliberately absent: the bar is built in, so no separate
+        # bar package is required for a working desktop.
+        foreach ($required in @('glazewm', 'alacritty', 'Flow.Launcher', 'Cursor')) {
             $names | Should -Contain $required
         }
     }

@@ -257,6 +257,8 @@ public sealed class WinmarchyState
     public string WallpaperDir = "";
     public int WallpaperIntervalMinutes = 30;
     public bool ChooserDisabled;
+    // Flipped by "winmarchy bar toggle", which is what lwin+shift+space runs.
+    public bool BarHidden;
 
     public static WinmarchyState Load()
     {
@@ -278,6 +280,7 @@ public sealed class WinmarchyState
                         try { state.WallpaperIntervalMinutes = intervalNode.GetValue<int>(); } catch { }
                     }
                     state.ChooserDisabled = node["chooserDisabled"]?.GetValue<bool>() ?? false;
+                    state.BarHidden = node["barHidden"]?.GetValue<bool>() ?? false;
                 }
             }
         }

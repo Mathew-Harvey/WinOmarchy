@@ -191,6 +191,13 @@ switch ($Command) {
             } else {
                 Write-Output 'bar: it will start with the next swap into Omarchy mode'
             }
+        } elseif ($Argument -eq 'toggle') {
+            # What lwin+shift+space does. The bar reads this flag once a
+            # second and shows or hides itself, so there is no process to
+            # start or stop and nothing to go out of step.
+            $hidden = [bool](Get-WinmarchyState).barHidden
+            Set-WinmarchyStateValue -Name 'barHidden' -Value (-not $hidden)
+            if ($hidden) { Write-Output 'bar: showing' } else { Write-Output 'bar: hidden' }
         } elseif ($Argument -eq 'status' -or $Argument -eq '') {
             $running = 'stopped'
             if (Test-WinmarchyBarRunning) { $running = 'running' }

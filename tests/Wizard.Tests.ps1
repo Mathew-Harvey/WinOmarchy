@@ -142,7 +142,7 @@ Describe 'Review summary' {
         $choices = @{ Theme = 'everforest'; InstallApps = $true; BuildChooser = $true; Autostart = $false; Tray = $true }
         $lines = @(Get-WinmarchyWizardSummary -Choices $choices)
         ($lines -join ' ') | Should -Match 'everforest'
-        ($lines -join ' ') | Should -Match 'install all 17 packages'
+        ($lines -join ' ') | Should -Match 'install all 16 packages'
         ($lines -join ' ') | Should -Match 'Cursor is themed to match'
         ($lines -join ' ') | Should -Match 'build the login chooser'
         ($lines -join ' ') | Should -Match 'Windows starts as it always has'

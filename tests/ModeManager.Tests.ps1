@@ -32,7 +32,7 @@ Describe 'enter-omarchy' {
         Mock Get-WinmarchyAppsTheme { [pscustomobject]@{ AppsUseLightTheme = 1; SystemUsesLightTheme = 1 } }
         Mock Test-WinmarchyProcessRunning { $false }
         Mock Start-WinmarchyGlazewm { }
-        Mock Start-WinmarchyYasb { }
+        Mock Start-WinmarchyBar { }
         Mock Start-WinmarchyFlowLauncher { }
         Mock Get-WinmarchyTaskbarAutoHide { $false }
         Mock Set-WinmarchyTaskbarAutoHide { }
@@ -54,7 +54,7 @@ Describe 'enter-omarchy' {
         Test-WinmarchyJournalPending | Should -BeFalse
 
         Should -Invoke Start-WinmarchyGlazewm -Times 1 -Exactly
-        Should -Invoke Start-WinmarchyYasb -Times 1 -Exactly
+        Should -Invoke Start-WinmarchyBar -Times 1 -Exactly
         Should -Invoke Start-WinmarchyFlowLauncher -Times 1 -Exactly
         Should -Invoke Set-WinmarchyTaskbarAutoHide -Times 1 -Exactly -ParameterFilter { $Enabled -eq $true }
         Should -Invoke Set-WinmarchyDesktopIcons -Times 1 -Exactly -ParameterFilter { $Visible -eq $false }
@@ -66,13 +66,16 @@ Describe 'enter-omarchy' {
     It 'skips steps whose target state already holds' {
         Mock Wait-WinmarchyOmarchyHealthy { $true }
         Mock Test-WinmarchyProcessRunning { $true }
+        # The bar has its own liveness check, since the built-in one shares an
+        # executable name with the tray and cannot be found by name alone.
+        Mock Test-WinmarchyBarRunning { $true }
         Mock Get-WinmarchyTaskbarAutoHide { $true }
         Mock Get-WinmarchyDesktopIconsVisible { $false }
 
         Enter-WinmarchyOmarchyMode
 
         Should -Invoke Start-WinmarchyGlazewm -Times 0 -Exactly
-        Should -Invoke Start-WinmarchyYasb -Times 0 -Exactly
+        Should -Invoke Start-WinmarchyBar -Times 0 -Exactly
         Should -Invoke Set-WinmarchyTaskbarAutoHide -Times 0 -Exactly
         Should -Invoke Set-WinmarchyDesktopIcons -Times 0 -Exactly
         (Get-WinmarchyState).mode | Should -Be 'omarchy'
@@ -660,11 +663,9 @@ Describe 'Which bar draws the strip' {
         Save-WinmarchyState -State (Get-WinmarchyDefaultState)
     }
 
-    It 'stays on yasb until something asks for the native bar' {
-        # The native bar is opt-in: an update must never move a working
-        # machine onto a bar it has not tried.
-        (Get-WinmarchyDefaultState).bar | Should -Be 'yasb'
-        Get-WinmarchyBarKind | Should -Be 'yasb'
+    It 'uses the built-in bar, which is the one setup now installs' {
+        (Get-WinmarchyDefaultState).bar | Should -Be 'native'
+        Get-WinmarchyBarKind | Should -Be 'native'
     }
 
     It 'reads native only from an exact setting, so a stray value stays safe' {
@@ -684,20 +685,29 @@ Describe 'Which bar draws the strip' {
         # test is the one that runs.
         Write-WinmarchyTextFile -Path (Get-WinmarchyChooserExePath) -Content 'not really an exe'
 
+        # The built-in bar is the default and runs as its own process.
+        Start-WinmarchyBar
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $ArgumentList -eq '--bar' }
+        Should -Invoke Start-WinmarchyYasb -Times 0 -Exactly
+
+        Set-WinmarchyStateValue -Name 'bar' -Value 'yasb'
         Start-WinmarchyBar
         Should -Invoke Start-WinmarchyYasb -Times 1 -Exactly
-        Should -Invoke Start-Process -Times 0 -Exactly
-
-        Set-WinmarchyStateValue -Name 'bar' -Value 'native'
-        Start-WinmarchyBar
-        Should -Invoke Start-WinmarchyYasb -Times 1 -Exactly -Because 'the native bar must not start yasb as well'
-        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $ArgumentList -eq '--bar' }
+        Should -Invoke Start-Process -Times 1 -Exactly -Because 'asking for yasb must not start the built-in bar as well'
     }
 
-    It 'refuses the native bar when the chooser exe is not built, and says how to fix it' {
-        # This test's home has no chooser exe in it at all.
-        Set-WinmarchyStateValue -Name 'bar' -Value 'native'
-        { Start-WinmarchyBar } | Should -Throw '*winmarchy bar yasb*'
+    It 'falls back to yasb rather than leaving the desktop with no bar at all' {
+        # This test's home has no chooser exe in it, which is what an install
+        # without the .NET SDK looks like.
+        Mock Start-WinmarchyYasb { }
+        Mock Find-WinmarchyExecutable { 'C:\fake\yasbc.exe' } -ParameterFilter { $Name -eq 'yasbc' }
+        Start-WinmarchyBar -WarningAction SilentlyContinue
+        Should -Invoke Start-WinmarchyYasb -Times 1 -Exactly
+    }
+
+    It 'names both cures when there is no bar of either kind' {
+        Mock Find-WinmarchyExecutable { $null }
+        { Start-WinmarchyBar } | Should -Throw '*AmN.yasb*'
     }
 
     It 'tells the bar apart from the tray, which share one executable' {

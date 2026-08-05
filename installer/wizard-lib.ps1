@@ -143,7 +143,6 @@ function Get-WinmarchyWingetPackages {
     # that actually runs; this is the list the user is shown.
     return @(
         [pscustomobject]@{ Id = 'glzr-io.glazewm'; Purpose = 'tiling window manager' },
-        [pscustomobject]@{ Id = 'AmN.yasb'; Purpose = 'status bar' },
         [pscustomobject]@{ Id = 'Flow-Launcher.Flow-Launcher'; Purpose = 'launcher' },
         [pscustomobject]@{ Id = 'voidtools.Everything'; Purpose = 'file search for the launcher' },
         [pscustomobject]@{ Id = 'Alacritty.Alacritty'; Purpose = 'terminal' },

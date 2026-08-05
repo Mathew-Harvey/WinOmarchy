@@ -263,13 +263,22 @@ public sealed class BarWindow : Form
                 return;
             }
             _themeStamp = stamp;
-            var theme = WinmarchyState.Load().Theme;
-            if (theme == _theme)
+            var state = WinmarchyState.Load();
+
+            // lwin+shift+space flips this flag rather than starting or
+            // stopping anything, so hiding and showing cannot leave the bar
+            // and its reserved strip out of step with each other.
+            if (state.BarHidden != !Visible)
+            {
+                Visible = !state.BarHidden;
+            }
+
+            if (state.Theme == _theme)
             {
                 return;
             }
-            _theme = theme;
-            _colours = Palette.Load(theme);
+            _theme = state.Theme;
+            _colours = Palette.Load(state.Theme);
             _signature = string.Empty;
         }
         catch

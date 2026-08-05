@@ -547,9 +547,13 @@ function Get-WinmarchyDefaultState {
         wallpaperDir              = $null
         wallpaperIntervalMinutes  = 30
         tutorialSeen              = $false
-        # 'yasb' or 'native'. yasb until the native bar is proven; see
-        # Get-WinmarchyBarKind.
-        bar                       = 'yasb'
+        # 'native' (the built-in bar) or 'yasb' (the separate package, kept
+        # as an escape hatch). See Get-WinmarchyBarKind.
+        bar                       = 'native'
+        # Set by "winmarchy bar toggle"; the bar reads it once a second and
+        # shows or hides itself, which is what lwin+shift+space does now that
+        # there is no yasbc to ask.
+        barHidden                 = $false
         # 'winmarchy' when the installer added the per-user Run entry that
         # starts Everything at login, so the uninstaller knows the entry is
         # ours to remove and leaves anyone else's alone.
@@ -1519,10 +1523,21 @@ function Start-WinmarchyBar {
         return
     }
     $exe = Get-WinmarchyChooserExePath
-    if (-not (Test-Path $exe)) {
-        throw 'the native bar lives in the chooser exe, which is not built here. Install the .NET 8 SDK and re-run setup, or go back to yasb with: winmarchy bar yasb'
+    if (Test-Path $exe) {
+        Start-Process -FilePath $exe -ArgumentList '--bar'
+        return
     }
-    Start-Process -FilePath $exe -ArgumentList '--bar'
+    # The built-in bar lives in the chooser exe, so an install that could not
+    # build it has no bar. Rather than leave the desktop bare, fall back to
+    # yasb when it happens to be installed; entering Omarchy mode with no bar
+    # at all is the one outcome worth avoiding here.
+    if (Find-WinmarchyExecutable -Name 'yasbc') {
+        Write-WinmarchyLog -Message 'the chooser exe is not built, so the bar falls back to yasb' -Level 'WARN'
+        Write-Warning 'The built-in bar needs the chooser exe, which is not built here, so yasb is being used instead. Install the .NET 8 SDK and re-run setup to get the built-in bar.'
+        Start-WinmarchyYasb
+        return
+    }
+    throw 'there is no bar to start: the built-in one needs the chooser exe (install the .NET 8 SDK and re-run setup), and yasb is not installed either (winget install -e --id AmN.yasb, then winmarchy bar yasb)'
 }
 
 function Stop-WinmarchyBar {
@@ -1676,13 +1691,10 @@ function Get-WinmarchyBindingCriticalApps {
         Marker        = $null
     })
 
-    $apps = $apps + @(, [pscustomobject]@{
-        Name          = 'yasbc'
-        PackageId     = 'AmN.yasb'
-        FallbackPaths = @()
-        Consequence   = 'the bar cannot start, so entering Omarchy mode fails its health check'
-        Marker        = $null
-    })
+    # yasb is no longer in this table. The bar is built in now, so nothing
+    # about a working desktop depends on a separate bar package; the
+    # "bar running" doctor row covers whichever bar is selected, and
+    # "winmarchy bar yasb" names the winget command when it is wanted.
 
     $alacrittyFallbacks = @()
     if ($env:ProgramFiles) {

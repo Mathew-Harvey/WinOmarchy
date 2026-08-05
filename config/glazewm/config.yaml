@@ -293,7 +293,9 @@ keybindings:
     bindings: ['lwin+ctrl+t']
 
   # Toggle the bar.
-  - commands: ['shell-exec yasbc toggle-bar']
+  # Toggle the bar. This used to ask yasbc; the bar is built in now, so it
+  # goes through the dispatcher, which flips a flag the bar reads.
+  - commands: ['shell-exec winmarchy bar toggle']
     bindings: ['lwin+shift+space']
 
   # PANIC: return to Windows 11 mode.

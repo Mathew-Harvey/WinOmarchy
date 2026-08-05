@@ -142,7 +142,6 @@ Invoke-WinmarchyInstallStep -Description ('back up everything about to be touche
 
 $wingetPackages = @(
     @{ id = 'glzr-io.glazewm'; purpose = 'tiling window manager' },
-    @{ id = 'AmN.yasb'; purpose = 'status bar' },
     @{ id = 'Flow-Launcher.Flow-Launcher'; purpose = 'launcher' },
     @{ id = 'voidtools.Everything'; purpose = 'file search for the launcher' },
     @{ id = 'Alacritty.Alacritty'; purpose = 'terminal' },

@@ -392,3 +392,18 @@ during setup, or run the installer with a bad winget source.
       hook no longer shares a thread with the menu.
 - [ ] Q4. Swap Omarchy to Windows 11 and back twice: the guard arms and
       disarms each time, and the log shows the re-hook on arming.
+
+## R. Round: the bar baked in
+
+- [ ] R1. After reinstalling, swap into Omarchy mode: a bar appears with no
+      yasb involved. Section N covers what it should look like and do.
+- [ ] R2. lwin+shift+space hides the bar and pressing it again brings it
+      back. Windows should tile into the freed space and back out again.
+- [ ] R3. winmarchy doctor: "bar running" says native, and there is no row
+      demanding yasbc.
+- [ ] R4. Task Manager: no yasb.exe at all, and note the working set of the
+      Winmarchy.Chooser.exe running as the bar. That is the number this
+      whole exercise was for.
+- [ ] R5. The escape hatch still works: winget install -e --id AmN.yasb,
+      then winmarchy bar yasb, gives the old bar back, themed. Then
+      winmarchy bar native returns to the built-in one.

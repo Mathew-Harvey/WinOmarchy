@@ -1567,3 +1567,35 @@ swap by another route, that is the change to make.
 
 Status: fixed in code, open until the machine confirms the menu closes the
 moment the swap is chosen.
+
+## FLAG-56: the bar is baked in and yasb is no longer installed
+
+Context: Mat asked for the bar to be built in rather than a separate
+install, and for a view on what else could stop being one.
+
+The built-in bar is now the default and yasb has left the package table, so
+setup installs sixteen packages instead of seventeen. yasbc has left the
+binding-critical table too, since nothing about a working desktop depends on
+a separate bar any more. The lwin+shift+space binding, which used to call
+"yasbc toggle-bar", now flips a barHidden flag in state that the bar reads
+on its once-a-second tick and shows or hides itself: no process to start or
+stop, so the window and its reserved strip cannot get out of step.
+
+The judgement call worth recording: this was done BEFORE the built-in bar
+had ever been seen running on Mat's machine, because the PATH bug (FLAG-52)
+had blocked "winmarchy bar native" and the round moved on. Making an
+unproven component the default is exactly what the previous round refused to
+do, so the risk is covered two ways instead. Start-WinmarchyBar falls back
+to yasb automatically when the chooser exe is missing and yasb happens to be
+installed, warning as it goes, and when neither exists it throws naming both
+cures rather than leaving Omarchy mode with a bare desktop. yasb remains
+fully supported through "winmarchy bar yasb".
+
+Deliberately not removed this round: the yasb config deployment and the
+stylesheet the theme engine renders for it. They are dead weight while the
+built-in bar is in use, but they are also what makes "winmarchy bar yasb" a
+real escape hatch rather than a broken one. Once the built-in bar has held
+up on the machine for a while, that is the cleanup to make.
+
+Status: open until the machine confirms a bar appears at all after a swap
+into Omarchy mode.
