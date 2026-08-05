@@ -1247,3 +1247,56 @@ boundary for container-unverifiable work.
 
 Status: closed; the number to watch is that the percentage never goes
 DOWN in a future round.
+
+## FLAG-48: the wallpaper change no longer starts a shell
+
+Context: first of the performance rounds. The wallpaper is the only Winmarchy
+action that fires three ways, on a timer, on a tray click and on
+lwin+ctrl+b, and every one of them started powershell.exe, parsed the 2600
+line library, did a few milliseconds of work and exited. On a weak machine
+that is most of a second of CPU each time, forever.
+
+The scan, the pick and the SystemParametersInfo call now live in
+chooser/Wallpaper.cs, so the tray timer and the tray menu do the whole job
+in process and the GlazeWM binding calls the exe with --wallpaper-next.
+bin/lib/common.ps1 remains the definition: the CLI, the PowerShell tray
+fallback and every other caller are untouched.
+
+Two rules the fast path is not allowed to break, both pinned by tests. A
+pending undo journal means an interrupted swap, and the standing rule is
+that every invocation repairs first, so a dirty journal hands straight to
+the dispatcher instead of taking any shortcut. And a fast path that fails
+falls back to the dispatcher, which does the same job the slow way and
+reports properly.
+
+One new risk came with the move and is mitigated: the tray icon, its menu
+and the Windows key guard's mode timer all share one message loop, so a
+scan of a large or slow folder running there would freeze all three. The
+old route got that for free by spawning a detached process; the new one
+runs the work on a background thread to get it back.
+
+Verification, beyond the gate: the real Wallpaper.cs was compiled into a
+throwaway net8.0 harness with stubs for its two dependencies and run against
+the same directory tree as the PowerShell. Both returned byte-identical
+sets over a tree mixing uppercase .JPG, mixed-case .JpEg, hidden files, a
+hidden folder, non-pictures and two levels of nesting; both never return the
+current picture when there is a choice, both treat the current picture
+comparison case insensitively, and both return the only picture when there
+is just one. The harness is not committed because the gate must keep running
+without the .NET SDK; it is a few minutes to rebuild from this description
+if the rules ever change.
+
+Considered and rejected: a symlink cycle guard in the walk (no such failure
+has occurred, it cannot be written the same way in 5.1, and moving the scan
+off the message loop already removes the consequence that made it look
+urgent); and moving the GlazeWM config write after the chooser build so a
+first install gets the fast binding immediately (reordering install steps
+for one keybinding is a worse trade than the current self-healing behaviour,
+where the config write patches the binding whenever the exe is already on
+disk and says in the log which route it took).
+
+Deferred to the machine: that lwin+ctrl+b feels instant, that the log shows
+"in process, no shell started", and that no powershell.exe appears in Task
+Manager when the wallpaper timer fires.
+
+Status: open until the machine confirms it, then closed.

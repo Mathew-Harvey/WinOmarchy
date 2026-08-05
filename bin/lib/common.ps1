@@ -1676,7 +1676,8 @@ function Update-WinmarchyGlazewmAppPaths {
     # Windows paths never contain $, so a path drops in literally.
     param(
         [Parameter(Mandatory = $true)][string]$ConfigText,
-        [Parameter(Mandatory = $true)][hashtable]$ResolvedPaths
+        [Parameter(Mandatory = $true)][hashtable]$ResolvedPaths,
+        [string]$ChooserExePath = ''
     )
     $markers = @{
         'Flow.Launcher' = 'winmarchy:launcher-path'
@@ -1703,6 +1704,17 @@ function Update-WinmarchyGlazewmAppPaths {
         if ($app.Marker) {
             $text = $text.Replace($app.Marker, 'shell-exec ' + $exePath)
         }
+    }
+    # The wallpaper keybinding is the one binding with a faster route than
+    # the dispatcher: the chooser exe does the whole change in process, where
+    # "winmarchy wallpaper next" costs a powershell start and a full library
+    # parse for a few milliseconds of work. Repointed only when the caller
+    # passes an exe it has confirmed exists, so an install without the
+    # chooser keeps the dispatcher route and a working key.
+    if ($ChooserExePath) {
+        $wallpaperMarker = 'winmarchy:wallpaper-next'
+        $wallpaperReplacement = "commands: ['shell-exec " + $ChooserExePath + " --wallpaper-next'] # " + $wallpaperMarker
+        $text = [regex]::Replace($text, "commands: \['shell-exec [^']*'\] # " + [regex]::Escape($wallpaperMarker), $wallpaperReplacement)
     }
     return $text
 }

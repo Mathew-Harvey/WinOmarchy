@@ -283,6 +283,36 @@ Describe 'GlazeWM path patching' {
         $patched | Should -Match ([regex]::Escape("commands: ['shell-exec C:\Cursor\Cursor.exe'] # winmarchy:editor-path"))
     }
 
+    It 'sends the wallpaper key to the chooser exe when there is one' {
+        $patched = Update-WinmarchyGlazewmAppPaths -ConfigText $script:glazeConfig -ResolvedPaths @{} -ChooserExePath 'C:\Users\mat\AppData\Local\winmarchy\chooser\Winmarchy.Chooser.exe'
+        $patched | Should -Match ([regex]::Escape("commands: ['shell-exec C:\Users\mat\AppData\Local\winmarchy\chooser\Winmarchy.Chooser.exe --wallpaper-next'] # winmarchy:wallpaper-next"))
+        $patched | Should -Not -Match 'shell-exec winmarchy wallpaper next'
+    }
+
+    It 'keeps the dispatcher route when the chooser was never built' {
+        # An install without the .NET SDK has no exe to call, and a keybinding
+        # pointing at a file that is not there is worse than a slow one.
+        $patched = Update-WinmarchyGlazewmAppPaths -ConfigText $script:glazeConfig -ResolvedPaths @{}
+        $patched | Should -Match 'shell-exec winmarchy wallpaper next'
+    }
+
+    It 'still parses as YAML with the wallpaper key repointed' {
+        Import-Module powershell-yaml
+        $patched = Update-WinmarchyGlazewmAppPaths -ConfigText $script:glazeConfig -ResolvedPaths @{
+            'alacritty' = 'C:\Program Files\Alacritty\alacritty.exe'
+        } -ChooserExePath 'C:\Program Files\winmarchy\Winmarchy.Chooser.exe'
+        { ConvertFrom-Yaml $patched } | Should -Not -Throw
+        $parsed = ConvertFrom-Yaml $patched
+        $found = $false
+        foreach ($entry in $parsed['keybindings']) {
+            if (@($entry['bindings']) -contains 'lwin+ctrl+b') {
+                $found = $true
+                $entry['commands'][0] | Should -Match '--wallpaper-next'
+            }
+        }
+        $found | Should -BeTrue
+    }
+
     It 'leaves the config alone for anything it could not resolve' {
         $patched = Update-WinmarchyGlazewmAppPaths -ConfigText $script:glazeConfig -ResolvedPaths @{
             'alacritty' = $null

@@ -330,8 +330,19 @@ Invoke-WinmarchyInstallStep -Description ('write GlazeWM config to ' + (Get-Winm
         # only works if the program happens to be on PATH, with nothing said.
         Add-WinmarchyInstallWarning ($app.Name + ' was not found, so the GlazeWM config keeps the bare program name and will only work if it is on PATH. Until it is installed, ' + $app.Consequence + '. Fix with: winget install -e --id ' + $app.PackageId)
     }
-    $configText = Update-WinmarchyGlazewmAppPaths -ConfigText $configText -ResolvedPaths $resolved
+    # The wallpaper key goes straight to the chooser exe when that exe is
+    # already on disk, skipping the powershell start entirely. A first
+    # install has not built it yet at this point in the run, so it keeps the
+    # dispatcher route and the next run switches it over.
+    $chooserExe = ''
+    if (Test-Path (Get-WinmarchyChooserExePath)) { $chooserExe = Get-WinmarchyChooserExePath }
+    $configText = Update-WinmarchyGlazewmAppPaths -ConfigText $configText -ResolvedPaths $resolved -ChooserExePath $chooserExe
     Write-WinmarchyTextFile -Path (Get-WinmarchyGlazewmConfigPath) -Content $configText
+    if ($chooserExe) {
+        Write-Output 'install:   wallpaper key bound straight to the chooser exe (no shell start)'
+    } else {
+        Write-Output 'install:   wallpaper key uses the dispatcher for now; re-run setup once the chooser is built to make it instant'
+    }
 }
 
 Invoke-WinmarchyInstallStep -Description ('write yasb config to ' + (Join-Path (Get-WinmarchyYasbConfigDir) 'config.yaml')) -Action {

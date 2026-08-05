@@ -280,7 +280,10 @@ keybindings:
   # background switcher lives on SUPER+CTRL+SPACE
   # (ref/omarchy/default/hypr/bindings/utilities.lua); that combo is taken
   # by next-theme here, so b for background.
-  - commands: ['shell-exec winmarchy wallpaper next']
+  # install.ps1 repoints this at the chooser exe (--wallpaper-next) when that
+  # exe is built, because it changes the wallpaper in process; the dispatcher
+  # route below costs a powershell start for a few milliseconds of work.
+  - commands: ['shell-exec winmarchy wallpaper next'] # winmarchy:wallpaper-next
     bindings: ['lwin+ctrl+b']
 
   # System monitor TUI in a floating terminal. Mirrors Omarchy exactly:

@@ -102,7 +102,7 @@ public static class TrayApplet
                 if (_wallpaperMinutes >= interval)
                 {
                     _wallpaperMinutes = 0;
-                    Program.RunWinmarchy("wallpaper next", waitForExit: false);
+                    WallpaperNextInBackground();
                 }
             };
             _wallpaperTimer.Start();
@@ -156,7 +156,7 @@ public static class TrayApplet
         _menu.Items.Add(new ToolStripSeparator());
         AddAction("Theme menu", () => RunDispatcherVisible("menu theme"));
         AddAction("Next theme", () => RunDispatcherHidden("theme next"));
-        AddAction("Next wallpaper", () => RunDispatcherHidden("wallpaper next"));
+        AddAction("Next wallpaper", WallpaperNextInBackground);
         AddAction("Keybindings", () => RunDispatcherVisible("keys"));
         AddAction("Tutorial", () => RunDispatcherHidden("tutorial"));
         _menu.Items.Add(new ToolStripSeparator());
@@ -188,6 +188,27 @@ public static class TrayApplet
             }
         };
         _menu!.Items.Add(item);
+    }
+
+    private static void WallpaperNextInBackground()
+    {
+        // Off the message loop on purpose. The scan touches the disk, and a
+        // large or slow folder (a network drive, a spun-down disk) running on
+        // the UI thread would freeze the icon, its menu and the Windows key
+        // guard's mode timer with it, since all three share this thread. The
+        // old route got that for free by spawning a detached process; doing
+        // the work in process has to ask for it.
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                Program.WallpaperNext();
+            }
+            catch (Exception ex)
+            {
+                Paths.Log("tray: wallpaper change failed: " + ex.Message);
+            }
+        });
     }
 
     private static void RunDispatcherHidden(string arguments)

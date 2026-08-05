@@ -149,11 +149,75 @@ Describe 'Never shows nothing' {
         # One-minute ticks with a counter, so a changed interval takes effect
         # within a minute rather than after the old interval runs out.
         $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
-        $applet | Should -Match 'wallpaper next'
+        # The tick asks for the change in process now; the test above pins
+        # that no shell is started for it.
+        $applet | Should -Match 'WallpaperNextInBackground'
         $applet | Should -Match 'WallpaperIntervalMinutes'
         $applet | Should -Match '60 \* 1000'
         $script = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'bin' 'tray.ps1')))
         $script | Should -Match 'Get-WinmarchyWallpaperIntervalMinutes'
+    }
+
+    It 'changes the wallpaper in process, with no shell started anywhere on the path' {
+        # The wallpaper is the only Winmarchy action that fires on a timer, a
+        # click and a keybinding, and each one used to start powershell.exe
+        # and parse a 2600 line library to do a few milliseconds of work.
+        $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
+        $applet | Should -Not -Match '"wallpaper next"' -Because 'the tray must not shell out for a job it can do itself'
+        $applet | Should -Match 'WallpaperNextInBackground'
+        $wallpaperCs = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'Wallpaper.cs'))
+        # SPI_SETDESKWALLPAPER with SPIF_UPDATEINIFILE plus SPIF_SENDWININICHANGE,
+        # the same call Set-WinmarchyWallpaper makes.
+        $wallpaperCs | Should -Match 'SystemParametersInfoW'
+        $wallpaperCs | Should -Match '0x0014'
+        $wallpaperCs | Should -Match '0x0003'
+    }
+
+    It 'agrees with the PowerShell on exactly which files count as pictures' {
+        # A set comparison rather than a spot check, so adding a format to one
+        # implementation and not the other fails here in either direction.
+        $wallpaperCs = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'Wallpaper.cs'))
+        $commonPs = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'bin' (Join-Path 'lib' 'common.ps1'))))
+
+        $csList = [regex]::Match($wallpaperCs, 'PictureExtensions\s*=\s*\{([^}]*)\}').Groups[1].Value
+        $csExtensions = @([regex]::Matches($csList, '"(\.[a-z]+)"') | ForEach-Object { $_.Groups[1].Value })
+        $psList = [regex]::Match($commonPs, '\$extensions\s*=\s*@\(([^)]*)\)').Groups[1].Value
+        $psExtensions = @([regex]::Matches($psList, "'(\.[a-z]+)'") | ForEach-Object { $_.Groups[1].Value })
+
+        $csExtensions.Count | Should -BeGreaterThan 0
+        $psExtensions.Count | Should -BeGreaterThan 0
+        (($csExtensions | Sort-Object) -join ',') | Should -Be (($psExtensions | Sort-Object) -join ',')
+    }
+
+    It 'keeps the picking rules the PowerShell keeps: recurse, skip hidden, never repeat' {
+        $wallpaperCs = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'Wallpaper.cs'))
+        $wallpaperCs | Should -Match 'Stack<string>' -Because 'the walk recurses through subfolders'
+        $wallpaperCs | Should -Match 'FileAttributes\.Hidden'
+        # Case insensitive, because the PowerShell comparison it mirrors is,
+        # and Windows paths are.
+        $wallpaperCs | Should -Match 'StringComparison\.OrdinalIgnoreCase'
+    }
+
+    It 'refuses the shortcut on a dirty journal, and falls back when it fails' {
+        # Both rules matter more than the speed: a pending journal means an
+        # interrupted swap, which every invocation must repair first (brief
+        # Section 10), and a failed fast path has to reach the slow one
+        # rather than silently doing nothing.
+        $program = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'Program.cs'))
+        $fastPath = ($program -split 'public static int WallpaperNext\(\)')[1]
+        $fastPath | Should -Match 'JournalPending'
+        $fastPath | Should -Match 'WallpaperOutcome\.Failed'
+        ([regex]::Matches($fastPath, 'RunWinmarchy\("wallpaper next"')).Count | Should -Be 2
+    }
+
+    It 'scans off the message loop, so a slow folder cannot freeze the icon or the guard' {
+        # The tray icon, its menu and the Windows key guard's mode timer all
+        # share this thread; the old route got that for free by spawning a
+        # detached process.
+        $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
+        $background = ($applet -split 'private static void WallpaperNextInBackground')[1]
+        $background | Should -Match 'Task\.Run'
+        $background | Should -Match 'Program\.WallpaperNext\(\)'
     }
 
     It 'only re-parses the state file when a swap actually rewrote it' {

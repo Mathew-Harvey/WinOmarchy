@@ -31,6 +31,14 @@ public static class Program
         {
             return TrayApplet.Run();
         }
+        // --wallpaper-next does the whole wallpaper change in this process.
+        // The GlazeWM binding points here when this exe exists, because the
+        // dispatcher route costs a powershell.exe start and a 2600 line
+        // library parse for a few milliseconds of work.
+        if (Array.IndexOf(args, "--wallpaper-next") >= 0)
+        {
+            return WallpaperNext();
+        }
         Paths.Log("chooser: starting, base " + Paths.BaseDir);
         try
         {
@@ -110,6 +118,26 @@ public static class Program
         {
             // Nothing more can be done; Explorer is still the shell.
         }
+    }
+
+    // The wallpaper fast path, plus the two rules it is not allowed to break.
+    // A pending undo journal means an earlier swap was interrupted, and the
+    // standing rule (brief Section 10) is that every invocation repairs
+    // before anything else, so a dirty journal hands straight over to the
+    // dispatcher rather than taking any shortcut. And a fast path that fails
+    // falls back to the slow one, which does the same job and reports
+    // properly, so this can never be the reason nothing happened.
+    public static int WallpaperNext()
+    {
+        if (Paths.JournalPending())
+        {
+            return RunWinmarchy("wallpaper next", waitForExit: false);
+        }
+        if (Wallpaper.Next() == WallpaperOutcome.Failed)
+        {
+            return RunWinmarchy("wallpaper next", waitForExit: false);
+        }
+        return 0;
     }
 
     public static int RunWinmarchy(string arguments, bool waitForExit)

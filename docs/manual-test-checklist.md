@@ -300,3 +300,21 @@ during setup, or run the installer with a bad winget source.
 - [ ] L6. Swap Omarchy -> Windows -> Omarchy: both directions complete in
       about the same time as before or faster, and doctor is clean after
       each.
+
+## M. Round: the wallpaper change without a shell
+
+- [ ] M1. In Omarchy mode press lwin+ctrl+b: the wallpaper changes and it
+      feels instant. Note this needs one install run AFTER the chooser exe
+      exists; the install log says which route the key took.
+- [ ] M2. Open Task Manager, Details, sorted by name, and press lwin+ctrl+b
+      again: no powershell.exe appears. Same when the wallpaper timer fires
+      and when the tray menu's "Next wallpaper" is clicked.
+- [ ] M3. winmarchy.log shows lines like "wallpaper: <name>.jpg (in
+      process, no shell started)".
+- [ ] M4. The rules are unchanged: pictures from subfolders appear, hidden
+      files never do, and the same picture never comes up twice in a row.
+- [ ] M5. Point the wallpaper folder at a removed drive, then press
+      lwin+ctrl+b: nothing changes and the log says the folder is not
+      reachable. Put it back and the key works again.
+- [ ] M6. `winmarchy wallpaper next` from a shell still works exactly as
+      before, and so does the tray on an install with no chooser built.
