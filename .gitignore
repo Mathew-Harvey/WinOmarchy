@@ -10,3 +10,7 @@ chooser/obj/
 # Local editor noise
 .vs/
 .vscode/
+
+# Python bytecode from tools/make-icon.py
+__pycache__/
+*.pyc
