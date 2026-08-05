@@ -31,6 +31,13 @@ public static class Program
         {
             return TrayApplet.Run();
         }
+        // --bar runs the native status bar, the replacement for yasb. Its own
+        // process on purpose: the tray hosts the Windows key guard, and a
+        // crash in the bar must not take that hook down with it.
+        if (Array.IndexOf(args, "--bar") >= 0)
+        {
+            return BarApp.Run();
+        }
         // --wallpaper-next does the whole wallpaper change in this process.
         // The GlazeWM binding points here when this exe exists, because the
         // dispatcher route costs a powershell.exe start and a 2600 line

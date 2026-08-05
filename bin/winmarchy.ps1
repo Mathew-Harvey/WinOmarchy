@@ -52,6 +52,9 @@ function Show-WinmarchyUsage {
     Write-Output '  winmarchy wallpaper every <minutes>  how often it changes (1 to 1440)'
     Write-Output '  winmarchy wallpaper off     stop cycling; themes control the wallpaper again'
     Write-Output '  winmarchy stats             system monitor TUI (btop)'
+    Write-Output '  winmarchy bar native        use the built-in bar (far lighter than yasb)'
+    Write-Output '  winmarchy bar yasb          go back to the yasb bar'
+    Write-Output '  winmarchy bar status        which bar is selected, and whether it is up'
 }
 
 # Safety rule from the build brief Section 10: a non-empty undo journal means
@@ -162,6 +165,36 @@ switch ($Command) {
             } else {
                 Write-Output 'wallpaper cycling: off (themed wallpapers in Omarchy mode, yours in Windows 11 mode)'
             }
+        } else {
+            Show-WinmarchyUsage
+            exit 1
+        }
+    }
+    'bar' {
+        # Which bar draws the top strip: yasb, or the native one inside the
+        # chooser exe. yasb is the default until the native bar has been
+        # proven on the machine.
+        if ($Argument -eq 'native' -or $Argument -eq 'yasb') {
+            if ($Argument -eq 'native' -and -not (Test-Path (Get-WinmarchyChooserExePath))) {
+                throw 'The native bar lives in the chooser exe, which is not built here. Install the .NET 8 SDK, re-run setup, then try again.'
+            }
+            $previous = Get-WinmarchyBarKind
+            # Stop the OLD bar before the setting changes, or it stays on
+            # screen with nothing left configured to close it.
+            $wasRunning = Test-WinmarchyBarRunning
+            if ($wasRunning) { Stop-WinmarchyBar }
+            Set-WinmarchyStateValue -Name 'bar' -Value $Argument
+            Write-Output ('bar: ' + $previous + ' -> ' + $Argument)
+            if ($wasRunning) {
+                Start-WinmarchyBar
+                Write-Output ('bar: started the ' + $Argument + ' bar')
+            } else {
+                Write-Output 'bar: it will start with the next swap into Omarchy mode'
+            }
+        } elseif ($Argument -eq 'status' -or $Argument -eq '') {
+            $running = 'stopped'
+            if (Test-WinmarchyBarRunning) { $running = 'running' }
+            Write-Output ('bar: ' + (Get-WinmarchyBarKind) + ', ' + $running)
         } else {
             Show-WinmarchyUsage
             exit 1

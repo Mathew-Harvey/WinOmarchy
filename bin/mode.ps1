@@ -63,11 +63,11 @@ function Enter-WinmarchyOmarchyMode {
             Write-WinmarchyLog -Message 'enter-omarchy: started GlazeWM'
         }
 
-        # Step: start yasb.
-        if (-not (Test-WinmarchyProcessRunning -Name 'yasb')) {
-            Add-WinmarchyJournalEntry -Action 'yasb-started'
-            Start-WinmarchyYasb
-            Write-WinmarchyLog -Message 'enter-omarchy: started yasb'
+        # Step: start the bar, whichever one is selected (winmarchy bar).
+        if (-not (Test-WinmarchyBarRunning)) {
+            Add-WinmarchyJournalEntry -Action 'bar-started'
+            Start-WinmarchyBar
+            Write-WinmarchyLog -Message ('enter-omarchy: started the ' + (Get-WinmarchyBarKind) + ' bar')
         }
 
         # Step: taskbar to auto-hide.
@@ -196,14 +196,28 @@ function Enter-WinmarchyWin11Mode {
         Write-WinmarchyLog -Message ('enter-win11: glazewm stop failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # Step: stop yasb (yasbc stop, then force).
+    # Step: stop the bar. Both kinds are stopped, not just the selected one,
+    # because switching bars mid-session must never strand the old one on
+    # screen with nothing able to close it.
     try {
-        if (Test-WinmarchyProcessRunning -Name 'yasb') {
-            Stop-WinmarchyYasb
+        if (Test-WinmarchyBarRunning) {
+            Stop-WinmarchyBar
+        }
+        # Only the OTHER kind is chased here. Stopping both unconditionally
+        # meant a yasb stop ran twice on every swap, and that call waits up
+        # to five seconds for the process to go.
+        if ((Get-WinmarchyBarKind) -eq 'native') {
+            if (Test-WinmarchyProcessRunning -Name 'yasb') {
+                Stop-WinmarchyYasb
+            }
+        } else {
+            foreach ($barProcess in @(Get-WinmarchyChooserProcesses -Argument '--bar')) {
+                Stop-Process -Id $barProcess.Id -Force -ErrorAction SilentlyContinue
+            }
         }
     } catch {
-        $failures = $failures + ('yasb: ' + $_.Exception.Message)
-        Write-WinmarchyLog -Message ('enter-win11: yasb stop failed: ' + $_.Exception.Message) -Level 'ERROR'
+        $failures = $failures + ('bar: ' + $_.Exception.Message)
+        Write-WinmarchyLog -Message ('enter-win11: bar stop failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
     # Step: taskbar back to always visible.
@@ -350,6 +364,10 @@ function Invoke-WinmarchyRepair {
             try {
                 switch ($entry.action) {
                     'glazewm-started' { Stop-WinmarchyGlazewm }
+                    'bar-started' { Stop-WinmarchyBar }
+                    # Journals written before the bar became switchable carry
+                    # the old action name. A recovery path must keep reading
+                    # what earlier builds wrote.
                     'yasb-started' { Stop-WinmarchyYasb }
                     'taskbar-autohide' { Set-WinmarchyTaskbarAutoHide -Enabled ([bool]$entry.data.previous) }
                     'icons-hidden' { Set-WinmarchyDesktopIcons -Visible ([bool]$entry.data.previous) }
@@ -437,12 +455,15 @@ function Get-WinmarchyStatus {
     Write-Output ('mode:    ' + $state.mode)
     Write-Output ('theme:   ' + $state.theme)
     Write-Output ('journal: ' + (@(Get-WinmarchyJournalEntries).Count) + ' pending entries')
-    foreach ($processName in @('glazewm', 'yasb', 'Flow.Launcher')) {
+    foreach ($processName in @('glazewm', 'Flow.Launcher')) {
         $running = Test-WinmarchyProcessRunning -Name $processName
         $label = 'stopped'
         if ($running) { $label = 'running' }
         Write-Output ($processName + ': ' + $label)
     }
+    $barLabel = 'stopped'
+    if (Test-WinmarchyBarRunning) { $barLabel = 'running' }
+    Write-Output ('bar:     ' + (Get-WinmarchyBarKind) + ', ' + $barLabel)
 }
 
 function Invoke-WinmarchyDoctor {
@@ -502,7 +523,8 @@ function Invoke-WinmarchyDoctor {
 
     $expectedProcesses = ($state.mode -eq 'omarchy')
     $rows = $rows + (New-DoctorRow ('glazewm ' + $(if ($expectedProcesses) { 'running' } else { 'stopped' })) ((Test-WinmarchyProcessRunning -Name 'glazewm') -eq $expectedProcesses) ('mode is ' + $state.mode))
-    $rows = $rows + (New-DoctorRow ('yasb ' + $(if ($expectedProcesses) { 'running' } else { 'stopped' })) ((Test-WinmarchyProcessRunning -Name 'yasb') -eq $expectedProcesses) ('mode is ' + $state.mode))
+    $barKind = Get-WinmarchyBarKind
+    $rows = $rows + (New-DoctorRow ('bar ' + $(if ($expectedProcesses) { 'running' } else { 'stopped' })) ((Test-WinmarchyBarRunning) -eq $expectedProcesses) ($barKind + ' bar, mode is ' + $state.mode))
 
     $taskbarAutoHide = Get-WinmarchyTaskbarAutoHide
     $rows = $rows + (New-DoctorRow 'taskbar state matches mode' ($taskbarAutoHide -eq $expectedProcesses) ('auto-hide is ' + $taskbarAutoHide))

@@ -171,6 +171,15 @@ menu: the key belongs to the tiling layer, exactly like Super on Omarchy.
 Every combo still works, Windows 11 mode is untouched, and the guard dies
 with the tray icon, so killing the icon returns the key to stock instantly.
 
+There are two bars to choose from. yasb is the default and the one setup
+installs. `winmarchy bar native` switches to the built-in bar instead: the
+same widgets from the same palette, drawn by the chooser executable in a
+fraction of the memory, since yasb carries a whole Python and Qt runtime to
+show a clock. The built-in one has no system tray of its own (those icons
+stay on the Windows taskbar) and its speaker button opens the volume mixer
+rather than showing a level. `winmarchy bar yasb` goes back, and
+`winmarchy bar status` says which is in use.
+
 Two more Omarchy habits carry over. Focus follows the mouse: moving the
 cursor onto a window activates it, no click needed (a GlazeWM setting, so
 Windows 11 mode keeps click-to-focus). And the bar's tray area stays

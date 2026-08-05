@@ -638,6 +638,86 @@ Describe 'doctor' {
     }
 }
 
+Describe 'Which bar draws the strip' {
+    BeforeEach {
+        Save-WinmarchyState -State (Get-WinmarchyDefaultState)
+    }
+
+    It 'stays on yasb until something asks for the native bar' {
+        # The native bar is opt-in: an update must never move a working
+        # machine onto a bar it has not tried.
+        (Get-WinmarchyDefaultState).bar | Should -Be 'yasb'
+        Get-WinmarchyBarKind | Should -Be 'yasb'
+    }
+
+    It 'reads native only from an exact setting, so a stray value stays safe' {
+        Set-WinmarchyStateValue -Name 'bar' -Value 'native'
+        Get-WinmarchyBarKind | Should -Be 'native'
+        Set-WinmarchyStateValue -Name 'bar' -Value 'nonsense'
+        Get-WinmarchyBarKind | Should -Be 'yasb'
+        Set-WinmarchyStateValue -Name 'bar' -Value $null
+        Get-WinmarchyBarKind | Should -Be 'yasb'
+    }
+
+    It 'starts and stops whichever bar is selected' {
+        Mock Start-WinmarchyYasb { }
+        Mock Stop-WinmarchyYasb { }
+        Mock Start-Process { }
+        # A real file rather than a mocked Test-Path, so the exe check under
+        # test is the one that runs.
+        Write-WinmarchyTextFile -Path (Get-WinmarchyChooserExePath) -Content 'not really an exe'
+
+        Start-WinmarchyBar
+        Should -Invoke Start-WinmarchyYasb -Times 1 -Exactly
+        Should -Invoke Start-Process -Times 0 -Exactly
+
+        Set-WinmarchyStateValue -Name 'bar' -Value 'native'
+        Start-WinmarchyBar
+        Should -Invoke Start-WinmarchyYasb -Times 1 -Exactly -Because 'the native bar must not start yasb as well'
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $ArgumentList -eq '--bar' }
+    }
+
+    It 'refuses the native bar when the chooser exe is not built, and says how to fix it' {
+        # This test's home has no chooser exe in it at all.
+        Set-WinmarchyStateValue -Name 'bar' -Value 'native'
+        { Start-WinmarchyBar } | Should -Throw '*winmarchy bar yasb*'
+    }
+
+    It 'tells the bar apart from the tray, which share one executable' {
+        # Both run as Winmarchy.Chooser, so a name check alone would call the
+        # bar healthy whenever the tray was up.
+        Mock Get-WinmarchyChooserProcesses { @() }
+        Set-WinmarchyStateValue -Name 'bar' -Value 'native'
+        Test-WinmarchyBarRunning | Should -BeFalse
+        Should -Invoke Get-WinmarchyChooserProcesses -ParameterFilter { $Argument -eq '--bar' }
+
+        Mock Get-WinmarchyChooserProcesses { @([pscustomobject]@{ Id = 42 }) }
+        Test-WinmarchyBarRunning | Should -BeTrue
+    }
+
+    It 'reports the selected bar in doctor, passing on the mode it is in' {
+        Mock Test-WinmarchyBarRunning { $false }
+        Mock Find-WinmarchyExecutable { 'C:\fake\tool.exe' }
+        Mock Test-WinmarchyProcessRunning { $false }
+        Mock Get-WinmarchyTaskbarAutoHide { $false }
+        Mock Get-WinmarchyDesktopIconsVisible { $true }
+        Mock Get-WtSettingsPath { $null }
+        Mock Test-WinmarchyWebView2Runtime { $true }
+        Mock Test-WinmarchyStartupDisabledByWindows { $false }
+        Mock Test-WinmarchyNerdFontInstalled { $true }
+        Mock Get-WinmarchyTrayStatus { 'exe' }
+        Mock Get-WinmarchyWinKeyGuardHeartbeat { [pscustomobject]@{ pid = 1; armed = $false; maskedTaps = 0; tickUtc = ((Get-Date).ToUniversalTime().ToString('o')) } }
+        Mock Resolve-WinmarchyBindingCriticalApp { 'C:\fake\tool.exe' }
+        Mock Get-WinmarchyEverythingStatus { [pscustomobject]@{ ExePath = 'C:\fake\Everything.exe'; ServiceStatus = 'Running'; ClientRunning = $true; Autorun = 'machine' } }
+        Set-WinmarchyStateValue -Name 'bar' -Value 'native'
+
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $row = $rows | Where-Object { $_.check -eq 'bar stopped' }
+        $row.pass | Should -BeTrue -Because 'win11 mode expects no bar'
+        $row.detail | Should -Match 'native bar'
+    }
+}
+
 Describe 'The pre-install wallpaper from the oldest backup' {
     # The substitute value the poison guards reach for (FLAG-42): when the
     # current wallpaper is one of Winmarchy's own, the baseline capture uses

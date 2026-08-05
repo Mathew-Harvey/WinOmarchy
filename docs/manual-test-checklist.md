@@ -318,3 +318,35 @@ during setup, or run the installer with a bad winget source.
       reachable. Put it back and the key works again.
 - [ ] M6. `winmarchy wallpaper next` from a shell still works exactly as
       before, and so does the tray on an install with no chooser built.
+
+## N. Round: the native bar (opt-in)
+
+- [ ] N1. In Omarchy mode run `winmarchy bar native`. The yasb bar goes and
+      the native one appears in its place, same height, themed to the
+      current palette.
+- [ ] N2. Workspaces show along the left, the focused one filled with the
+      accent colour, populated ones outlined, empty ones dimmed. Switch
+      workspaces with lwin+1..9 and the strip follows.
+- [ ] N3. Click a workspace button: that workspace is focused.
+- [ ] N4. Windows tile BELOW the bar, never behind it. Open a window
+      maximised and confirm its top edge sits under the bar.
+- [ ] N5. Clicking the bar does not steal focus from the window you were
+      typing in.
+- [ ] N6. The menu button (three bars, far left) opens the Winmarchy menu.
+      The power button (far right) opens lock, sleep, sign out, restart,
+      shut down and back to Windows 11. The speaker button opens the
+      Windows volume mixer.
+- [ ] N7. Clock, CPU and RAM update and look right. The active window title
+      shows in the middle left and is trimmed rather than colliding with
+      the clock.
+- [ ] N8. Run `winmarchy theme next`: the bar recolours within a second or
+      two without restarting.
+- [ ] N9. Task Manager, Details: compare the working set of
+      Winmarchy.Chooser.exe (the --bar one) against what yasb.exe used.
+      Record both numbers; that difference is the point of the round.
+- [ ] N10. Swap to Windows 11 mode: the bar goes and the taskbar returns.
+      Swap back: the bar returns. Then `winmarchy bar yasb` puts yasb back
+      exactly as before, which is the escape hatch if anything above fails.
+- [ ] N11. Kill the bar process from Task Manager: the tray icon and the
+      Windows key guard keep working (that is why the bar is its own
+      process). doctor's "bar running" row fails until the next swap.

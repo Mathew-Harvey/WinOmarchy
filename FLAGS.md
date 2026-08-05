@@ -1300,3 +1300,61 @@ Deferred to the machine: that lwin+ctrl+b feels instant, that the log shows
 Manager when the wallpaper timer fires.
 
 Status: open until the machine confirms it, then closed.
+
+## FLAG-49: the native bar, opt-in until the machine says otherwise
+
+Context: second performance round. yasb is Python plus Qt6, roughly 150 to
+250MB resident and the busiest background process Winmarchy ran, for a bar
+with eight widgets. chooser/BarWindow.cs draws the same bar from the same
+palette in a WinForms window.
+
+Judgement calls, all deliberate:
+
+1. It is OPT-IN. yasb stays the default and "winmarchy bar native" switches
+   over, because none of this can be run on the build container: a bar is a
+   GUI, on Windows, talking to a window manager that is not here. Shipping
+   it as the default would mean betting the most visible surface in the
+   project on untested code. The switch stops the old bar before it changes
+   the setting and starts the new one, so the swap is safe mid-session.
+2. It runs as its OWN process, not inside the tray. The tray hosts the
+   Windows key guard, whose hook took five rounds to get right, and a bar
+   that paints on a timer and talks to a socket is the likelier thing to
+   crash. This also means the mode manager starts and stops it exactly
+   where it started and stopped yasb.
+3. NO systray in the bar. Hosting other applications' tray icons means the
+   Shell_TrayWnd protocol, which is why yasb offers a dll injection hook for
+   it. The icons remain in the Windows taskbar, which auto-hides in Omarchy
+   mode, and Mat asked for those icons hidden by default anyway.
+4. NO live volume level yet. Reading it means hand-rolling the
+   IAudioEndpointVolume COM interface, and neither ref/ clone carries the
+   interface declaration (yasb uses pycaw), so the vtable order cannot be
+   verified here. Rule 8 forbids guessing it, and a wrong guess crashes the
+   bar. The volume button opens the Windows volume mixer instead, and the
+   readout waits until the layout can be verified against the SDK header.
+5. The workspace strip is NOT filtered per monitor. A bar is created on
+   every screen, but each shows all workspaces, because GlazeWM's monitor
+   "handle" could not be confirmed here as an HMONITOR rather than a window
+   handle, and a wrong comparison would leave a monitor with no workspaces
+   at all. Single monitor machines see no difference.
+
+Verified rather than assumed: the IPC port, message envelope, the two
+messages sent on connect, the re-query-on-event behaviour and every field
+read off a container all come from ref/glazewm/packages/wm-common/src/ipc.rs
+and the working client at
+ref/yasb/src/core/widgets/services/glazewm/client.py, cited in the source.
+The app bar contract is the documented SHAppBarMessage sequence. The bar
+height is asserted by a test to equal the height the yasb config reserved,
+so the tiled area does not move when the bar is swapped.
+
+Two defects this round's tests caught before they shipped: stopping both
+bar kinds unconditionally on every swap to Windows 11, which ran a yasb
+stop twice and waited up to five seconds for the second one; and two GDI
+brushes allocated inside draw calls, leaking one object per repaint.
+
+Deferred to the machine: everything visual. Does it draw, does it sit above
+the tiling area, do workspace clicks focus, does it recolour on a theme
+change, and what does Task Manager say its working set is against yasb's.
+
+Status: open until Mat has run "winmarchy bar native" and reported. When it
+holds up, the next round makes it the default and drops yasb from the
+install, which is where the memory is actually won back.

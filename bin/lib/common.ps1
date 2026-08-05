@@ -547,6 +547,9 @@ function Get-WinmarchyDefaultState {
         wallpaperDir              = $null
         wallpaperIntervalMinutes  = 30
         tutorialSeen              = $false
+        # 'yasb' or 'native'. yasb until the native bar is proven; see
+        # Get-WinmarchyBarKind.
+        bar                       = 'yasb'
         # 'winmarchy' when the installer added the per-user Run entry that
         # starts Everything at login, so the uninstaller knows the entry is
         # ours to remove and leaves anyone else's alone.
@@ -1470,6 +1473,76 @@ function Stop-WinmarchyYasb {
     }
 }
 
+# ---------------------------------------------------------------------------
+# Which bar: yasb, or the native one in the chooser exe
+# ---------------------------------------------------------------------------
+# The native bar draws the same widgets from the same palette in tens of
+# megabytes, where yasb is Python plus Qt6 at roughly 150 to 250MB resident.
+# yasb stays the default until the native bar has been proven on the machine,
+# so this setting is the switch and everything below dispatches on it.
+
+function Get-WinmarchyBarKind {
+    $value = [string](Get-WinmarchyState).bar
+    if ($value -eq 'native') { return 'native' }
+    return 'yasb'
+}
+
+function Get-WinmarchyChooserProcesses {
+    # The chooser, the tray and the bar are all the same executable, so the
+    # command line is the only thing that tells them apart. Get-WinmarchyTrayStatus
+    # reads it the same way.
+    param([Parameter(Mandatory = $true)][string]$Argument)
+    $matched = @()
+    if (-not (Test-WinmarchyIsWindows)) { return $matched }
+    foreach ($process in @(Get-Process -Name 'Winmarchy.Chooser' -ErrorAction SilentlyContinue)) {
+        $commandLine = ''
+        try {
+            $commandLine = [string](Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId = ' + $process.Id) -ErrorAction SilentlyContinue).CommandLine
+        } catch {
+            $commandLine = ''
+        }
+        if ($commandLine -like ('*' + $Argument + '*')) { $matched = $matched + $process }
+    }
+    return $matched
+}
+
+function Test-WinmarchyBarRunning {
+    if ((Get-WinmarchyBarKind) -eq 'native') {
+        return (@(Get-WinmarchyChooserProcesses -Argument '--bar').Count -gt 0)
+    }
+    return (Test-WinmarchyProcessRunning -Name 'yasb')
+}
+
+function Start-WinmarchyBar {
+    if ((Get-WinmarchyBarKind) -ne 'native') {
+        Start-WinmarchyYasb
+        return
+    }
+    $exe = Get-WinmarchyChooserExePath
+    if (-not (Test-Path $exe)) {
+        throw 'the native bar lives in the chooser exe, which is not built here. Install the .NET 8 SDK and re-run setup, or go back to yasb with: winmarchy bar yasb'
+    }
+    Start-Process -FilePath $exe -ArgumentList '--bar'
+}
+
+function Stop-WinmarchyBar {
+    if ((Get-WinmarchyBarKind) -ne 'native') {
+        Stop-WinmarchyYasb
+        return
+    }
+    foreach ($process in @(Get-WinmarchyChooserProcesses -Argument '--bar')) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    }
+    $deadline = (Get-Date).AddSeconds(5)
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Test-WinmarchyBarRunning)) { return }
+        Start-Sleep -Milliseconds 250
+    }
+    if (Test-WinmarchyBarRunning) {
+        Write-WinmarchyLog -Message 'the native bar did not stop' -Level 'WARN'
+    }
+}
+
 function Start-WinmarchyFlowLauncher {
     $candidates = @()
     if ($env:LOCALAPPDATA) {
@@ -1514,8 +1587,8 @@ function Wait-WinmarchyOmarchyHealthy {
     while ((Get-Date) -lt $deadline) {
         $glazeAlive = Test-WinmarchyProcessRunning -Name 'glazewm'
         $ipcAlive = Test-WinmarchyTcpPortOpen -Port 6123
-        $yasbAlive = Test-WinmarchyProcessRunning -Name 'yasb'
-        if ($glazeAlive -and $ipcAlive -and $yasbAlive) { return $true }
+        $barAlive = Test-WinmarchyBarRunning
+        if ($glazeAlive -and $ipcAlive -and $barAlive) { return $true }
         Start-Sleep -Seconds 1
     }
     return $false
