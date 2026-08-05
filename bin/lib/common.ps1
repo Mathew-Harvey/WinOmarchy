@@ -2453,29 +2453,6 @@ function Get-WinmarchyPathDoctorRow {
 # Chooser health and launch
 # ---------------------------------------------------------------------------
 
-function Test-WinmarchyWebView2Runtime {
-    # Whether the WebView2 Evergreen Runtime is present. Microsoft documents
-    # this exact detection: read the pv value under the WebView2 client GUID
-    # {F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}, per-machine under
-    # HKLM EdgeUpdate\Clients (WOW6432Node on 64-bit Windows) or per-user under
-    # HKCU, and treat a missing or 0.0.0.0 value as not installed.
-    # learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
-    # ("Detect if a WebView2 Runtime is already installed").
-    if (-not (Test-WinmarchyIsWindows)) { return $false }
-    $clientGuid = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
-    $candidates = @(
-        ('HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\' + $clientGuid),
-        ('HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\' + $clientGuid),
-        ('HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\' + $clientGuid)
-    )
-    foreach ($path in $candidates) {
-        $entry = Get-ItemProperty -Path $path -Name 'pv' -ErrorAction SilentlyContinue
-        if ($null -eq $entry) { continue }
-        $version = [string]$entry.pv
-        if ($version -and $version -ne '0.0.0.0') { return $true }
-    }
-    return $false
-}
 
 function Test-WinmarchyChooserPayload {
     # Everything the chooser exe needs beside it. A publish that dropped the ui
@@ -2483,10 +2460,8 @@ function Test-WinmarchyChooserPayload {
     # plain chooser existed) showed nothing at all, so this is checked
     # explicitly at install time and by doctor.
     $exePath = Get-WinmarchyChooserExePath
-    $indexPath = Join-Path (Join-Path (Get-WinmarchyChooserDir) 'ui') 'index.html'
     $missing = @()
     if (-not (Test-Path $exePath)) { $missing = $missing + 'Winmarchy.Chooser.exe' }
-    if (-not (Test-Path $indexPath)) { $missing = $missing + 'ui\index.html' }
     return [pscustomobject]@{
         Ok      = ($missing.Count -eq 0)
         Missing = $missing

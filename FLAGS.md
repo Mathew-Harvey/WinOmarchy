@@ -1626,3 +1626,58 @@ native menu has held up.
 
 Status: open until the machine confirms lwin+escape opens a window promptly
 and every entry in it still does its job.
+
+## FLAG-58: the chooser drew a web page, and no longer does
+
+Context: the login chooser rendered plain HTML in WebView2, with a WPF window
+as the standby if that failed. It was roughly 100MB of browser engine and the
+slowest thing at login, to show two panels and a countdown, on the one screen
+that must appear quickly.
+
+The standby face already did the same job in a fraction of it and had been
+the tested fallback for months, so it became the only face. Gone with it:
+MainWindow.xaml and its code, the whole ui/ folder, the
+Microsoft.Web.WebView2 package reference, the WebView2 runtime detector, the
+installer's runtime check and doctor's "webview2 runtime" row. The chooser
+payload check is now just the executable, because that is the whole
+deliverable.
+
+The plain window no longer announces itself as a stand-in: it showed a banner
+explaining that the rich chooser had failed, which would be nonsense on a
+face that is no longer standing in for anything. The banner is kept for the
+case where something genuinely did go wrong on the way in.
+
+What this costs: the chooser's look is now WPF rather than CSS, so any future
+restyling is XAML work rather than a stylesheet. That is a fair trade for
+deleting a browser from the login path, and the theme palette still drives
+it.
+
+Status: open until the machine confirms the chooser still appears at login
+and both panels still work.
+
+## FLAG-59: the native launcher was NOT built, and why
+
+Context: Mat asked for items 1 through 3 of the performance list, of which
+item 2 was replacing Flow Launcher with a built-in launcher. Items 1 and 3
+are done; this one is not, and it should not be attempted until the
+following is resolved.
+
+Flow Launcher is roughly 100 to 200MB resident, so the prize is real. The
+blocker is file search. Winmarchy installs Everything precisely so the
+launcher can find files, and a replacement that only lists applications would
+be a straight regression against a capability Mat asked for by name two
+rounds ago. Talking to Everything means its IPC contract, either the SDK DLL
+or the WM_COPYDATA query structure, and neither ref/ clone carries the
+interface: yasb uses pycaw for audio and does not use Everything at all, and
+Flow's own client is C# we cannot copy wholesale on licence grounds. Guessing
+a structure layout for a query that runs on lwin+space is exactly the class
+of mistake rule 8 exists to prevent, and the same reason the bar still has no
+live volume readout (FLAG-49).
+
+What would unblock it: verifying EVERYTHING_IPC_QUERY against the published
+voidtools SDK header, or confirming Everything's HTTP or named-pipe interface
+is available on Mat's install. Then the launcher is a window, an index of
+Start Menu shortcuts, a fuzzy match and that query, which is a day's work
+with no unknowns left in it.
+
+Status: open, deliberately not started.

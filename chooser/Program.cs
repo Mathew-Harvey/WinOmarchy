@@ -86,30 +86,13 @@ public static class Program
                 app.Shutdown(0);
             };
 
-            Window window;
-            if (forcePlain)
-            {
-                window = new FallbackWindow(state, "--plain was passed");
-            }
-            else
-            {
-                try
-                {
-                    window = new MainWindow(renderTest, state);
-                }
-                catch (Exception ex)
-                {
-                    // Typically a missing WebView2 assembly, which used to take
-                    // the whole chooser down before it drew a single pixel.
-                    Paths.Log("chooser: the WebView2 window could not be created: " + ex.Message);
-                    if (renderTest)
-                    {
-                        throw;
-                    }
-                    window = new FallbackWindow(state, "WebView2 window creation failed: " + ex.Message);
-                }
-            }
-            app.Run(window);
+            // One face, drawn in WPF. There used to be two: a WebView2 page
+            // with this window as the standby, which meant the login screen
+            // carried a browser engine, roughly 100MB and the slowest thing
+            // at login, to show two panels and a countdown. The standby face
+            // did the same job in a fraction of it, so it became the only
+            // one (FLAGS.md FLAG-58).
+            app.Run(new FallbackWindow(state, forcePlain ? "--plain was passed" : string.Empty));
             return 0;
         }
         catch (Exception ex)

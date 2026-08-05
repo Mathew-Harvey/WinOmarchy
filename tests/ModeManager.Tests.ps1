@@ -506,14 +506,12 @@ Describe 'doctor' {
         # describe a working install unless a test breaks one on purpose.
         $script:fakeChooserExe = Join-Path (Get-WinmarchyChooserDir) 'Winmarchy.Chooser.exe'
         Write-WinmarchyTextFile -Path $script:fakeChooserExe -Content 'not really an exe'
-        Write-WinmarchyTextFile -Path (Join-Path (Join-Path (Get-WinmarchyChooserDir) 'ui') 'index.html') -Content '<html></html>'
 
         Mock Find-WinmarchyExecutable { 'C:\fake\tool.exe' }
         Mock Test-WinmarchyProcessRunning { $false }
         Mock Get-WinmarchyTaskbarAutoHide { $false }
         Mock Get-WinmarchyDesktopIconsVisible { $true }
         Mock Get-WtSettingsPath { $null }
-        Mock Test-WinmarchyWebView2Runtime { $true }
         Mock Test-WinmarchyStartupDisabledByWindows { $false }
         Mock Test-WinmarchyNerdFontInstalled { $true }
         Mock Get-WinmarchyTrayStatus { 'exe' }
@@ -555,17 +553,11 @@ Describe 'doctor' {
     It 'checks every link in the chain between install and a chooser at login' {
         $json = Invoke-WinmarchyDoctor -Json
         $checks = @(@($json | ConvertFrom-Json) | ForEach-Object { $_.check })
-        foreach ($required in @('chooser installed', 'run key autostart', 'startup entry enabled', 'chooser at login', 'webview2 runtime', 'tray autostart', 'tray running', 'win key guard')) {
+        # No webview2 row: the chooser draws in WPF, so there is no runtime
+        # to be missing (FLAGS.md FLAG-58).
+        foreach ($required in @('chooser installed', 'run key autostart', 'startup entry enabled', 'chooser at login', 'tray autostart', 'tray running', 'win key guard')) {
             $checks | Should -Contain $required
         }
-    }
-
-    It 'fails the chooser row when the publish dropped the ui folder' {
-        Remove-Item -Path (Join-Path (Get-WinmarchyChooserDir) 'ui') -Recurse -Force
-        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
-        $row = $rows | Where-Object { $_.check -eq 'chooser installed' }
-        $row.pass | Should -BeFalse
-        $row.detail | Should -Match 'index.html'
     }
 
     It 'fails the run key row when it points at a file that is not there' {
@@ -729,7 +721,6 @@ Describe 'Which bar draws the strip' {
         Mock Get-WinmarchyTaskbarAutoHide { $false }
         Mock Get-WinmarchyDesktopIconsVisible { $true }
         Mock Get-WtSettingsPath { $null }
-        Mock Test-WinmarchyWebView2Runtime { $true }
         Mock Test-WinmarchyStartupDisabledByWindows { $false }
         Mock Test-WinmarchyNerdFontInstalled { $true }
         Mock Get-WinmarchyTrayStatus { 'exe' }

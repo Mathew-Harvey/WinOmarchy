@@ -43,7 +43,7 @@ function Show-WinmarchyUsage {
     Write-Output '  winmarchy status            show mode, theme and process state'
     Write-Output '  winmarchy repair            replay the undo journal and re-assert the recorded mode'
     Write-Output '  winmarchy doctor [-Json]    print a pass/fail health table'
-    Write-Output '  winmarchy chooser [plain]   show the mode chooser now (plain skips WebView2)'
+    Write-Output '  winmarchy chooser           show the mode chooser now'
     Write-Output '  winmarchy tray              put the Winmarchy icon in the notification area'
     Write-Output '  winmarchy lockscreen on     theme the lock and sign-in screen in Omarchy mode'
     Write-Output '  winmarchy lockscreen off    put the lock screen back and leave it alone'

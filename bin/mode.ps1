@@ -597,11 +597,6 @@ function Invoke-WinmarchyDoctor {
     }
     $rows = $rows + (New-DoctorRow 'chooser at login' (-not $chooserOff) $chooserAtLoginDetail)
 
-    $hasWebView2 = Test-WinmarchyWebView2Runtime
-    $webViewDetail = 'Evergreen runtime found'
-    if (-not $hasWebView2) { $webViewDetail = 'not found; the chooser falls back to its plain window. Install from https://developer.microsoft.com/microsoft-edge/webview2/' }
-    $rows = $rows + (New-DoctorRow 'webview2 runtime' $hasWebView2 $webViewDetail)
-
     $trayValue = Get-WinmarchyRunKeyValue -Name 'WinmarchyTray'
     $trayDetail = 'not set; no Winmarchy icon in the notification area'
     if ($trayValue) { $trayDetail = $trayValue }

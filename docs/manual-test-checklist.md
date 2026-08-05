@@ -407,3 +407,20 @@ during setup, or run the installer with a bad winget source.
 - [ ] R5. The escape hatch still works: winget install -e --id AmN.yasb,
       then winmarchy bar yasb, gives the old bar back, themed. Then
       winmarchy bar native returns to the built-in one.
+
+## S. Round: the menu in a window, and no browser at login
+
+- [ ] S1. In Omarchy mode press lwin+escape: a themed window opens at once,
+      with a filter box and the eighteen entries. No terminal flashes up.
+      Note this needs one install run after the chooser exe exists.
+- [ ] S2. Type to filter, arrows to move, Enter to run, Escape to close,
+      and clicking away closes it too.
+- [ ] S3. Every entry still works from that window. Check the four that
+      need a console especially: System stats (btop), Git TUI (lazygit),
+      Keybindings, and Theme menu. Each should open its own terminal.
+- [ ] S4. The bar's menu button opens the same window.
+- [ ] S5. Sign out and back in: the chooser appears, with both panels, the
+      countdown and the theme colours. It should feel faster than before,
+      and there should be no "plain chooser standing in" banner.
+- [ ] S6. winmarchy doctor: no "webview2 runtime" row any more, and
+      "chooser installed" still passes.

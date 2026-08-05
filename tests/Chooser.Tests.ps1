@@ -3,8 +3,7 @@
 #
 # The C# cannot be exercised headlessly on Linux, so the source-level
 # assertions below stand in for it. They are deliberately about the shape of
-# the failure handling, not about wording: every WebView2 failure path has to
-# reach the plain chooser rather than closing the window.
+# the failure handling, not about wording.
 
 BeforeAll {
     $script:repoRoot = Split-Path -Parent $PSScriptRoot
@@ -27,19 +26,12 @@ Describe 'Payload check' {
         $payload = Test-WinmarchyChooserPayload
         $payload.Ok | Should -BeFalse
         $payload.Missing | Should -Contain 'Winmarchy.Chooser.exe'
-        $payload.Missing | Should -Contain 'ui\index.html'
     }
 
-    It 'reports the ui folder alone when the publish dropped it' {
+    It 'passes once the exe is there, which is now the whole payload' {
+        # There used to be a web page beside it. The chooser draws in WPF now,
+        # so the executable is the entire deliverable (FLAGS.md FLAG-58).
         Write-WinmarchyTextFile -Path (Get-WinmarchyChooserExePath) -Content 'exe'
-        $payload = Test-WinmarchyChooserPayload
-        $payload.Ok | Should -BeFalse
-        $payload.Missing | Should -Be @('ui\index.html')
-    }
-
-    It 'passes when the exe and the page are both there' {
-        Write-WinmarchyTextFile -Path (Get-WinmarchyChooserExePath) -Content 'exe'
-        Write-WinmarchyTextFile -Path (Join-Path (Join-Path (Get-WinmarchyChooserDir) 'ui') 'index.html') -Content '<html></html>'
         (Test-WinmarchyChooserPayload).Ok | Should -BeTrue
     }
 }
@@ -52,50 +44,31 @@ Describe 'Launch' {
 }
 
 Describe 'Never shows nothing' {
-    It 'ships a plain chooser with no WebView2 in it' {
+    It 'carries no browser engine at all' {
         $xaml = Join-Path $script:chooserDir 'FallbackWindow.xaml'
         $code = Join-Path $script:chooserDir 'FallbackWindow.xaml.cs'
         Test-Path $xaml | Should -BeTrue
         Test-Path $code | Should -BeTrue
-        # The namespace, not the word: both files mention WebView2 in prose,
-        # explaining why they exist.
+        # The namespace, not the word: the files mention WebView2 in prose,
+        # explaining why it is gone.
         [System.IO.File]::ReadAllText($xaml) | Should -Not -Match 'Microsoft\.Web\.WebView2'
         [System.IO.File]::ReadAllText($code) | Should -Not -Match 'Microsoft\.Web\.WebView2'
+        # And no package reference, which is what actually kept the runtime
+        # requirement alive.
+        $csproj = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'Winmarchy.Chooser.csproj'))
+        $csproj | Should -Not -Match 'Microsoft\.Web\.WebView2'
+        Test-Path (Join-Path $script:chooserDir 'MainWindow.xaml.cs') | Should -BeFalse
+        Test-Path (Join-Path $script:chooserDir 'ui') | Should -BeFalse
     }
 
-    It 'routes every WebView2 failure to the plain chooser' {
-        $source = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'MainWindow.xaml.cs'))
-        # Creation failure, navigation failure, renderer crash and the health
-        # timeout: four ways for the rich chooser to fail, four hand-overs.
-        ([regex]::Matches($source, 'HandOverToPlainChooser\(')).Count | Should -BeGreaterOrEqual 5
-    }
-
-    It 'falls back to the plain chooser when the WebView2 window cannot be built at all' {
-        $source = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'Program.cs'))
-        $source | Should -Match 'new FallbackWindow'
-        # OnLastWindowClose, because the rich chooser shows the plain one and
-        # then closes itself; the default would take both down.
-        $source | Should -Match 'ShutdownMode\.OnLastWindowClose'
-    }
-
-    It 'gives the login countdown 20 seconds, in both faces' {
+    It 'gives the login countdown 20 seconds, and logs an expiry as an expiry' {
         # 5 seconds auto-continued to the last mode before the user had taken
         # their hand off the keyboard, which read as "no chooser appeared at
-        # login". Input still cancels it instantly.
-        $main = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'MainWindow.xaml.cs'))
-        $main | Should -Match '\["countdownSeconds"\]\s*=\s*20'
+        # login". Input still cancels it instantly. And an expiry used to log
+        # "user chose", making the auto-continue indistinguishable from a
+        # real choice.
         $plain = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'FallbackWindow.xaml.cs'))
         $plain | Should -Match '_secondsLeft\s*=\s*20'
-    }
-
-    It 'logs a countdown expiry differently from a click' {
-        # Both used to log "user chose", which made the auto-continue at
-        # login indistinguishable from a real choice in the log.
-        $appJs = [System.IO.File]::ReadAllText((Join-Path (Join-Path $script:chooserDir 'ui') 'app.js'))
-        $appJs | Should -Match "auto:\s*auto\s*===\s*true"
-        $main = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'MainWindow.xaml.cs'))
-        $main | Should -Match 'countdown expired'
-        $plain = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'FallbackWindow.xaml.cs'))
         $plain | Should -Match 'countdown expired'
     }
 

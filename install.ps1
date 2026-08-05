@@ -482,12 +482,6 @@ if ((Test-WinmarchyIsWindows) -and (-not $SkipChooser)) {
         }
     }
 
-    Invoke-WinmarchyInstallStep -Description 'check the WebView2 runtime the chooser draws with' -Action {
-        if (-not (Test-WinmarchyWebView2Runtime)) {
-            Add-WinmarchyInstallWarning 'WebView2 runtime not detected. The chooser will still appear, in its plain window rather than the rich one. Install the Evergreen runtime from https://developer.microsoft.com/microsoft-edge/webview2/ to get the full version.'
-        }
-    }
-
     if ($NoAutostart) {
         Write-Output 'install: login autostart skipped (-NoAutostart); run the chooser by hand or swap from the Start menu'
     } else {
