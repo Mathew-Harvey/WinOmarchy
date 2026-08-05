@@ -350,3 +350,20 @@ during setup, or run the installer with a bad winget source.
 - [ ] N11. Kill the bar process from Task Manager: the tray icon and the
       Windows key guard keep working (that is why the bar is its own
       process). doctor's "bar running" row fails until the next swap.
+
+## O. Round: the Windows key on GlazeWM bindings, and the icon
+
+- [ ] O1. In Omarchy mode press lwin+space: the launcher opens and the
+      Start menu does NOT. Same for lwin+1 through lwin+9, lwin+enter,
+      lwin+w, lwin+escape and lwin+shift+x.
+- [ ] O2. A bare Windows key tap still opens nothing (the earlier fix must
+      survive this one).
+- [ ] O3. Combos Windows itself owns still work: Win+L locks, Win+E opens
+      Explorer, Win+Shift+S snips, Alt+Tab is untouched.
+- [ ] O4. In Windows 11 mode the Windows key opens Start normally, and
+      every combo above behaves as stock.
+- [ ] O5. winmarchy doctor: the guard row shows a rising count of masked
+      releases after using a few bindings.
+- [ ] O6. The Winmarchy icon (blue tiling panes on a dark rounded square)
+      appears on Winmarchy.Chooser.exe in Explorer, on the tray and bar
+      processes in Task Manager, and on every Winmarchy Start menu entry.

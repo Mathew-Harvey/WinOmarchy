@@ -494,6 +494,15 @@ if (Test-WinmarchyIsWindows) {
         # WScript.Shell WindowStyle: 1 is normal, 7 is minimised. A swap needs
         # no console, so the shortcuts that do not print anything useful start
         # minimised rather than throwing a window at the user.
+        # The shortcuts run through powershell.exe, so without this they all
+        # wear the PowerShell icon in the Start menu. The icon file is copied
+        # beside the install rather than read out of the chooser exe, so the
+        # shortcuts still look right on an install that never built it.
+        $iconSource = Join-Path $PSScriptRoot (Join-Path 'chooser' 'winmarchy.ico')
+        $iconTarget = Join-Path $installRoot 'winmarchy.ico'
+        if (Test-Path $iconSource) {
+            Copy-Item -Path $iconSource -Destination $iconTarget -Force
+        }
         foreach ($item in $shortcuts) {
             $link = $shell.CreateShortcut((Join-Path $startDir ($item.name + '.lnk')))
             $link.TargetPath = $powershellExe
@@ -501,6 +510,7 @@ if (Test-WinmarchyIsWindows) {
             $link.WorkingDirectory = $installRoot
             $link.Description = 'Winmarchy: ' + $item.name
             if ($item.hidden) { $link.WindowStyle = 7 }
+            if (Test-Path $iconTarget) { $link.IconLocation = $iconTarget + ',0' }
             $link.Save()
         }
     }

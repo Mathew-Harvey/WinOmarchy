@@ -631,7 +631,7 @@ function Invoke-WinmarchyDoctor {
             $guardOk = $true
             $armedText = 'disarmed (win11 mode, key is stock)'
             if ($heartbeat.armed) { $armedText = 'armed' }
-            $guardDetail = $armedText + ', ' + $heartbeat.maskedTaps + ' bare tap(s) masked this session'
+            $guardDetail = $armedText + ', ' + $heartbeat.maskedTaps + ' Windows key release(s) masked this session'
         }
     }
     $rows = $rows + (New-DoctorRow 'win key guard' $guardOk $guardDetail)

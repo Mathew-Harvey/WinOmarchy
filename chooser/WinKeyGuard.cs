@@ -121,9 +121,10 @@ public static class WinKeyGuard
     // two never share a lock: the hook must only ever read a ready-made flag.
     private static volatile bool _omarchyActive;
     private static Timer? _modeTimer;
-    // Bare-tap tracking. Touched only by the hook, on one thread.
+    // Whether the Windows key is currently held, so a release with no press
+    // behind it (the key was already down when the guard armed) is left
+    // alone. Touched only by the hook, on one thread.
     private static bool _winDown;
-    private static bool _otherKeySeen;
     // Incremented by the hook, reported by the timer, so the log carries
     // evidence of the guard actually firing without the hook ever logging.
     private static int _maskedTaps;
@@ -292,33 +293,39 @@ public static class WinKeyGuard
                     {
                         if (isWinKey)
                         {
-                            // Autorepeat sends further downs while the key is
-                            // held; only a FRESH press resets the combo flag,
-                            // or holding Win through a combo would read as a
-                            // bare tap again.
-                            if (!_winDown)
-                            {
-                                _otherKeySeen = false;
-                            }
                             _winDown = true;
                         }
-                        else if (_winDown)
-                        {
-                            // A combo: hands off from here to the up.
-                            _otherKeySeen = true;
-                        }
                     }
-                    else if (isUp && isWinKey)
+                    else if (isUp && isWinKey && _winDown)
                     {
-                        var bareTap = _winDown && !_otherKeySeen;
+                        // EVERY Windows key release is masked, not just the
+                        // ones that looked like a bare tap. The earlier
+                        // version only masked a release with no other key
+                        // seen in between, which is unknowable from here:
+                        // GlazeWM runs its own low-level hook and SWALLOWS
+                        // the keys it binds, so on lwin+space, lwin+1 and
+                        // lwin+2 this hook saw the second key while Windows
+                        // never did. That left Windows watching a Win press
+                        // and a Win release with nothing between them, which
+                        // is precisely its rule for opening Start, so every
+                        // GlazeWM binding opened the Start menu (FLAG-50).
+                        //
+                        // Masking unconditionally is safe because Windows
+                        // acts on a Win combo at the SECOND key's down
+                        // (Win+E opens Explorer as E goes down); nothing but
+                        // the bare-tap Start trigger keys off the release.
                         _winDown = false;
-                        if (bareTap && ReplayMaskedWinUp(info.vkCode))
+                        if (ReplayMaskedWinUp(info.vkCode))
                         {
                             // Swallow the real up: the replay above already
                             // queued the mask and a fresh up behind it.
                             _maskedTaps = _maskedTaps + 1;
                             return (IntPtr)1;
                         }
+                    }
+                    else if (isUp && isWinKey)
+                    {
+                        _winDown = false;
                     }
                 }
             }

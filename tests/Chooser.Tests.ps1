@@ -132,6 +132,23 @@ Describe 'Never shows nothing' {
         $callback | Should -Match 'return \(IntPtr\)1;'
     }
 
+    It 'masks every Windows key release, not only the ones that looked bare' {
+        # The bug this pins: GlazeWM runs its own low-level hook and swallows
+        # the keys it binds, so on lwin+space, lwin+1 and lwin+2 this hook saw
+        # the second key while Windows never did. Windows then saw a press and
+        # a release with nothing between them, which is its rule for opening
+        # Start, and every GlazeWM binding opened the Start menu. Whether a
+        # downstream hook ate a key is unknowable from inside a hook, so the
+        # release is masked unconditionally (FLAGS.md FLAG-50).
+        $guard = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'WinKeyGuard.cs'))
+        $guard | Should -Not -Match '_otherKeySeen' -Because 'a hook cannot tell whether Windows saw the other key'
+        $guard | Should -Not -Match 'bareTap'
+        $callback = ($guard -split 'private static IntPtr Callback')[1]
+        # The release path calls the replay with no combo condition in front
+        # of it.
+        $callback | Should -Match 'if \(ReplayMaskedWinUp\(info\.vkCode\)\)'
+    }
+
     It 'replays a Windows key up for every one it swallows, so the key cannot stick' {
         $guard = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'WinKeyGuard.cs'))
         $replay = ($guard -split 'ReplayMaskedWinUp\(uint winVkCode\)')[1]
@@ -308,6 +325,39 @@ Describe 'Never shows nothing' {
         # The tray keeps the guard; the bar must not be started inside it.
         $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
         $applet | Should -Not -Match 'BarApp'
+    }
+
+    It 'wears the Winmarchy mark, in the exe and on the Start menu shortcuts' {
+        $csproj = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'Winmarchy.Chooser.csproj'))
+        $csproj | Should -Match '<ApplicationIcon>winmarchy\.ico</ApplicationIcon>'
+        $iconPath = Join-Path $script:chooserDir 'winmarchy.ico'
+        Test-Path $iconPath | Should -BeTrue
+        # A real icon file: the header is reserved 0, type 1, then the count
+        # of images, and it must carry the small sizes Explorer and the
+        # taskbar actually ask for.
+        $bytes = [System.IO.File]::ReadAllBytes($iconPath)
+        $bytes[0] | Should -Be 0
+        $bytes[1] | Should -Be 0
+        $bytes[2] | Should -Be 1
+        $bytes[3] | Should -Be 0
+        $imageCount = [int]$bytes[4] + ([int]$bytes[5] * 256)
+        $imageCount | Should -BeGreaterThan 3
+        $widths = @()
+        for ($i = 0; $i -lt $imageCount; $i++) {
+            $entry = 6 + (16 * $i)
+            $width = [int]$bytes[$entry]
+            if ($width -eq 0) { $width = 256 }
+            $widths = $widths + $width
+        }
+        $widths | Should -Contain 16
+        $widths | Should -Contain 32
+        $widths | Should -Contain 256
+
+        # The shortcuts run through powershell.exe, so without an explicit
+        # icon they all wear the PowerShell one.
+        $installText = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot 'install.ps1'))
+        $installText | Should -Match 'IconLocation'
+        $installText | Should -Match 'winmarchy\.ico'
     }
 
     It 'only re-parses the state file when a swap actually rewrote it' {

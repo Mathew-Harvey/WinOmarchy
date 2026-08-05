@@ -565,7 +565,7 @@ Describe 'doctor' {
         $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
         $row = $rows | Where-Object { $_.check -eq 'win key guard' }
         $row.pass | Should -BeTrue
-        $row.detail | Should -Match '7 bare tap'
+        $row.detail | Should -Match '7 Windows key release'
     }
 
     It 'fails the guard row when it is alive but unarmed in omarchy mode' {
