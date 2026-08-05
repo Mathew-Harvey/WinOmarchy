@@ -111,8 +111,15 @@ function Invoke-WinmarchyMenuAction {
             }
         }
         'Files' { Start-Process 'explorer.exe' }
-        'Swap to Omarchy mode' { & $dispatcher mode omarchy }
-        'Swap to Windows 11 mode' { & $dispatcher mode win11 }
+        # A mode swap is launched detached and this menu then returns, which
+        # closes its window immediately. Running it in-process made the menu
+        # the PARENT of the swap, so its floating terminal had to stay on
+        # screen for the whole teardown, which stops GlazeWM and the bar and
+        # waits up to five seconds for each, and it was left sitting on the
+        # Windows 11 desktop once the swap had finished, an Omarchy-mode
+        # window with nothing left to manage it (FLAGS.md FLAG-55).
+        'Swap to Omarchy mode' { Start-WinmarchyDispatcherDetached -Arguments @('mode', 'omarchy') }
+        'Swap to Windows 11 mode' { Start-WinmarchyDispatcherDetached -Arguments @('mode', 'win11') }
         'Reload GlazeWM' { Invoke-WinmarchyGlazewmCommand -Command 'wm-reload-config' }
         'Edit GlazeWM config' { Start-Process notepad.exe -ArgumentList (Get-WinmarchyGlazewmConfigPath) }
         'Edit yasb config' { Start-Process notepad.exe -ArgumentList (Join-Path (Get-WinmarchyYasbConfigDir) 'config.yaml') }

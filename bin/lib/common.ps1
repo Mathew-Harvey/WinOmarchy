@@ -2325,6 +2325,28 @@ function Install-WinmarchyEverythingService {
 # Is "winmarchy" reachable as a command
 # ---------------------------------------------------------------------------
 
+function Start-WinmarchyDispatcherDetached {
+    # Runs a winmarchy command in its own process, with no console allocated
+    # at all. CreateNoWindow rather than a hidden window because Windows
+    # Terminal, the Windows 11 default, does not honour hide requests
+    # (microsoft/terminal issues 12570 and 15311), so a hidden window still
+    # shows. The tray and the system menu both need this: whatever they
+    # launch has to outlive them and must not hold their window open.
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+    $dispatcher = Join-Path (Join-Path (Get-WinmarchyHome) 'bin') 'winmarchy.ps1'
+    if (-not (Test-Path $dispatcher)) {
+        # Running from a source tree rather than an install: this file lives
+        # in bin\lib, so the dispatcher is one directory up.
+        $dispatcher = Join-Path (Split-Path -Parent $PSScriptRoot) 'winmarchy.ps1'
+    }
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = Get-WinmarchyPowerShellExe
+    $startInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $dispatcher + '" ' + ($Arguments -join ' ')
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $null = [System.Diagnostics.Process]::Start($startInfo)
+}
+
 function Get-WinmarchyInstallStampPath { return (Join-Path (Get-WinmarchyStateDir) 'install.json') }
 
 function Get-WinmarchyInstallStamp {

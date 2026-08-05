@@ -95,6 +95,18 @@ Describe 'System menu entries' {
         (Get-WinmarchyState).chooserDisabled | Should -BeFalse
     }
 
+    It 'launches a mode swap detached, so the menu window does not outlive the swap' {
+        # The menu used to run the swap in-process, which made it the PARENT
+        # of the teardown: its floating terminal sat on screen for the whole
+        # thing and was still there, an Omarchy window on a Windows 11
+        # desktop, once the swap finished (FLAGS.md FLAG-55).
+        Mock Start-WinmarchyDispatcherDetached { }
+        $null = Invoke-WinmarchyMenuAction -Label 'Swap to Windows 11 mode'
+        Should -Invoke Start-WinmarchyDispatcherDetached -Times 1 -Exactly -ParameterFilter { $Arguments -contains 'win11' }
+        $null = Invoke-WinmarchyMenuAction -Label 'Swap to Omarchy mode'
+        Should -Invoke Start-WinmarchyDispatcherDetached -Times 1 -Exactly -ParameterFilter { $Arguments -contains 'omarchy' }
+    }
+
     It 'hands over the winget command when lazygit is missing, instead of failing silently' {
         Mock Find-WinmarchyExecutable { $null }
         $out = @(Invoke-WinmarchyMenuAction -Label 'Git TUI (lazygit)')

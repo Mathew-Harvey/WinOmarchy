@@ -1537,3 +1537,33 @@ doctor's count still rises. The threading change is invisible when it works,
 so the checklist item is simply that nothing regressed.
 
 Status: open until the machine confirms the guard still behaves.
+
+## FLAG-55: the menu window outlived the swap it launched
+
+Context: Mat picked "Swap to Windows 11 mode" from the system menu and the
+menu's floating terminal was still on screen afterwards, an Omarchy-mode
+window sitting on a Windows 11 desktop.
+
+The cause is structural rather than incidental. Invoke-WinmarchyMenuAction
+ran the swap in-process, with "& winmarchy.ps1 mode win11", which made the
+menu the PARENT of its own teardown. Its window therefore had to stay on
+screen for the entire swap, which stops GlazeWM and the bar and waits up to
+five seconds for each, and the swap could not close it, because closing the
+parent would have taken the swap down with it.
+
+Fix: mode swaps launch detached, through the same no-console route the tray
+uses, and the menu returns immediately, which closes its window. The swap
+outlives the menu rather than the menu outliving the swap. The shared
+launcher moved into common.ps1 so the tray and the menu cannot drift apart
+on how a detached command is started.
+
+Considered and not done: sweeping up any window titled "Winmarchy ..." when
+entering Windows 11 mode. It would also catch the case where the menu is
+left open and the swap comes from somewhere else, but it means enumerating
+windows and posting WM_CLOSE to things the user may still want, the btop
+stats window among them, to tidy a leftover that the fix above already
+removes for the reported path. If stray Winmarchy windows show up after a
+swap by another route, that is the change to make.
+
+Status: fixed in code, open until the machine confirms the menu closes the
+moment the swap is chosen.
