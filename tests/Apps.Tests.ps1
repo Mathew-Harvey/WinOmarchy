@@ -9,8 +9,14 @@
 BeforeAll {
     $script:repoRoot = Split-Path -Parent $PSScriptRoot
     . (Join-Path $script:repoRoot (Join-Path 'bin' (Join-Path 'lib' 'common.ps1')))
+    . (Join-Path $script:repoRoot (Join-Path 'installer' 'wizard-lib.ps1'))
     $script:glazeConfig = [System.IO.File]::ReadAllText(
         (Join-Path $script:repoRoot (Join-Path 'config' (Join-Path 'glazewm' 'config.yaml'))))
+    # Get-Service only exists on Windows; a stub lets the Everything status
+    # tests mock it on any platform.
+    if (-not (Get-Command Get-Service -ErrorAction SilentlyContinue)) {
+        function script:Get-Service { [CmdletBinding()] param([string]$Name) return $null }
+    }
 }
 
 Describe 'Apps a keybinding depends on' {
@@ -71,6 +77,58 @@ Describe 'The dependency table' {
     }
 }
 
+Describe 'Package presence probes' {
+    It 'answers from the disk first, winget second, and installs only after both' {
+        # The disk answers in milliseconds; a winget list probe costs a
+        # second or two per package. On a machine that already has
+        # everything, the order of these three is the difference between a
+        # re-run in seconds and one in minutes.
+        $installText = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot 'install.ps1'))
+        $diskIndex = $installText.IndexOf('Test-WinmarchyPackageOnDisk')
+        $probeIndex = $installText.IndexOf('Test-WinmarchyWingetPackagePresent')
+        $installIndex = $installText.IndexOf('& winget install')
+        $diskIndex | Should -BeGreaterThan 0
+        $probeIndex | Should -BeGreaterThan $diskIndex
+        $installIndex | Should -BeGreaterThan $probeIndex
+        $installText | Should -Match 'already present, skipped'
+    }
+
+    It 'has local evidence for every package in the table' {
+        # With every resolver reporting "found", each of the packages must
+        # short-circuit to present without a winget call: a package that
+        # falls through here pays the slow probe on every single run.
+        Mock Resolve-WinmarchyBindingCriticalApp { 'C:\fake\tool.exe' }
+        Mock Get-WinmarchyEverythingExePath { 'C:\fake\Everything.exe' }
+        Mock Test-WinmarchyNerdFontInstalled { $true }
+        Mock Find-WinmarchyExecutable { 'C:\fake\tool.exe' }
+        foreach ($package in @(Get-WinmarchyWingetPackages)) {
+            Test-WinmarchyPackageOnDisk -PackageId $package.Id | Should -BeTrue -Because ($package.Id + ' must be recognisable from the disk')
+        }
+    }
+
+    It 'treats no local evidence as unknown, never as absent-and-skip' {
+        Mock Resolve-WinmarchyBindingCriticalApp { $null }
+        Mock Get-WinmarchyEverythingExePath { $null }
+        Mock Test-WinmarchyNerdFontInstalled { $false }
+        Mock Find-WinmarchyExecutable { $null }
+        Test-WinmarchyPackageOnDisk -PackageId 'Git.Git' | Should -BeFalse
+        # An id this function has never heard of is unknown too; the winget
+        # probe decides, not this one.
+        Test-WinmarchyPackageOnDisk -PackageId 'Unknown.Package' | Should -BeFalse
+    }
+
+    It 'accepts either exe name for btop4win, whose shipped name varies (FLAG-33)' {
+        Mock Find-WinmarchyExecutable { $null }
+        Mock Find-WinmarchyExecutable { 'C:\fake\btop.exe' } -ParameterFilter { $Name -eq 'btop' }
+        Test-WinmarchyPackageOnDisk -PackageId 'aristocratos.btop4win' | Should -BeTrue
+    }
+
+    It 'declines to answer off Windows, where winget does not exist' {
+        Mock Test-WinmarchyIsWindows { $false }
+        Test-WinmarchyWingetPackagePresent -PackageId 'Git.Git' | Should -BeFalse
+    }
+}
+
 Describe 'Everything, the file search backend' {
     It 'never reinstalls: the presence probe runs before winget install in the loop' {
         # Round two of every install used to re-run all the machine-scope
@@ -82,6 +140,64 @@ Describe 'Everything, the file search backend' {
         $probeIndex | Should -BeGreaterThan 0
         $installIndex | Should -BeGreaterThan $probeIndex
         $installText | Should -Match 'already present, skipped'
+    }
+
+    It 'reports nothing installed while off Windows, so doctor fails soft there' {
+        Mock Test-WinmarchyIsWindows { $false }
+        $status = Get-WinmarchyEverythingStatus
+        $status.ExePath | Should -BeNullOrEmpty
+        $status.ServiceStatus | Should -Be 'missing'
+        $status.ClientRunning | Should -BeFalse
+        $status.Autorun | Should -BeNullOrEmpty
+    }
+
+    It 'reads exe, service, client and autorun in one snapshot' {
+        Mock Test-WinmarchyIsWindows { $true }
+        Mock Get-WinmarchyEverythingExePath { 'C:\Program Files\Everything\Everything.exe' }
+        Mock Get-Service { [pscustomobject]@{ Status = 'Running' } }
+        Mock Test-WinmarchyProcessRunning { $true }
+        Mock Get-ItemProperty { $null }
+        Mock Get-WinmarchyRunKeyValue { '"C:\Program Files\Everything\Everything.exe" -startup' }
+        $status = Get-WinmarchyEverythingStatus
+        $status.ServiceStatus | Should -Be 'Running'
+        $status.ClientRunning | Should -BeTrue
+        $status.Autorun | Should -Be 'user'
+    }
+
+    It 'starts the client only when it is not already running' {
+        Mock Test-WinmarchyIsWindows { $true }
+        Mock Test-WinmarchyProcessRunning { $true }
+        Mock Start-Process { }
+        Start-WinmarchyEverythingClient | Should -BeTrue
+        Should -Invoke Start-Process -Times 0 -Exactly
+    }
+
+    It 'cannot start what is not installed, and says so with $false' {
+        Mock Test-WinmarchyIsWindows { $true }
+        Mock Test-WinmarchyProcessRunning { $false }
+        Mock Get-WinmarchyEverythingExePath { $null }
+        Mock Start-Process { }
+        Start-WinmarchyEverythingClient | Should -BeFalse
+        Should -Invoke Start-Process -Times 0 -Exactly
+    }
+
+    It 'spawns with the documented -startup option and polls until the process appears' {
+        Mock Test-WinmarchyIsWindows { $true }
+        $script:probeCount = 0
+        Mock Test-WinmarchyProcessRunning {
+            $script:probeCount = $script:probeCount + 1
+            return ($script:probeCount -gt 2)
+        }
+        Mock Get-WinmarchyEverythingExePath { 'C:\fake\Everything.exe' }
+        Mock Start-Process { }
+        Mock Start-Sleep { }
+        Start-WinmarchyEverythingClient | Should -BeTrue
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $ArgumentList -eq '-startup' }
+    }
+
+    It 'service install declines to run off Windows' {
+        Mock Test-WinmarchyIsWindows { $false }
+        Install-WinmarchyEverythingService -ExePath 'C:\fake\Everything.exe' | Should -BeFalse
     }
 
     It 'is in every package table: installer, wizard and uninstaller' {

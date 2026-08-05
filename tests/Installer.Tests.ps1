@@ -64,6 +64,16 @@ Describe 'Chooser build cannot fight a running tray' {
         # again masquerade as a successful install.
         $installText | Should -Match 'NOT refreshed'
     }
+
+    It 'publishes the chooser ReadyToRun, so a slow machine is not JIT-compiling at login' {
+        # Flags per learn.microsoft.com/dotnet/core/deploying/ready-to-run:
+        # PublishReadyToRun needs a runtime identifier, and framework
+        # dependent needs --self-contained false alongside -r.
+        $installText = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot 'install.ps1'))
+        $installText | Should -Match 'PublishReadyToRun=true'
+        $installText | Should -Match '-r win-x64'
+        $installText | Should -Match '--self-contained false'
+    }
 }
 
 Describe 'Installer and uninstaller' {

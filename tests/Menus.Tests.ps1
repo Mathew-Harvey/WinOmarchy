@@ -94,5 +94,11 @@ Describe 'System menu entries' {
         $null = Invoke-WinmarchyMenuAction -Label 'Chooser at login: off (toggle)'
         (Get-WinmarchyState).chooserDisabled | Should -BeFalse
     }
+
+    It 'hands over the winget command when lazygit is missing, instead of failing silently' {
+        Mock Find-WinmarchyExecutable { $null }
+        $out = @(Invoke-WinmarchyMenuAction -Label 'Git TUI (lazygit)')
+        ($out -join ' ') | Should -Match 'winget install -e --id JesseDuffield.lazygit'
+    }
 }
 }

@@ -156,6 +156,23 @@ Describe 'Never shows nothing' {
         $script | Should -Match 'Get-WinmarchyWallpaperIntervalMinutes'
     }
 
+    It 'only re-parses the state file when a swap actually rewrote it' {
+        # The tray runs for the whole session and its mode timer fires once
+        # a second; parsing unchanged JSON every tick is pure idle cost on a
+        # slow machine. The write-stamp shortcut lives in RefreshMode, and
+        # the heartbeat must stay unconditional, before the shortcut, so
+        # doctor can still tell a dead guard from an idle one.
+        $guard = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'WinKeyGuard.cs'))
+        $refresh = ($guard -split 'private static void RefreshMode')[1]
+        $refresh | Should -Match 'GetLastWriteTimeUtc'
+        $heartbeatIndex = $refresh.IndexOf('WriteHeartbeat()')
+        $stampIndex = $refresh.IndexOf('GetLastWriteTimeUtc')
+        $heartbeatIndex | Should -BeGreaterThan -1
+        $stampIndex | Should -BeGreaterThan $heartbeatIndex
+        # The parse itself is still a real JSON load when the stamp moved.
+        $refresh | Should -Match 'WinmarchyState\.Load\(\)'
+    }
+
     It 'can run on a newer .NET than it was built for' {
         # A net8.0 app with only a newer Desktop Runtime installed refuses to
         # start, and a WinExe failing that way is silent at login.

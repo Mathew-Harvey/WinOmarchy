@@ -275,3 +275,28 @@ during setup, or run the installer with a bad winget source.
 - [ ] K6. In Omarchy mode, moving the mouse over another window focuses it
       without a click (tiles and floats alike). In Windows 11 mode, focus
       still needs a click, as stock Windows behaves.
+
+## L. Round: performance on modest hardware
+
+- [ ] L1. Re-run install.ps1 with everything already installed: the
+      seventeen package steps print "already present, skipped" near
+      instantly (no multi-second pause per package, no prompts).
+- [ ] L2. The first install after this round runs the ReadyToRun publish:
+      the build step takes noticeably longer than before ONCE and needs
+      the network for the win-x64 runtime pack; it must end with "chooser
+      exe fresh, built <time>". If the publish fails, the old chooser
+      keeps running and the summary says so; record the build lines in
+      FLAGS.md.
+- [ ] L3. Sign out and back in: the chooser appears promptly. Compare
+      against the pre-round feel; it should be the same or faster, never
+      slower.
+- [ ] L4. With a wallpaper folder of a few thousand pictures, lwin+ctrl+b
+      changes the wallpaper without a multi-second stall, and the timed
+      change does not spike the CPU.
+- [ ] L5. Task Manager, Details, Winmarchy.Chooser.exe idle for a minute
+      in each mode: CPU stays at or near 0.0 percent between wallpaper
+      ticks, and doctor's "win key guard" row still shows a live
+      heartbeat (the stamp shortcut must not have silenced it).
+- [ ] L6. Swap Omarchy -> Windows -> Omarchy: both directions complete in
+      about the same time as before or faster, and doctor is clean after
+      each.

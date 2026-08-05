@@ -1179,3 +1179,71 @@ attempted, which is the safe direction.
 
 Status: closed; on-machine confirmation is a reinstall run showing
 seventeen "already present, skipped" lines and no elevation prompts.
+
+## FLAG-46: the performance round, and what it deliberately did not touch
+
+Context: Mat asked for the system to be extremely performant and run well
+on a weak machine, with no regressions. The costs that matter on such a
+machine are the login chooser cold start, the swap, the reinstall, and the
+idle weight of the always-running tray. Four changes, each measured or
+pinned:
+
+1. The wallpaper scan (rebuilt on every cycle, swap and theme change) is
+   now a raw .NET directory walk instead of Get-ChildItem -Recurse:
+   measured 430ms down to 33ms on a 5000-file tree under pwsh on the build
+   container, identical result sets, and 5.1's heavier object wrapper
+   widens that gap on the real machine. Hidden entries stay excluded,
+   matching what Get-ChildItem without -Force always did; a test pins that
+   on both platforms.
+2. The installer's presence check asks the disk first (the same resolution
+   table doctor uses, plus the font registry check) and only falls back to
+   the slow winget list probe when there is no local evidence, so a re-run
+   on a complete machine skips in milliseconds per package. $false from
+   the disk probe means "unknown", never "absent": nothing is skipped
+   without positive evidence from one probe or the other.
+3. The chooser is published ReadyToRun (flags verified against
+   learn.microsoft.com/dotnet/core/deploying/ready-to-run), trading two to
+   three times the assembly size for no JIT work at login. The first
+   publish after this change downloads the win-x64 runtime pack, so it
+   needs the network once.
+4. The Windows key guard's once-a-second timer no longer re-parses
+   state.json when the file's write stamp has not moved; the heartbeat
+   still writes every tick, so doctor's staleness check is unchanged.
+
+Considered and rejected: caching parsed state inside the PowerShell
+processes (a stale-state bug in the system whose first rule is
+recoverability is a bad trade for milliseconds); thinning the yasb widget
+intervals (user-visible behaviour change); and a disk cache for the
+wallpaper list (the faster scan made it unnecessary complexity).
+
+Deferred to the machine: the felt login and swap speed, and that the
+ReadyToRun publish completes cleanly on the first run (it compiles more
+and downloads the runtime pack once).
+
+Status: open until one reinstall and one login on the machine confirm the
+publish works and the chooser feels faster, then closed.
+
+## FLAG-47: test coverage measured, and where the honest ceiling sits
+
+Context: Mat asked to ensure test coverage. Measured with Pester code
+coverage over the PowerShell sources: 52.0 percent of commands before this
+round, 55.6 percent after (1987 of 3575), with 253 tests passing against
+223 before. The additions target behaviour-carrying logic that was dark:
+the Everything helpers, the JSONC comment stripper that edits the user's
+own Windows Terminal settings, the pre-install manifest wallpaper the
+poison guards depend on, wallpaper-next end to end, the status command,
+and a new CLI dispatcher suite that exercises real invocations, exit codes
+and usage text through a child shell.
+
+Two honest caveats. The CLI suite runs the dispatcher in a child process,
+which the coverage instrument cannot see, so the dispatcher's lines still
+read as missed while its behaviour is pinned. And most of what remains
+uncovered is Windows-only effector code (WinRT lock screen calls, GDI
+image drawing, P/Invoke taskbar and desktop toggles, CIM process queries)
+that cannot execute in the Linux build container; mocking every OS call to
+watch the mock would test nothing. Those paths are owned by the on-machine
+checklist (docs/manual-test-checklist.md), which is the project's stated
+boundary for container-unverifiable work.
+
+Status: closed; the number to watch is that the percentage never goes
+DOWN in a future round.

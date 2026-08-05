@@ -615,6 +615,17 @@ Describe 'doctor' {
         $row.detail | Should -Match 'client is not running'
     }
 
+    It 'status reports mode, theme, journal depth and the three processes' {
+        Save-WinmarchyState -State (Get-WinmarchyDefaultState)
+        Mock Test-WinmarchyProcessRunning { $false }
+        $out = (@(Get-WinmarchyStatus) -join "`n")
+        $out | Should -Match 'mode:\s+win11'
+        $out | Should -Match 'theme:\s+tokyo-night'
+        $out | Should -Match 'journal: 0 pending'
+        $out | Should -Match 'glazewm: stopped'
+        $out | Should -Match 'Flow\.Launcher: stopped'
+    }
+
     It 'names the dead keys and the fix when an app a keybinding needs is missing' {
         # The failure that started this: a winget package failed, doctor said
         # everything was fine, and lwin+enter did nothing.
@@ -624,6 +635,51 @@ Describe 'doctor' {
         $row.pass | Should -BeFalse
         $row.detail | Should -Match 'lwin\+enter'
         $row.detail | Should -Match 'winget install -e --id Alacritty.Alacritty'
+    }
+}
+
+Describe 'The pre-install wallpaper from the oldest backup' {
+    # The substitute value the poison guards reach for (FLAG-42): when the
+    # current wallpaper is one of Winmarchy's own, the baseline capture uses
+    # the machine's pre-install wallpaper from the oldest backup manifest.
+    BeforeEach {
+        $script:backupRoot = Get-WinmarchyBackupDir
+        $null = New-Item -ItemType Directory -Path $script:backupRoot -Force
+    }
+
+    It 'returns the wallpaper from the OLDEST manifest that carries one' {
+        foreach ($set in @(
+            @{ dir = '20240101-000000'; wallpaper = 'C:\Users\mat\Pictures\original.jpg' },
+            @{ dir = '20250101-000000'; wallpaper = 'C:\Users\mat\Pictures\later.jpg' }
+        )) {
+            $setDir = Join-Path $script:backupRoot $set.dir
+            $null = New-Item -ItemType Directory -Path $setDir -Force
+            $manifest = @{ created = $set.dir; entries = @(@{ label = 'wallpaper'; value = $set.wallpaper }) } | ConvertTo-Json -Depth 4
+            Write-WinmarchyTextFile -Path (Join-Path $setDir 'manifest.json') -Content $manifest
+        }
+        Get-WinmarchyInstallManifestWallpaper | Should -Be 'C:\Users\mat\Pictures\original.jpg'
+    }
+
+    It 'skips a manifest whose wallpaper is one of Winmarchy''s own' {
+        $ourWallpaper = Join-Path (Get-WinmarchyWallpaperDir) 'tokyo-night.png'
+        foreach ($set in @(
+            @{ dir = '20240101-000000'; wallpaper = $ourWallpaper },
+            @{ dir = '20250101-000000'; wallpaper = 'C:\Users\mat\Pictures\real.jpg' }
+        )) {
+            $setDir = Join-Path $script:backupRoot $set.dir
+            $null = New-Item -ItemType Directory -Path $setDir -Force
+            $manifest = @{ created = $set.dir; entries = @(@{ label = 'wallpaper'; value = $set.wallpaper }) } | ConvertTo-Json -Depth 4
+            Write-WinmarchyTextFile -Path (Join-Path $setDir 'manifest.json') -Content $manifest
+        }
+        Get-WinmarchyInstallManifestWallpaper | Should -Be 'C:\Users\mat\Pictures\real.jpg'
+    }
+
+    It 'returns nothing when there are no backups, and survives an unreadable manifest' {
+        Get-WinmarchyInstallManifestWallpaper | Should -BeNullOrEmpty
+        $setDir = Join-Path $script:backupRoot '20240101-000000'
+        $null = New-Item -ItemType Directory -Path $setDir -Force
+        Write-WinmarchyTextFile -Path (Join-Path $setDir 'manifest.json') -Content 'not json {'
+        Get-WinmarchyInstallManifestWallpaper | Should -BeNullOrEmpty
     }
 }
 }

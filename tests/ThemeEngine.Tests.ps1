@@ -401,4 +401,32 @@ Describe 'Review regression fixes' {
         { Get-WinmarchyTheme -Name 'broken' } | Should -Throw '*not a six-digit hex colour*'
     }
 }
+
+Describe 'JSONC noise stripper' {
+    # Windows Terminal's settings.json may carry comments and trailing
+    # commas; this walker strips them before parsing. Tested directly
+    # because a regex-shaped bug here corrupts the user's own settings file.
+    It 'strips line comments, block comments and trailing commas' {
+        $text = '{' + [Environment]::NewLine +
+            '  // the colour scheme' + [Environment]::NewLine +
+            '  "a": 1, /* block */ "b": [1, 2,],' + [Environment]::NewLine +
+            '}'
+        $parsed = (Remove-WinmarchyJsoncNoise -Text $text) | ConvertFrom-Json
+        $parsed.a | Should -Be 1
+        @($parsed.b).Count | Should -Be 2
+    }
+
+    It 'never touches comment markers or comma-brace sequences inside strings' {
+        $text = '{"cmd": "cmd.exe /c echo {a,} // not a comment /* nor this */"}'
+        $parsed = (Remove-WinmarchyJsoncNoise -Text $text) | ConvertFrom-Json
+        $parsed.cmd | Should -Be 'cmd.exe /c echo {a,} // not a comment /* nor this */'
+    }
+
+    It 'follows escaped quotes without losing track of the string' {
+        $text = '{"a": "say \"hi\" // still inside", "b": 2, }'
+        $parsed = (Remove-WinmarchyJsoncNoise -Text $text) | ConvertFrom-Json
+        $parsed.a | Should -Be 'say "hi" // still inside'
+        $parsed.b | Should -Be 2
+    }
+}
 }

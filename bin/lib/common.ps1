@@ -1103,14 +1103,39 @@ function Get-WinmarchyWallpaperCandidates {
     # copy would duplicate the collection and go stale. The formats are the
     # ones the SPI_SETDESKWALLPAPER path accepts on Windows 11 (bmp always;
     # jpg and png are transcoded by the shell).
+    #
+    # The walk is raw .NET rather than Get-ChildItem -Recurse because this
+    # list is rebuilt on every wallpaper change, every swap and every theme
+    # change: the cmdlet wraps each file in a PSObject and the wrapper cost
+    # dominates on a big collection (measured about 13x slower on a
+    # 5000-file tree, and 5.1's heavier wrapper widens that). Hidden
+    # entries are skipped, matching what
+    # Get-ChildItem without -Force returned, so a hidden folder full of
+    # pictures joins or leaves the rotation exactly as before. An unreadable
+    # subfolder skips itself, matching the old -ErrorAction SilentlyContinue.
     param([Parameter(Mandatory = $true)][string]$Folder)
-    $pictures = @()
-    foreach ($file in @(Get-ChildItem -Path $Folder -File -Recurse -ErrorAction SilentlyContinue)) {
-        if ($file.Extension -match '^\.(jpg|jpeg|png|bmp)$') {
-            $pictures = $pictures + $file.FullName
+    $extensions = @('.jpg', '.jpeg', '.png', '.bmp')
+    $hidden = [System.IO.FileAttributes]::Hidden
+    $pictures = New-Object System.Collections.Generic.List[string]
+    $pending = New-Object System.Collections.Generic.Stack[string]
+    $pending.Push($Folder)
+    while ($pending.Count -gt 0) {
+        $dir = $pending.Pop()
+        try {
+            $info = New-Object System.IO.DirectoryInfo($dir)
+            foreach ($entry in $info.GetFileSystemInfos()) {
+                if (($entry.Attributes -band $hidden) -ne 0) { continue }
+                if ($entry -is [System.IO.DirectoryInfo]) {
+                    $pending.Push($entry.FullName)
+                } elseif ($extensions -contains $entry.Extension.ToLowerInvariant()) {
+                    $pictures.Add($entry.FullName)
+                }
+            }
+        } catch {
+            continue
         }
     }
-    return $pictures
+    return $pictures.ToArray()
 }
 
 function Get-WinmarchyWallpaperIntervalMinutes {
@@ -2015,6 +2040,57 @@ function Test-WinmarchyWingetPackagePresent {
     return ($LASTEXITCODE -eq 0)
 }
 
+function Test-WinmarchyPackageOnDisk {
+    # Fast local evidence that a package is already installed, so the
+    # installer can skip it in milliseconds instead of asking winget (a
+    # winget list probe costs a second or two per package, which adds up to
+    # most of a re-run's wait once nothing needs installing). $true means
+    # positive evidence on this disk; $false only means "no evidence here",
+    # and the caller falls back to the winget probe, so a package this
+    # function does not recognise is never wrongly skipped.
+    param([Parameter(Mandatory = $true)][string]$PackageId)
+
+    # The five programs the keybindings depend on already have a shared
+    # resolution table with per-app fallback paths; presence uses the same
+    # answer doctor uses, so the two can never disagree.
+    foreach ($app in (Get-WinmarchyBindingCriticalApps)) {
+        if ($app.PackageId -eq $PackageId) {
+            return ($null -ne (Resolve-WinmarchyBindingCriticalApp -App $app))
+        }
+    }
+
+    if ($PackageId -eq 'voidtools.Everything') {
+        return ($null -ne (Get-WinmarchyEverythingExePath))
+    }
+    if ($PackageId -eq 'DEVCOM.JetBrainsMonoNerdFont') {
+        return (Test-WinmarchyNerdFontInstalled)
+    }
+    if ($PackageId -eq 'aristocratos.btop4win') {
+        # The shipped exe name differs between releases (FLAGS.md FLAG-33),
+        # so either name counts.
+        if (Find-WinmarchyExecutable -Name 'btop4win') { return $true }
+        return ($null -ne (Find-WinmarchyExecutable -Name 'btop'))
+    }
+
+    # The command line tools and Windows Terminal all land on PATH, which is
+    # what Find-WinmarchyExecutable checks first.
+    $exeNames = @{
+        'Microsoft.WindowsTerminal' = 'wt'
+        'Git.Git'                   = 'git'
+        'junegunn.fzf'              = 'fzf'
+        'BurntSushi.ripgrep.MSVC'   = 'rg'
+        'sharkdp.fd'                = 'fd'
+        'sharkdp.bat'               = 'bat'
+        'eza-community.eza'         = 'eza'
+        'ajeetdsouza.zoxide'        = 'zoxide'
+        'JesseDuffield.lazygit'     = 'lazygit'
+    }
+    if ($exeNames.ContainsKey($PackageId)) {
+        return ($null -ne (Find-WinmarchyExecutable -Name $exeNames[$PackageId]))
+    }
+    return $false
+}
+
 # ---------------------------------------------------------------------------
 # Everything, the launcher's file search backend
 # ---------------------------------------------------------------------------
@@ -2120,7 +2196,13 @@ function Start-WinmarchyEverythingClient {
     $exePath = Get-WinmarchyEverythingExePath
     if (-not $exePath) { return $false }
     Start-Process -FilePath $exePath -ArgumentList '-startup'
-    Start-Sleep -Milliseconds 500
+    # Poll rather than a fixed sleep: the process usually exists within a
+    # tenth of a second, and this sits on the swap path where every fixed
+    # wait is felt.
+    for ($attempt = 0; $attempt -lt 10; $attempt++) {
+        if (Test-WinmarchyProcessRunning -Name 'Everything') { return $true }
+        Start-Sleep -Milliseconds 100
+    }
     return (Test-WinmarchyProcessRunning -Name 'Everything')
 }
 

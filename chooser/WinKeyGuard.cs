@@ -128,6 +128,12 @@ public static class WinKeyGuard
     // evidence of the guard actually firing without the hook ever logging.
     private static int _maskedTaps;
     private static int _reportedTaps;
+    // The state file's timestamp at the last successful read, so the
+    // once-a-second timer only re-parses state.json when a swap actually
+    // rewrote it. The tray runs for the whole session; on a slow machine a
+    // parse per second is the kind of idle cost that adds up to a warm fan.
+    private static DateTime _stateStamp = DateTime.MinValue;
+    private static bool _stateStampActive;
 
     public static void Install()
     {
@@ -195,8 +201,21 @@ public static class WinKeyGuard
             // searched the raw file for "mode": "omarchy" with one space,
             // and Windows PowerShell 5.1's ConvertTo-Json writes two spaces
             // after the colon, so the guard never armed on the real machine
-            // (FLAG-36).
-            active = WinmarchyState.Load().Mode == "omarchy";
+            // (FLAG-36). The parse only happens when the file's write stamp
+            // moved: a mode swap always rewrites state.json, and a missing
+            // file reports a constant sentinel stamp, so "unchanged" always
+            // means "same answer as last time".
+            var stamp = System.IO.File.GetLastWriteTimeUtc(Paths.StateFile);
+            if (stamp == _stateStamp)
+            {
+                active = _stateStampActive;
+            }
+            else
+            {
+                active = WinmarchyState.Load().Mode == "omarchy";
+                _stateStamp = stamp;
+                _stateStampActive = active;
+            }
         }
         catch
         {

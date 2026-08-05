@@ -178,11 +178,17 @@ if ($SkipApps) {
         Invoke-WinmarchyInstallStep -Description ('winget install ' + $packageId + ' (' + $packagePurpose + ')') -Action {
             # Skip what the machine already has: each attempt is slow, and a
             # machine-scope package raises an elevation prompt even when
-            # there is nothing to do. The presence probe is winget's own
-            # installed list, so software installed by hand counts too. The
-            # price is that setup never upgrades a present package; that is
-            # what "winget upgrade" is for.
-            if (Test-WinmarchyWingetPackagePresent -PackageId $packageId) {
+            # there is nothing to do. Local evidence (the exe resolving, the
+            # font registered) answers in milliseconds; only a package with
+            # no local evidence pays for the slower winget list probe, which
+            # also counts software installed by hand. The price is that
+            # setup never upgrades a present package; that is what
+            # "winget upgrade" is for.
+            $alreadyPresent = Test-WinmarchyPackageOnDisk -PackageId $packageId
+            if (-not $alreadyPresent) {
+                $alreadyPresent = Test-WinmarchyWingetPackagePresent -PackageId $packageId
+            }
+            if ($alreadyPresent) {
                 Write-Output 'install:   already present, skipped'
                 $script:wingetResults = $script:wingetResults + @(, @{ id = $packageId; outcome = 'already present (skipped)' })
                 return
@@ -382,7 +388,15 @@ if ((Test-WinmarchyIsWindows) -and (-not $SkipChooser)) {
         $ErrorActionPreference = 'Continue'
         $publishOutput = @()
         try {
-            $publishOutput = @(& dotnet publish $chooserProject -c Release -o $chooserOut 2>&1)
+            # ReadyToRun trades disk for startup: the assemblies are
+            # ahead-of-time compiled so the chooser and tray cold-start
+            # without waiting on the JIT, which is where a slow machine
+            # loses the most at login. Flags per
+            # learn.microsoft.com/dotnet/core/deploying/ready-to-run
+            # (PublishReadyToRun needs a runtime identifier; framework
+            # dependent stays framework dependent via --self-contained
+            # false).
+            $publishOutput = @(& dotnet publish $chooserProject -c Release -r win-x64 --self-contained false '-p:PublishReadyToRun=true' -o $chooserOut 2>&1)
         } finally {
             $ErrorActionPreference = $savedPreference
         }

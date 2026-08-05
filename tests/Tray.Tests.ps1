@@ -203,6 +203,58 @@ Describe 'Wallpaper cycling' {
         Set-WinmarchyStateValue -Name 'wallpaperDir' -Value (Join-Path $TestDrive 'gone-away')
         Get-WinmarchyWallpaperFolder | Should -BeNullOrEmpty
     }
+
+    It 'skips hidden files and hidden folders, exactly as the old scan did' {
+        # The scan moved from Get-ChildItem to a raw .NET walk for speed;
+        # Get-ChildItem without -Force never saw hidden entries, and that
+        # behaviour must survive the rewrite. A dot prefix marks an entry
+        # hidden on Linux; on Windows the attribute is set explicitly,
+        # because a dot prefix alone hides nothing there.
+        $folder = Join-Path $TestDrive ('walls-' + [System.IO.Path]::GetRandomFileName())
+        $hiddenDir = Join-Path $folder '.cache'
+        $hiddenFile = Join-Path $folder '.sneaky.jpg'
+        $null = New-Item -ItemType Directory -Path $hiddenDir -Force
+        Write-WinmarchyTextFile -Path (Join-Path $folder 'seen.jpg') -Content 'x'
+        Write-WinmarchyTextFile -Path $hiddenFile -Content 'x'
+        Write-WinmarchyTextFile -Path (Join-Path $hiddenDir 'thumb.jpg') -Content 'x'
+        if (Test-WinmarchyIsWindows) {
+            [System.IO.File]::SetAttributes($hiddenFile, [System.IO.FileAttributes]::Hidden)
+            $dirInfo = New-Object System.IO.DirectoryInfo($hiddenDir)
+            $dirInfo.Attributes = $dirInfo.Attributes -bor [System.IO.FileAttributes]::Hidden
+        }
+        $found = @(Get-WinmarchyWallpaperCandidates -Folder $folder)
+        $found.Count | Should -Be 1
+        ($found -join ';') | Should -Match 'seen'
+    }
+
+    It 'quietly does nothing on next when cycling is off' {
+        Save-WinmarchyState -State (Get-WinmarchyDefaultState)
+        Mock Set-WinmarchyWallpaper { }
+        $out = @(Invoke-WinmarchyWallpaperNext)
+        ($out -join ' ') | Should -Match 'cycling is off'
+        Should -Invoke Set-WinmarchyWallpaper -Times 0 -Exactly
+    }
+
+    It 'warns and changes nothing when the folder holds no pictures' {
+        $folder = Join-Path $TestDrive ('walls-' + [System.IO.Path]::GetRandomFileName())
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        Set-WinmarchyStateValue -Name 'wallpaperDir' -Value $folder
+        Mock Set-WinmarchyWallpaper { }
+        { Invoke-WinmarchyWallpaperNext -WarningAction SilentlyContinue } | Should -Not -Throw
+        Should -Invoke Set-WinmarchyWallpaper -Times 0 -Exactly
+    }
+
+    It 'applies one picture from the pool and names it in the output' {
+        $folder = Join-Path $TestDrive ('walls-' + [System.IO.Path]::GetRandomFileName())
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        Write-WinmarchyTextFile -Path (Join-Path $folder 'one.jpg') -Content 'x'
+        Write-WinmarchyTextFile -Path (Join-Path $folder 'two.jpg') -Content 'x'
+        Set-WinmarchyStateValue -Name 'wallpaperDir' -Value $folder
+        Mock Set-WinmarchyWallpaper { }
+        $out = @(Invoke-WinmarchyWallpaperNext)
+        ($out -join ' ') | Should -Match 'wallpaper: (one|two)\.jpg'
+        Should -Invoke Set-WinmarchyWallpaper -Times 1 -Exactly -ParameterFilter { $Path -like '*.jpg' }
+    }
 }
 
 Describe 'Lock screen command' {
