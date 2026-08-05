@@ -481,6 +481,12 @@ function Invoke-WinmarchyDoctor {
         return [pscustomobject]@{ check = $Check; pass = $Pass; detail = $Detail }
     }
 
+    # First row on purpose: every other row describes the behaviour of a
+    # particular build, and knowing which one saves arguing about symptoms
+    # from code that was never deployed.
+    $stamp = Get-WinmarchyInstallStamp
+    $rows = $rows + (New-DoctorRow 'installed build' ($null -ne $stamp) (Get-WinmarchyInstallStampDetail -Stamp $stamp))
+
     $rows = $rows + (New-DoctorRow 'state file' (Test-Path (Get-WinmarchyStatePath)) (Get-WinmarchyStatePath))
     $rows = $rows + (New-DoctorRow 'journal empty' (-not (Test-WinmarchyJournalPending)) (Get-WinmarchyJournalPath))
     $rows = $rows + (New-DoctorRow 'recorded mode valid' ($state.mode -eq 'win11' -or $state.mode -eq 'omarchy') $state.mode)

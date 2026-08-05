@@ -314,6 +314,34 @@ Invoke-WinmarchyInstallStep -Description ('deploy bin/, themes/, templates/ and 
     }
 }
 
+Invoke-WinmarchyInstallStep -Description 'stamp this install with its build, so doctor can name what is running' -Action {
+    # Which commit is on the machine, recorded at install time. Three rounds
+    # of diagnosis have been spent on symptoms produced by code that was
+    # never deployed, so doctor now answers "what am I running" directly
+    # rather than leaving it to be inferred from the wording of other rows.
+    $commit = ''
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        $savedPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $described = & git -C $PSScriptRoot rev-parse --short HEAD 2>$null
+            if ($LASTEXITCODE -eq 0) { $commit = ([string]$described).Trim() }
+        } catch {
+            $commit = ''
+        } finally {
+            $ErrorActionPreference = $savedPreference
+        }
+    }
+    if (-not $commit) { $commit = 'a source tree with no git information' }
+    $stamp = @{
+        installedUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')
+        commit       = $commit
+        source       = $PSScriptRoot
+    }
+    Write-WinmarchyTextFile -Path (Get-WinmarchyInstallStampPath) -Content ($stamp | ConvertTo-Json -Depth 3)
+    Write-Output ('install:   build stamp ' + $commit)
+}
+
 Invoke-WinmarchyInstallStep -Description ('write GlazeWM config to ' + (Get-WinmarchyGlazewmConfigPath)) -Action {
     $configText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot (Join-Path 'config' (Join-Path 'glazewm' 'config.yaml'))))
 

@@ -519,6 +519,7 @@ Describe 'doctor' {
         Mock Get-WinmarchyRunKeyValue { ('"' + $script:fakeChooserExe + '"') }
         Mock Get-WinmarchyEverythingStatus { [pscustomobject]@{ ExePath = 'C:\fake\Everything.exe'; ServiceStatus = 'Running'; ClientRunning = $true; Autorun = 'machine' } }
         Mock Get-WinmarchyPathEntryStatus { [pscustomobject]@{ ShimPresent = $true; OnPath = $true; BinOnPath = $false; ShimDir = 'C:\fake\shim' } }
+        Write-WinmarchyTextFile -Path (Get-WinmarchyInstallStampPath) -Content (@{ installedUtc = '2026-08-05 01:02:03'; commit = 'abc1234'; source = 'C:\src' } | ConvertTo-Json)
     }
 
     It 'emits a JSON health table whose only failure is the absent WT settings' {
@@ -531,6 +532,21 @@ Describe 'doctor' {
             if (-not $row.pass) { $failing = $failing + $row.check }
         }
         $failing | Should -Be @('wt settings found')
+    }
+
+    It 'names the build it is running, first, and admits when it cannot' {
+        # Three rounds of diagnosis went on symptoms produced by code that was
+        # never deployed. Doctor answers "what am I running" directly now.
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $rows[0].check | Should -Be 'installed build'
+        $rows[0].pass | Should -BeTrue
+        $rows[0].detail | Should -Match 'abc1234'
+        $rows[0].detail | Should -Match '2026-08-05'
+
+        Remove-Item -Path (Get-WinmarchyInstallStampPath) -Force
+        $rows = @(Invoke-WinmarchyDoctor -Json | ConvertFrom-Json)
+        $rows[0].pass | Should -BeFalse
+        $rows[0].detail | Should -Match 're-run setup'
     }
 
     It 'checks every link in the chain between install and a chooser at login' {

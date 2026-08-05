@@ -1463,3 +1463,33 @@ it, not the one intended.
 
 Status: fixed in code, open until a fresh terminal on the machine runs
 "winmarchy doctor" successfully.
+
+## FLAG-53: doctor now names the build it is running
+
+Context: Mat sent a clean doctor run, 27 rows all passing, while reporting
+that the Windows key fix had not worked. The giveaway was in the wording:
+the guard row read "0 bare tap(s) masked", which is the text from BEFORE the
+FLAG-50 fix, and there was no "winmarchy on PATH" row at all. The machine
+was running an older pull, so the fix under discussion had never executed
+there. The symptom was real and the diagnosis was sound; the code simply was
+not present.
+
+That is the third time: FLAG-43 was an exe Windows had locked so publish
+could not replace it, and twice now it has been a machine running an earlier
+pull. In every case the round was spent reasoning about behaviour of code
+that was not on the machine, and in every case the truth was recoverable
+only by noticing incidental details, such as the exact wording of a log line.
+
+Fix: install.ps1 writes state/install.json with the install time and the
+short commit of the source tree it was run from, and doctor reports it as
+its FIRST row. "What am I running" is now a direct answer rather than
+something inferred from the phrasing of other rows. An install predating the
+stamp reports itself as unknown and says to re-run setup, which is exactly
+the machine state this flag was written about.
+
+Lesson for the register: when a report and the code disagree, establish
+which build produced the report before reasoning about the behaviour. Every
+diagnostic surface should be able to identify its own version.
+
+Status: closed once a reinstall shows a commit on the row; the value it
+provides is permanent.

@@ -2325,6 +2325,36 @@ function Install-WinmarchyEverythingService {
 # Is "winmarchy" reachable as a command
 # ---------------------------------------------------------------------------
 
+function Get-WinmarchyInstallStampPath { return (Join-Path (Get-WinmarchyStateDir) 'install.json') }
+
+function Get-WinmarchyInstallStamp {
+    # When this copy was installed and from which commit. Written by
+    # install.ps1 and reported by doctor, because three separate rounds of
+    # diagnosis have been spent on symptoms from code that was never
+    # deployed: an exe Windows had locked (FLAG-43), and twice a machine
+    # simply running an older pull. A build the user cannot identify is a
+    # build nobody can reason about.
+    $path = Get-WinmarchyInstallStampPath
+    if (-not (Test-Path $path)) { return $null }
+    try {
+        return (ConvertTo-WinmarchyHashtable ([System.IO.File]::ReadAllText($path) | ConvertFrom-Json))
+    } catch {
+        return $null
+    }
+}
+
+function Get-WinmarchyInstallStampDetail {
+    # One line for doctor, and a pure function so it is testable.
+    param($Stamp)
+    if ($null -eq $Stamp) {
+        return 'unknown; this install predates build stamping, so re-run setup to find out what you are running'
+    }
+    $when = [string]$Stamp['installedUtc']
+    $commit = [string]$Stamp['commit']
+    if (-not $commit) { $commit = 'unknown commit' }
+    return ('installed ' + $when + ' UTC from ' + $commit)
+}
+
 function Get-WinmarchyPathEntryStatus {
     # What the user PATH carries. The entry must be shim\, which holds only
     # winmarchy.cmd, and must NOT be bin\: bin\ also holds winmarchy.ps1, and
