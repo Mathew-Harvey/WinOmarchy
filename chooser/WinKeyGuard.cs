@@ -136,6 +136,11 @@ public static class WinKeyGuard
     private static DateTime _stateStamp = DateTime.MinValue;
     private static bool _stateStampActive;
 
+    // Set by the tray's timer, acted on by the hook thread. Volatile because
+    // the two never share a lock, exactly like the armed flag above.
+    private static volatile bool _rehookRequested;
+    private static volatile bool _stopping;
+
     public static void Install()
     {
         if (_hook != IntPtr.Zero)
@@ -165,31 +170,88 @@ public static class WinKeyGuard
         // Earlier versions read and parsed state.json inside the callback;
         // one slow cold read there could kill the guard for the whole
         // session (FLAG-38). The callback now touches nothing but this flag.
+        // This timer belongs to the CALLER's thread, the tray's, and does all
+        // the reading, writing and logging there.
         _modeTimer = new Timer { Interval = 1000 };
         _modeTimer.Tick += (_, _) => RefreshMode();
         _modeTimer.Start();
         RefreshMode();
 
+        // The hook itself gets a thread of its own, which exists to pump
+        // messages and run the callback and does nothing else, ever.
+        // A WH_KEYBOARD_LL callback is delivered on the thread that installed
+        // the hook, so before this it shared the tray's message loop with the
+        // notification icon, its menu, the wallpaper timer and the heartbeat
+        // write that happens every single second. Any of those running long
+        // made every keystroke in the system queue behind them, against a
+        // deadline whose penalty is the hook being silently removed. Nothing
+        // can queue in front of the callback now (FLAGS.md FLAG-54).
+        var thread = new Thread(HookThreadMain)
+        {
+            IsBackground = true,
+            Name = "WinmarchyKeyGuard",
+            // Above the tray's own work, since the whole system's input waits
+            // on this callback returning.
+            Priority = ThreadPriority.AboveNormal,
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+    }
+
+    private static void HookThreadMain()
+    {
         // A module handle of zero is valid for WH_KEYBOARD_LL hooks in
-        // managed code; the hook runs in this process's message loop.
+        // managed code; the hook runs on this thread's message loop.
         _hook = SetWindowsHookExW(WhKeyboardLl, Proc, IntPtr.Zero, 0);
         if (_hook == IntPtr.Zero)
         {
             Paths.Log("win key guard: hook failed to install (error " + Marshal.GetLastWin32Error() + "); the Windows key keeps its stock behaviour");
             return;
         }
-        Paths.Log("win key guard: hook installed; arms and disarms with the mode");
+        Paths.Log("win key guard: hook installed on its own thread; arms and disarms with the mode");
+
+        // The only work this thread does besides the callback: re-establish
+        // the hook when the mode timer asks, and stand down on shutdown.
+        // Deliberately no file access, no parsing and no logging on a tick.
+        var maintenance = new Timer { Interval = 250 };
+        maintenance.Tick += (_, _) =>
+        {
+            if (_stopping)
+            {
+                maintenance.Stop();
+                if (_hook != IntPtr.Zero)
+                {
+                    UnhookWindowsHookEx(_hook);
+                    _hook = IntPtr.Zero;
+                }
+                System.Windows.Forms.Application.ExitThread();
+                return;
+            }
+            if (_rehookRequested)
+            {
+                _rehookRequested = false;
+                if (_hook != IntPtr.Zero)
+                {
+                    UnhookWindowsHookEx(_hook);
+                }
+                _hook = SetWindowsHookExW(WhKeyboardLl, Proc, IntPtr.Zero, 0);
+                if (_hook == IntPtr.Zero)
+                {
+                    Paths.Log("win key guard: RE-HOOK FAILED (error " + Marshal.GetLastWin32Error() + "); the Windows key will open Start");
+                }
+            }
+        };
+        maintenance.Start();
+        System.Windows.Forms.Application.Run();
     }
 
     public static void Uninstall()
     {
+        // The hook belongs to its own thread and is released there: the
+        // callback may be mid-flight, and that thread owns the handle. This
+        // just asks, and the maintenance tick stands the thread down.
         _modeTimer?.Stop();
-        if (_hook == IntPtr.Zero)
-        {
-            return;
-        }
-        UnhookWindowsHookEx(_hook);
-        _hook = IntPtr.Zero;
+        _stopping = true;
     }
 
     private static void RefreshMode()
@@ -228,24 +290,20 @@ public static class WinKeyGuard
             Paths.Log(active
                 ? "win key guard: armed (omarchy mode; a bare Windows key tap opens nothing)"
                 : "win key guard: disarmed (the Windows key is stock again)");
-            if (active && _hook != IntPtr.Zero)
+            if (active)
             {
                 // A fresh hook at the moment it matters: if anything removed
-                // the old one along the way, arming re-establishes it. Never
-                // silently: a failed re-hook IS the guard being dead.
-                UnhookWindowsHookEx(_hook);
-                _hook = SetWindowsHookExW(WhKeyboardLl, Proc, IntPtr.Zero, 0);
-                if (_hook == IntPtr.Zero)
-                {
-                    Paths.Log("win key guard: RE-HOOK FAILED (error " + Marshal.GetLastWin32Error() + "); the Windows key will open Start");
-                }
+                // the old one along the way, arming re-establishes it. The
+                // hook belongs to its own thread, so this asks rather than
+                // acts; that thread picks the request up within a tick.
+                _rehookRequested = true;
             }
         }
         var taps = _maskedTaps;
         if (taps != _reportedTaps)
         {
             _reportedTaps = taps;
-            Paths.Log("win key guard: masked " + taps + " bare tap(s) so far this session");
+            Paths.Log("win key guard: masked " + taps + " Windows key release(s) so far this session");
         }
     }
 
@@ -338,7 +396,16 @@ public static class WinKeyGuard
         return CallNextHookEx(_hook, nCode, wParam, lParam);
     }
 
-    private static bool ReplayMaskedWinUp(uint winVkCode)
+    // Built once and reused. The callback runs inside the system's input
+    // path under a deadline, so it allocates nothing: a three element array
+    // per keystroke is garbage the collector would eventually have to stop
+    // and sweep, and a collection landing inside the callback is one of the
+    // few things that can push it past LowLevelHooksTimeout. Only the last
+    // entry's key code ever changes, and only the hook thread touches it.
+    private static readonly Input[] ReplayBuffer = BuildReplayBuffer();
+    private static readonly int InputSize = Marshal.SizeOf<Input>();
+
+    private static Input[] BuildReplayBuffer()
     {
         // vkE8 down, vkE8 up, then the Windows key up. 0xE8 is unassigned in
         // the winuser.h virtual key table, so nothing can act on it; its only
@@ -350,11 +417,16 @@ public static class WinKeyGuard
         inputs[1].u.ki.wVk = VkUnassigned;
         inputs[1].u.ki.dwFlags = 2; // KEYEVENTF_KEYUP
         inputs[2].type = 1;
-        inputs[2].u.ki.wVk = (ushort)winVkCode;
         inputs[2].u.ki.dwFlags = 2; // KEYEVENTF_KEYUP
+        return inputs;
+    }
+
+    private static bool ReplayMaskedWinUp(uint winVkCode)
+    {
+        ReplayBuffer[2].u.ki.wVk = (ushort)winVkCode;
         // Only report success when the whole sequence was accepted. A partial
         // or failed send must leave the real up alone, or the Windows key
         // would be left logically held down with no way back.
-        return SendInput(3, inputs, Marshal.SizeOf<Input>()) == 3;
+        return SendInput(3, ReplayBuffer, InputSize) == 3;
     }
 }

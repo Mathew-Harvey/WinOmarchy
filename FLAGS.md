@@ -1493,3 +1493,47 @@ diagnostic surface should be able to identify its own version.
 
 Status: closed once a reinstall shows a commit on the row; the value it
 provides is permanent.
+
+## FLAG-54: the key guard gets its own thread, and no native rewrite
+
+Context: the ranked performance list proposed rewriting the Windows key
+guard as a tiny native helper in C or Rust, on the grounds that a .NET
+process can be paused by its garbage collector and a callback that overruns
+LowLevelHooksTimeout has its hook silently removed. Mat asked for that item.
+
+It was not built as proposed, and the reason is a cost the original proposal
+under-weighted: a native helper means every install needs a C or Rust
+toolchain on top of the .NET SDK to produce a 50KB binary, or else a
+prebuilt executable committed to an MIT repository and run at every login,
+which nobody can audit. Neither is a good trade for a component that works.
+
+What the proposal was actually reaching for was a guard that cannot be
+silently removed, and two things threatened that, both fixable in the
+existing C#:
+
+1. The callback shared a thread with everything else the tray does. A
+   WH_KEYBOARD_LL callback is delivered on the thread that installed the
+   hook, and that was the tray's UI thread, which also carries the
+   notification icon, its context menu, the wallpaper timer and a heartbeat
+   file write EVERY SECOND. Any of those running long put every keystroke in
+   the system behind them, against a deadline whose penalty is the hook
+   being dropped. The hook now runs on a dedicated thread whose only jobs
+   are pumping messages and running the callback; it does no file access, no
+   parsing and no logging on a tick. The tray's timer keeps all of that and
+   now only asks for a re-hook through a volatile flag.
+2. The callback allocated a three element array on every masked release.
+   That is garbage the collector must eventually stop and sweep, and a
+   collection landing inside the callback is precisely the failure being
+   guarded against. The buffer is built once and reused; the keystroke path
+   now allocates nothing.
+
+This gets most of what a native rewrite offered, at no cost to the setup
+requirements. The remaining exposure is a GC pause triggered by another
+thread landing while the callback runs, which is a far smaller target than
+either of the above and is not worth a second language to close.
+
+Deferred to the machine: that the guard still arms, still masks, and that
+doctor's count still rises. The threading change is invisible when it works,
+so the checklist item is simply that nothing regressed.
+
+Status: open until the machine confirms the guard still behaves.

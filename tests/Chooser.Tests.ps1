@@ -149,14 +149,49 @@ Describe 'Never shows nothing' {
         $callback | Should -Match 'if \(ReplayMaskedWinUp\(info\.vkCode\)\)'
     }
 
+    It 'runs the hook on a thread of its own, where nothing can queue in front of it' {
+        # A WH_KEYBOARD_LL callback is delivered on the thread that installed
+        # the hook. That used to be the tray's UI thread, shared with the
+        # notification icon, its menu, the wallpaper timer and a heartbeat
+        # file write every single second: any of those running long made every
+        # keystroke in the system wait behind them, against a deadline whose
+        # penalty is the hook being silently removed (FLAGS.md FLAG-54).
+        $guard = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'WinKeyGuard.cs'))
+        $guard | Should -Match 'new Thread\(HookThreadMain\)'
+        $guard | Should -Match 'WinmarchyKeyGuard'
+        # Bounded to that method: everything after it in the file is the
+        # tray-thread work this one must stay clear of.
+        $thread = (($guard -split 'private static void HookThreadMain')[1] -split 'public static void Uninstall')[0]
+        $thread | Should -Match 'SetWindowsHookExW'
+        $thread | Should -Match 'Application\.Run\(\)'
+        # The maintenance tick on that thread must stay free of the I/O that
+        # the tray's timer does, or the isolation is undone.
+        $thread | Should -Not -Match 'WriteHeartbeat'
+        $thread | Should -Not -Match 'WinmarchyState\.Load'
+    }
+
+    It 'allocates nothing on the keystroke path' {
+        # A three element array per keystroke is garbage the collector would
+        # eventually stop the world to sweep, and a collection landing inside
+        # the callback is one of the few things that can overrun the deadline.
+        $guard = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'WinKeyGuard.cs'))
+        $replay = ($guard -split 'private static bool ReplayMaskedWinUp')[1]
+        $replay | Should -Not -Match 'new Input\[3\]'
+        $replay | Should -Match 'ReplayBuffer'
+        $guard | Should -Match 'static readonly Input\[\] ReplayBuffer'
+    }
+
     It 'replays a Windows key up for every one it swallows, so the key cannot stick' {
         $guard = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'WinKeyGuard.cs'))
-        $replay = ($guard -split 'ReplayMaskedWinUp\(uint winVkCode\)')[1]
         # Three events: mask down, mask up, and the Windows key up itself.
-        $replay | Should -Match 'new Input\[3\]'
+        # Built once now rather than per keystroke, so the shape is asserted
+        # where it is built.
+        $buffer = ($guard -split 'private static Input\[\] BuildReplayBuffer')[1]
+        $buffer | Should -Match 'new Input\[3\]'
+        $replay = ($guard -split 'private static bool ReplayMaskedWinUp\(uint winVkCode\)')[1]
         $replay | Should -Match 'winVkCode'
         # Swallowing is conditional on the replay being accepted in full.
-        $replay | Should -Match 'SendInput\(3, inputs, Marshal\.SizeOf<Input>\(\)\) == 3'
+        $replay | Should -Match 'SendInput\(3, ReplayBuffer, InputSize\) == 3'
         $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
         $applet | Should -Match 'WinKeyGuard\.Install\(\)'
         $applet | Should -Match 'WinKeyGuard\.Uninstall\(\)'

@@ -380,3 +380,15 @@ during setup, or run the installer with a bad winget source.
 - [ ] P4. In Omarchy mode, lwin+ctrl+space cycles the theme and
       lwin+shift+x returns to Windows 11: both go through this command and
       were failing silently before.
+
+## Q. Round: the key guard on its own thread
+
+- [ ] Q1. Everything from section O still holds: bindings work, no Start
+      menu, bare tap does nothing, Windows 11 mode is stock.
+- [ ] Q2. doctor's guard row still says armed, and the masked count still
+      rises as bindings are used.
+- [ ] Q3. Open the tray menu and leave it open for a few seconds while
+      pressing Windows key combinations: the keys keep working, because the
+      hook no longer shares a thread with the menu.
+- [ ] Q4. Swap Omarchy to Windows 11 and back twice: the guard arms and
+      disarms each time, and the log shows the re-hook on arming.
