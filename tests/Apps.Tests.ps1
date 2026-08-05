@@ -129,6 +129,58 @@ Describe 'Package presence probes' {
     }
 }
 
+Describe 'The winmarchy command on PATH' {
+    # The failure this pins: bin\ was on PATH and holds BOTH winmarchy.cmd and
+    # winmarchy.ps1. PowerShell resolves a bare "winmarchy" to the .ps1 ahead
+    # of the .cmd and runs it in the caller's session, where the default
+    # Restricted execution policy refuses it, so every winmarchy command
+    # typed into PowerShell failed, doctor included (FLAGS.md FLAG-52).
+    It 'passes only when the shim is present and bin is not on PATH' {
+        $verdict = Get-WinmarchyPathDoctorRow -Status ([pscustomobject]@{
+            ShimPresent = $true; OnPath = $true; BinOnPath = $false; ShimDir = 'C:\w\shim'
+        })
+        $verdict.Pass | Should -BeTrue
+    }
+
+    It 'fails while the old bin entry survives on PATH, and says why' {
+        $verdict = Get-WinmarchyPathDoctorRow -Status ([pscustomobject]@{
+            ShimPresent = $true; OnPath = $true; BinOnPath = $true; ShimDir = 'C:\w\shim'
+        })
+        $verdict.Pass | Should -BeFalse
+        $verdict.Detail | Should -Match 'winmarchy\.ps1'
+        $verdict.Detail | Should -Match 'execution policy'
+    }
+
+    It 'fails when the shim is missing or not on PATH' {
+        (Get-WinmarchyPathDoctorRow -Status ([pscustomobject]@{
+            ShimPresent = $false; OnPath = $false; BinOnPath = $false; ShimDir = 'C:\w\shim'
+        })).Pass | Should -BeFalse
+        $verdict = Get-WinmarchyPathDoctorRow -Status ([pscustomobject]@{
+            ShimPresent = $true; OnPath = $false; BinOnPath = $false; ShimDir = 'C:\w\shim'
+        })
+        $verdict.Pass | Should -BeFalse
+        $verdict.Detail | Should -Match 'not on your PATH'
+    }
+
+    It 'installs the shim directory on PATH and takes bin off it' {
+        $installText = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot 'install.ps1'))
+        $installText | Should -Match "Join-Path \`$installRoot 'shim'"
+        # The old entry has to be removed, not merely left unadded, or a
+        # machine that has installed before keeps the broken resolution.
+        $installText | Should -Match '\$part -ne \$binDir'
+        $uninstallText = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot 'uninstall.ps1'))
+        $uninstallText | Should -Match '\$shimDir'
+    }
+
+    It 'reaches the dispatcher from either directory, and always with the policy bypass' {
+        $shim = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'bin' 'winmarchy.cmd')))
+        $shim | Should -Match '-ExecutionPolicy Bypass'
+        # %~dp0..\bin\ resolves to bin\ from shim\ and back to itself from
+        # bin\, so one line serves both locations.
+        $shim | Should -Match ([regex]::Escape('%~dp0..\bin\winmarchy.ps1'))
+    }
+}
+
 Describe 'Everything, the file search backend' {
     It 'never reinstalls: the presence probe runs before winget install in the loop' {
         # Round two of every install used to re-run all the machine-scope

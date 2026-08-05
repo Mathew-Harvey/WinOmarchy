@@ -518,6 +518,7 @@ Describe 'doctor' {
         Mock Resolve-WinmarchyBindingCriticalApp { 'C:\fake\tool.exe' }
         Mock Get-WinmarchyRunKeyValue { ('"' + $script:fakeChooserExe + '"') }
         Mock Get-WinmarchyEverythingStatus { [pscustomobject]@{ ExePath = 'C:\fake\Everything.exe'; ServiceStatus = 'Running'; ClientRunning = $true; Autorun = 'machine' } }
+        Mock Get-WinmarchyPathEntryStatus { [pscustomobject]@{ ShimPresent = $true; OnPath = $true; BinOnPath = $false; ShimDir = 'C:\fake\shim' } }
     }
 
     It 'emits a JSON health table whose only failure is the absent WT settings' {

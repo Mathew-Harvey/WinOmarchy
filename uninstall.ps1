@@ -80,14 +80,17 @@ Invoke-WinmarchyUninstallStep -Description 'remove the Start menu and desktop sh
 }
 
 # 5. PATH entry.
-Invoke-WinmarchyUninstallStep -Description 'remove the bin directory from the user PATH' -Action {
+Invoke-WinmarchyUninstallStep -Description 'remove the Winmarchy directories from the user PATH' -Action {
     if (Test-WinmarchyIsWindows) {
+        # shim\ is what current installs put on PATH; bin\ is what older ones
+        # did, and a machine that has been through both carries either.
         $binDir = Join-Path $installRoot 'bin'
+        $shimDir = Join-Path $installRoot 'shim'
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         if ($userPath) {
             $kept = @()
             foreach ($part in ($userPath -split ';')) {
-                if ($part -ne $binDir -and $part -ne '') { $kept = $kept + $part }
+                if ($part -ne $binDir -and $part -ne $shimDir -and $part -ne '') { $kept = $kept + $part }
             }
             [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User')
         }

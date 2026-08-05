@@ -521,6 +521,12 @@ function Invoke-WinmarchyDoctor {
     $everythingRow = Get-WinmarchyEverythingDoctorRow -Status (Get-WinmarchyEverythingStatus)
     $rows = $rows + (New-DoctorRow 'file search (Everything)' $everythingRow.Pass $everythingRow.Detail)
 
+    # Whether "winmarchy" typed into a shell reaches the dispatcher at all.
+    # It did not for a while, and the failure hid every other diagnosis
+    # behind it, doctor included.
+    $pathRow = Get-WinmarchyPathDoctorRow -Status (Get-WinmarchyPathEntryStatus)
+    $rows = $rows + (New-DoctorRow 'winmarchy on PATH' $pathRow.Pass $pathRow.Detail)
+
     $expectedProcesses = ($state.mode -eq 'omarchy')
     $rows = $rows + (New-DoctorRow ('glazewm ' + $(if ($expectedProcesses) { 'running' } else { 'stopped' })) ((Test-WinmarchyProcessRunning -Name 'glazewm') -eq $expectedProcesses) ('mode is ' + $state.mode))
     $barKind = Get-WinmarchyBarKind

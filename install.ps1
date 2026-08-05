@@ -351,16 +351,30 @@ Invoke-WinmarchyInstallStep -Description ('write yasb config to ' + (Join-Path (
 }
 
 if (Test-WinmarchyIsWindows) {
-    Invoke-WinmarchyInstallStep -Description 'add the winmarchy bin directory to the user PATH' -Action {
+    Invoke-WinmarchyInstallStep -Description 'put the winmarchy command on the user PATH' -Action {
+        # The PATH entry is shim\, which holds winmarchy.cmd and nothing else.
+        # bin\ must stay OFF the PATH: it also holds winmarchy.ps1, and
+        # PowerShell resolves a bare "winmarchy" to the .ps1 ahead of the
+        # .cmd, then runs it in the caller's session where the default
+        # Restricted execution policy refuses it. Every "winmarchy ..." typed
+        # into PowerShell failed that way, including doctor (FLAGS.md
+        # FLAG-52). Earlier installs put bin\ on PATH, so it is removed here
+        # rather than merely not added.
         $binDir = Join-Path $installRoot 'bin'
+        $shimDir = Join-Path $installRoot 'shim'
+        if (-not (Test-Path $shimDir)) { $null = New-Item -ItemType Directory -Path $shimDir -Force }
+        Copy-Item -Path (Join-Path $binDir 'winmarchy.cmd') -Destination (Join-Path $shimDir 'winmarchy.cmd') -Force
+
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         if ($null -eq $userPath) { $userPath = '' }
-        $parts = $userPath -split ';'
-        if (-not ($parts -contains $binDir)) {
-            $newPath = $userPath.TrimEnd(';') + ';' + $binDir
-            [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+        $parts = @()
+        foreach ($part in ($userPath -split ';')) {
+            if ($part -ne '' -and $part -ne $binDir -and $part -ne $shimDir) { $parts = $parts + $part }
         }
-        $env:Path = $env:Path + ';' + $binDir
+        $parts = $parts + $shimDir
+        [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
+        $env:Path = $env:Path + ';' + $shimDir
+        Write-Output ('install:   winmarchy command on PATH via ' + $shimDir)
     }
 } else {
     Write-Output 'install: user PATH update skipped (not on Windows)'

@@ -1424,3 +1424,42 @@ outline. Checked by rendering 16, 24, 32 and 64 and looking at them.
 
 Status: closed; the on-machine confirmation is the icon appearing in
 Explorer, the taskbar and the Start menu.
+
+## FLAG-52: every "winmarchy" command typed into PowerShell was blocked
+
+Context: Mat ran "winmarchy doctor" and got "File ...\bin\winmarchy.ps1
+cannot be loaded because running scripts is disabled on this system." The
+same for "winmarchy bar native". This had been true of every winmarchy
+command on his machine, which also means every diagnosis it could have given
+was unavailable behind it.
+
+The shim was not at fault: bin\winmarchy.cmd has always passed
+-ExecutionPolicy Bypass. The fault is that bin\ was the directory put on
+PATH, and bin\ holds BOTH winmarchy.cmd and winmarchy.ps1. PowerShell
+resolves a bare "winmarchy" to the .ps1 ahead of the .cmd and runs it inside
+the caller's own session, where the default Restricted execution policy
+refuses it outright. The .cmd, and the bypass it carries, never got a look
+in. From cmd.exe it would have worked, which is why it survived this long.
+
+Fix: the PATH entry is now shim\, a directory holding winmarchy.cmd and
+nothing else, so the name cannot resolve to anything but the .cmd. The
+installer removes the old bin\ entry rather than merely not adding it, since
+every existing install carries it. One line in the shim serves both
+locations: %~dp0..\bin\winmarchy.ps1 resolves to bin\ from shim\ and back to
+itself from bin\. The uninstaller removes both entries.
+
+Doctor gains a "winmarchy on PATH" row, because this failure hid every other
+diagnosis behind it, including its own.
+
+Worth noting what else this was breaking, all of it silently: the GlazeWM
+bindings that call the command, which include lwin+ctrl+space for the next
+theme and lwin+shift+x, the panic key back to Windows 11, plus the bar's
+menu button. The panic path having a second route (the Start menu shortcut,
+which passes the bypass explicitly) is the only reason this was not worse.
+
+Lesson for the register: a shim is only as good as the name resolution that
+reaches it. Putting a directory on PATH publishes EVERY executable name in
+it, not the one intended.
+
+Status: fixed in code, open until a fresh terminal on the machine runs
+"winmarchy doctor" successfully.

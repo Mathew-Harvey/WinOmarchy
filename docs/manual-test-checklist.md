@@ -367,3 +367,16 @@ during setup, or run the installer with a bad winget source.
 - [ ] O6. The Winmarchy icon (blue tiling panes on a dark rounded square)
       appears on Winmarchy.Chooser.exe in Explorer, on the tray and bar
       processes in Task Manager, and on every Winmarchy Start menu entry.
+
+## P. Round: the winmarchy command itself
+
+- [ ] P1. After reinstalling, open a BRAND NEW PowerShell window (the PATH
+      change does not reach terminals that were already open) and run
+      `winmarchy doctor`. It runs, rather than reporting that scripts are
+      disabled.
+- [ ] P2. The "winmarchy on PATH" row passes.
+- [ ] P3. `where.exe winmarchy` names shim\winmarchy.cmd, and does not name
+      bin\winmarchy.ps1.
+- [ ] P4. In Omarchy mode, lwin+ctrl+space cycles the theme and
+      lwin+shift+x returns to Windows 11: both go through this command and
+      were failing silently before.

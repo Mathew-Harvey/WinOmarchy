@@ -2322,6 +2322,64 @@ function Install-WinmarchyEverythingService {
 }
 
 # ---------------------------------------------------------------------------
+# Is "winmarchy" reachable as a command
+# ---------------------------------------------------------------------------
+
+function Get-WinmarchyPathEntryStatus {
+    # What the user PATH carries. The entry must be shim\, which holds only
+    # winmarchy.cmd, and must NOT be bin\: bin\ also holds winmarchy.ps1, and
+    # PowerShell resolves a bare "winmarchy" to the .ps1 ahead of the .cmd,
+    # then runs it in the caller's session where the default Restricted
+    # execution policy refuses it (FLAGS.md FLAG-52).
+    $installRoot = Get-WinmarchyHome
+    $shimDir = Join-Path $installRoot 'shim'
+    $binDir = Join-Path $installRoot 'bin'
+    $onPath = $false
+    $binOnPath = $false
+    if (Test-WinmarchyIsWindows) {
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if ($null -eq $userPath) { $userPath = '' }
+        foreach ($part in ($userPath -split ';')) {
+            if ($part -eq $shimDir) { $onPath = $true }
+            if ($part -eq $binDir) { $binOnPath = $true }
+        }
+    }
+    return [pscustomobject]@{
+        ShimPresent = (Test-Path (Join-Path $shimDir 'winmarchy.cmd'))
+        OnPath      = $onPath
+        BinOnPath   = $binOnPath
+        ShimDir     = $shimDir
+    }
+}
+
+function Get-WinmarchyPathDoctorRow {
+    # Pure verdict over that snapshot, so every shape is testable headlessly.
+    param([Parameter(Mandatory = $true)]$Status)
+    if (-not $Status.ShimPresent) {
+        return [pscustomobject]@{
+            Pass   = $false
+            Detail = 'no winmarchy.cmd in ' + $Status.ShimDir + '; re-run setup'
+        }
+    }
+    if ($Status.BinOnPath) {
+        return [pscustomobject]@{
+            Pass   = $false
+            Detail = 'the bin directory is still on your PATH, so PowerShell runs winmarchy.ps1 instead of the shim and your execution policy blocks it. Re-run setup, then open a new terminal'
+        }
+    }
+    if (-not $Status.OnPath) {
+        return [pscustomobject]@{
+            Pass   = $false
+            Detail = $Status.ShimDir + ' is not on your PATH, so "winmarchy" only works from its full path. Re-run setup, then open a new terminal'
+        }
+    }
+    return [pscustomobject]@{
+        Pass   = $true
+        Detail = 'winmarchy runs from any shell, via ' + $Status.ShimDir
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Chooser health and launch
 # ---------------------------------------------------------------------------
 
