@@ -440,3 +440,19 @@ during setup, or run the installer with a bad winget source.
 - [ ] T5. Kill glazewm.exe from Task Manager while in Omarchy mode, then
       swap to Windows 11: the swap still completes and the log warns that
       the windows could not be gathered.
+
+## U. Round: bar ignored by the tiler, taskbar restored
+
+- [ ] U1. In Omarchy mode open several windows: they tile in the area BELOW
+      the bar, none is placed behind it, and none vanishes. Open and close
+      windows repeatedly to be sure the layout stays sane.
+- [ ] U2. lwin+escape opens the menu as a floating window that never joins
+      the tiling layout, and closing it does not disturb the layout.
+- [ ] U3. Swap to Windows 11: the taskbar comes back and STAYS visible. Its
+      auto-hide setting under Settings > Personalisation > Taskbar matches
+      what it was before Winmarchy was ever used.
+- [ ] U4. The desktop work area is right after the swap: maximise a window
+      and it fills the screen down to the taskbar, with no reserved strip
+      left over at the top where the bar used to be.
+- [ ] U5. Repeat the swap three times in a row and check U3 and U4 each
+      time; the failure being fixed only showed on some swaps.

@@ -72,7 +72,13 @@ workspaces:
 window_rules:
   - commands: ['ignore']
     match:
-      # Ignore the yasb bar.
+      # Ignore everything Winmarchy draws itself. The bar, the system menu
+      # and the login chooser are all this one executable, and none of them
+      # is a window to be tiled: managing the bar put it into the layout and
+      # pushed real windows behind it (FLAGS.md FLAG-62).
+      - window_process: { equals: 'Winmarchy.Chooser' }
+
+      # Ignore the yasb bar, still supported through "winmarchy bar yasb".
       - window_process: { equals: 'yasb' }
 
       # Ignore picture-in-picture windows for browsers.

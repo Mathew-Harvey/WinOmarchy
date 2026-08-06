@@ -1545,7 +1545,21 @@ function Stop-WinmarchyBar {
         Stop-WinmarchyYasb
         return
     }
+    # Asked to close, not killed. The bar reserves its strip of screen with
+    # SHAppBarMessage, and only its own shutdown hands that reservation back;
+    # a forced kill leaks it, and Windows goes on reserving space for a bar
+    # that is not there (FLAGS.md FLAG-62).
     foreach ($process in @(Get-WinmarchyChooserProcesses -Argument '--bar')) {
+        $null = $process.CloseMainWindow()
+    }
+    $closeDeadline = (Get-Date).AddSeconds(3)
+    while ((Get-Date) -lt $closeDeadline) {
+        if (-not (Test-WinmarchyBarRunning)) { return }
+        Start-Sleep -Milliseconds 150
+    }
+    # Only now, and only for whatever refused to go.
+    foreach ($process in @(Get-WinmarchyChooserProcesses -Argument '--bar')) {
+        Write-WinmarchyLog -Message 'the bar did not close on request; forcing it, so its reserved strip may linger until the next sign-in' -Level 'WARN'
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
     }
     $deadline = (Get-Date).AddSeconds(5)

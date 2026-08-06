@@ -128,7 +128,9 @@ Describe 'enter-win11' {
     BeforeEach {
         Mock Stop-WinmarchyGlazewm { }
         Mock Stop-WinmarchyYasb { }
-        Mock Set-WinmarchyTaskbarAutoHide { }
+        $script:taskbarHidden = $false
+        Mock Set-WinmarchyTaskbarAutoHide { $script:taskbarHidden = $Enabled }
+        Mock Get-WinmarchyTaskbarAutoHide { $script:taskbarHidden }
         Mock Set-WinmarchyDesktopIcons { }
         Mock Set-WinmarchyWallpaper { }
         Mock Set-WinmarchyAppsTheme { }
@@ -136,7 +138,7 @@ Describe 'enter-win11' {
 
     It 'is a no-op when already in a clean win11 state' {
         Mock Test-WinmarchyProcessRunning { $false }
-        Mock Get-WinmarchyTaskbarAutoHide { $false }
+        $script:taskbarHidden = $false
         Mock Get-WinmarchyDesktopIconsVisible { $true }
 
         Enter-WinmarchyWin11Mode
@@ -154,7 +156,7 @@ Describe 'enter-win11' {
         # nothing reliably uncloaks them on the way out, so this has to happen
         # while the window manager is still alive to do it (FLAGS.md FLAG-61).
         Mock Test-WinmarchyProcessRunning { $true }
-        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        $script:taskbarHidden = $true
         Mock Get-WinmarchyDesktopIconsVisible { $false }
         Mock Invoke-WinmarchyGatherWindows { $true }
         Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
@@ -168,7 +170,7 @@ Describe 'enter-win11' {
         # A swap back to Windows 11 is the panic path; nothing in it may be
         # blocked by a tidy-up step.
         Mock Test-WinmarchyProcessRunning { $true }
-        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        $script:taskbarHidden = $true
         Mock Get-WinmarchyDesktopIconsVisible { $false }
         Mock Invoke-WinmarchyGatherWindows { throw 'no IPC' }
         Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
@@ -181,7 +183,7 @@ Describe 'enter-win11' {
 
     It 'tears down a full omarchy state and restores the captured baseline' {
         Mock Test-WinmarchyProcessRunning { $true }
-        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        $script:taskbarHidden = $true
         Mock Get-WinmarchyDesktopIconsVisible { $false }
         Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
         Set-WinmarchyStateValue -Name 'savedWallpaper' -Value 'C:\orig\wall.jpg'
@@ -206,7 +208,7 @@ Describe 'enter-win11' {
 
     It 'never restores a Winmarchy wallpaper into Windows mode' {
         Mock Test-WinmarchyProcessRunning { $true }
-        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        $script:taskbarHidden = $true
         Mock Get-WinmarchyDesktopIconsVisible { $false }
         Set-WinmarchyStateValue -Name 'mode' -Value 'omarchy'
         # A poisoned capture from before the guard existed.
@@ -220,7 +222,7 @@ Describe 'enter-win11' {
 
     It 'restores Windows Terminal and Cursor on the way out' {
         Mock Test-WinmarchyProcessRunning { $true }
-        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        $script:taskbarHidden = $true
         Mock Get-WinmarchyDesktopIconsVisible { $false }
         Mock Get-WtSettingsPath { 'C:\fake\settings.json' }
         Mock Restore-WtSettingsFile { $true }
@@ -244,7 +246,7 @@ Describe 'enter-win11' {
         Mock Get-WinmarchyCursorSettingsPath { $null }
         Mock Get-WinmarchyAlacrittyConfigPath { $null }
         Mock Test-WinmarchyProcessRunning { $false }
-        Mock Get-WinmarchyTaskbarAutoHide { $false }
+        $script:taskbarHidden = $false
         Mock Get-WinmarchyDesktopIconsVisible { $true }
         Set-WinmarchyStateValue -Name 'savedWtColorScheme' -Value 'Campbell'
         Set-WinmarchyStateValue -Name 'savedWtCaptured' -Value $true
@@ -263,7 +265,7 @@ Describe 'enter-win11' {
 
     It 'continues past a failing step and still restores the rest' {
         Mock Test-WinmarchyProcessRunning { $true }
-        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        $script:taskbarHidden = $true
         Mock Get-WinmarchyDesktopIconsVisible { $false }
         Mock Stop-WinmarchyGlazewm { throw 'glazewm refused to die' }
         Set-WinmarchyStateValue -Name 'savedWallpaper' -Value 'C:\orig\wall.jpg'

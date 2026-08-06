@@ -237,10 +237,24 @@ function Enter-WinmarchyWin11Mode {
         Write-WinmarchyLog -Message ('enter-win11: bar stop failed: ' + $_.Exception.Message) -Level 'ERROR'
     }
 
-    # Step: taskbar back to always visible.
+    # Step: taskbar back to always visible, and CHECKED. A taskbar still
+    # hiding itself is the most visible way a swap back can look broken, and
+    # it stayed hidden on the machine while every step reported success
+    # (FLAGS.md FLAG-62). The set is asserted rather than assumed: one retry,
+    # then a warning that names the fix, because a single shell call quietly
+    # not taking effect is exactly what happened.
     try {
         if (Get-WinmarchyTaskbarAutoHide) {
             Set-WinmarchyTaskbarAutoHide -Enabled $false
+            if (Get-WinmarchyTaskbarAutoHide) {
+                Write-WinmarchyLog -Message 'enter-win11: the taskbar was still on auto-hide after being told otherwise; trying once more' -Level 'WARN'
+                Set-WinmarchyTaskbarAutoHide -Enabled $false
+                if (Get-WinmarchyTaskbarAutoHide) {
+                    $failures = $failures + 'taskbar: still auto-hiding'
+                    Write-WinmarchyLog -Message 'enter-win11: the taskbar will not come back; turn auto-hide off in Settings > Personalisation > Taskbar' -Level 'ERROR'
+                    Write-Warning 'The taskbar is still set to auto-hide. Turn it off under Settings > Personalisation > Taskbar > Taskbar behaviours.'
+                }
+            }
         }
     } catch {
         $failures = $failures + ('taskbar: ' + $_.Exception.Message)

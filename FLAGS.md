@@ -1761,3 +1761,38 @@ say.
 
 Status: open until the machine confirms windows opened on lwin+2 and lwin+3
 are all present after a swap back.
+
+## FLAG-62: the bar was being tiled, and the taskbar stayed hidden
+
+Two reports from the machine after the bar was baked in, with one root cause
+between them.
+
+The tiling went wrong, with windows disappearing behind the tiled ones. The
+GlazeWM config ignores window_process 'yasb', which was correct while yasb
+drew the bar. The built-in bar is Winmarchy.Chooser, and nothing ignored it,
+so GlazeWM managed it: the bar was placed into the tiling layout as though it
+were an ordinary window, taking a tile and pushing real windows behind it.
+The system menu and the login chooser are the same executable and were
+equally unprotected. Fixed by ignoring window_process 'Winmarchy.Chooser',
+which covers everything Winmarchy draws, with the yasb rule kept because that
+bar is still supported.
+
+Lesson for the register: replacing a component means inheriting every rule
+that named the old one. The ignore rule was written for the bar, not for
+yasb, and it should have moved when the bar did.
+
+The taskbar stayed on auto-hide after swapping back. Two things contributed
+and both are fixed. The bar was FORCE-KILLED on the way out, so its
+SHAppBarMessage reservation was never handed back; it is now asked to close
+first and killed only if it refuses, with a warning when that happens. And
+the restore step trusted a single shell call: it read auto-hide, set it off
+and moved on, so a call that quietly failed left the taskbar hidden with
+every step reporting success. It now re-reads, retries once, and on a second
+failure records a failure and tells the user where the setting lives.
+
+The tests around this were also weakened by a constant mock: a taskbar mock
+that always returned true could never model the state changing, so it could
+not have caught a failed restore. Set and Get are now a stateful pair.
+
+Status: open until the machine confirms the taskbar returns and the tiling
+behaves with the bar ignored.
