@@ -34,8 +34,11 @@ Describe 'enter-omarchy' {
         Mock Start-WinmarchyGlazewm { }
         Mock Start-WinmarchyBar { }
         Mock Start-WinmarchyFlowLauncher { }
-        Mock Get-WinmarchyTaskbarAutoHide { $false }
-        Mock Set-WinmarchyTaskbarAutoHide { }
+        # A stateful pair: the checked setter re-reads what it wrote, which a
+        # constant mock can never satisfy and could never catch a failed set.
+        $script:taskbarHidden = $false
+        Mock Get-WinmarchyTaskbarAutoHide { $script:taskbarHidden }
+        Mock Set-WinmarchyTaskbarAutoHide { $script:taskbarHidden = $Enabled }
         Mock Get-WinmarchyDesktopIconsVisible { $true }
         Mock Set-WinmarchyDesktopIcons { }
         Mock Set-WinmarchyTheme { }
@@ -69,7 +72,7 @@ Describe 'enter-omarchy' {
         # The bar has its own liveness check, since the built-in one shares an
         # executable name with the tray and cannot be found by name alone.
         Mock Test-WinmarchyBarRunning { $true }
-        Mock Get-WinmarchyTaskbarAutoHide { $true }
+        $script:taskbarHidden = $true
         Mock Get-WinmarchyDesktopIconsVisible { $false }
 
         Enter-WinmarchyOmarchyMode
@@ -79,6 +82,24 @@ Describe 'enter-omarchy' {
         Should -Invoke Set-WinmarchyTaskbarAutoHide -Times 0 -Exactly
         Should -Invoke Set-WinmarchyDesktopIcons -Times 0 -Exactly
         (Get-WinmarchyState).mode | Should -Be 'omarchy'
+    }
+
+    It 'retries a taskbar change the shell ignored, in both directions' {
+        # The shell posts ABM_SETSTATE rather than applying it, and recomputes
+        # its layout whenever an app bar registers, which the bar does moments
+        # earlier in a swap. So the call sometimes does nothing: the taskbar
+        # stayed visible going into Omarchy and stayed hidden coming back, with
+        # every step reporting success (FLAGS.md FLAG-63).
+        Mock Get-WinmarchyTaskbarAutoHide { $false }
+        Mock Set-WinmarchyTaskbarAutoHide { }
+        Set-WinmarchyTaskbarAutoHideChecked -Enabled $true | Should -BeFalse
+        Should -Invoke Set-WinmarchyTaskbarAutoHide -Times 2 -Exactly -Because 'a change that did not take is tried once more'
+
+        # And it reports success without a retry when the first one worked.
+        $script:taskbarHidden = $false
+        Mock Get-WinmarchyTaskbarAutoHide { $script:taskbarHidden }
+        Mock Set-WinmarchyTaskbarAutoHide { $script:taskbarHidden = $Enabled }
+        Set-WinmarchyTaskbarAutoHideChecked -Enabled $true | Should -BeTrue
     }
 
     It 'rolls back to win11 when the health check fails, leaving the journal for repair' {

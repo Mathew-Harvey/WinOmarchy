@@ -74,8 +74,13 @@ function Enter-WinmarchyOmarchyMode {
         $taskbarState = Get-WinmarchyTaskbarAutoHide
         if (-not $taskbarState) {
             Add-WinmarchyJournalEntry -Action 'taskbar-autohide' -Data @{ previous = $taskbarState }
-            Set-WinmarchyTaskbarAutoHide -Enabled $true
-            Write-WinmarchyLog -Message 'enter-omarchy: taskbar set to auto-hide'
+            # Checked, because the shell can quietly ignore this while every
+            # step reports success; it happened in both directions (FLAG-63).
+            if (Set-WinmarchyTaskbarAutoHideChecked -Enabled $true) {
+                Write-WinmarchyLog -Message 'enter-omarchy: taskbar set to auto-hide'
+            } else {
+                Write-Warning 'The taskbar would not switch to auto-hide, so it stays on screen in Omarchy mode. Turn it on under Settings > Personalisation > Taskbar > Taskbar behaviours.'
+            }
         }
 
         # Step: desktop icons off. The live toggle is a blind WM_COMMAND, so
@@ -245,15 +250,9 @@ function Enter-WinmarchyWin11Mode {
     # not taking effect is exactly what happened.
     try {
         if (Get-WinmarchyTaskbarAutoHide) {
-            Set-WinmarchyTaskbarAutoHide -Enabled $false
-            if (Get-WinmarchyTaskbarAutoHide) {
-                Write-WinmarchyLog -Message 'enter-win11: the taskbar was still on auto-hide after being told otherwise; trying once more' -Level 'WARN'
-                Set-WinmarchyTaskbarAutoHide -Enabled $false
-                if (Get-WinmarchyTaskbarAutoHide) {
-                    $failures = $failures + 'taskbar: still auto-hiding'
-                    Write-WinmarchyLog -Message 'enter-win11: the taskbar will not come back; turn auto-hide off in Settings > Personalisation > Taskbar' -Level 'ERROR'
-                    Write-Warning 'The taskbar is still set to auto-hide. Turn it off under Settings > Personalisation > Taskbar > Taskbar behaviours.'
-                }
+            if (-not (Set-WinmarchyTaskbarAutoHideChecked -Enabled $false)) {
+                $failures = $failures + 'taskbar: still auto-hiding'
+                Write-Warning 'The taskbar is still set to auto-hide. Turn it off under Settings > Personalisation > Taskbar > Taskbar behaviours.'
             }
         }
     } catch {

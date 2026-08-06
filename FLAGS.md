@@ -1796,3 +1796,38 @@ not have caught a failed restore. Set and Get are now a stateful pair.
 
 Status: open until the machine confirms the taskbar returns and the tiling
 behaves with the bar ignored.
+
+## FLAG-63: the taskbar change is unreliable in BOTH directions
+
+Context: the previous round fixed the taskbar staying hidden on the way back
+to Windows by verifying and retrying that one call. Mat then hit the mirror
+image: swapping INTO Omarchy mode, the taskbar did not hide.
+
+That second report is the useful one, because it rules out the explanation
+the first invited. This is not something about the win11 path; the shell
+simply drops these requests sometimes, whichever way they go. ABM_SETSTATE
+is posted to the shell rather than applied synchronously, and the shell
+recomputes its layout whenever an app bar registers or unregisters, which is
+exactly what the Winmarchy bar does moments earlier in a swap. A request that
+lands in that window can be lost.
+
+Fix: one Set-WinmarchyTaskbarAutoHideChecked in common.ps1 that sets,
+re-reads, retries once and reports whether it worked. Both mode paths use it,
+so the two directions cannot be fixed unevenly again, which is precisely what
+happened here: the retry was written inline on one side only.
+
+Lesson for the register, and it is the third time in this area: fixing a
+symptom on one path when the cause is shared leaves the other path broken and
+makes the next report look like a NEW bug. FLAG-62 should have asked why the
+call failed rather than where.
+
+The enter-omarchy tests carried the same defect the enter-win11 ones did: a
+constant taskbar mock that could not model the state changing, and so could
+never fail on a change that did not take. Both are stateful pairs now, and a
+test drives the retry directly.
+
+Deferred: if it turns out one retry is not always enough, the numbers are in
+the log, since every ignored request is recorded before the retry.
+
+Status: open until the machine confirms the taskbar hides on the way in and
+returns on the way out, across several swaps.

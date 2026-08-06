@@ -1572,6 +1572,25 @@ function Stop-WinmarchyBar {
     }
 }
 
+function Set-WinmarchyTaskbarAutoHideChecked {
+    # Sets the taskbar's auto-hide state and PROVES it took. ABM_SETSTATE is
+    # posted to the shell rather than applied synchronously, and the shell
+    # recomputes its layout whenever an app bar registers or unregisters,
+    # which is exactly what the Winmarchy bar does moments earlier in a swap.
+    # The result is that the call sometimes does nothing, in either
+    # direction: the taskbar stayed hidden coming back to Windows, then
+    # stayed visible going into Omarchy (FLAGS.md FLAG-62 and FLAG-63).
+    # Returns whether the taskbar ended up in the requested state.
+    param([Parameter(Mandatory = $true)][bool]$Enabled)
+    Set-WinmarchyTaskbarAutoHide -Enabled $Enabled
+    if ((Get-WinmarchyTaskbarAutoHide) -eq $Enabled) { return $true }
+    Write-WinmarchyLog -Message ('the taskbar ignored being set to auto-hide=' + $Enabled + '; trying once more') -Level 'WARN'
+    Set-WinmarchyTaskbarAutoHide -Enabled $Enabled
+    if ((Get-WinmarchyTaskbarAutoHide) -eq $Enabled) { return $true }
+    Write-WinmarchyLog -Message ('the taskbar would not go to auto-hide=' + $Enabled) -Level 'ERROR'
+    return $false
+}
+
 function Invoke-WinmarchyGatherWindows {
     # Asks the chooser exe to move every workspace's windows onto the visible
     # one, over GlazeWM's own IPC, before the window manager stops. Returns
