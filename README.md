@@ -220,6 +220,20 @@ Omarchy mode applies all of it again. Installing Winmarchy changes none of
 it: until you first enter Omarchy mode, the machine looks and behaves
 exactly as it did before.
 
+## If antivirus flags it
+
+Defender or SmartScreen may flag Winmarchy. It is behaviour, not a known bad
+file: the Windows key guard is a system-wide keyboard hook, the tray starts at
+login from a Run key, and the scripts run with the execution policy bypassed,
+which together look like a keylogger with persistence. The guard stores
+nothing, sends nothing, and only ever touches the Windows key; the whole
+mechanism is about 400 lines in `chooser/WinKeyGuard.cs`, and this repository
+ships no executables at all, so what runs is compiled on your own machine
+from source you can read.
+
+`docs/defender.md` explains every flagged behaviour, where it lives, and how
+to report the false positive to Microsoft, which is the fix worth doing.
+
 ## Honest limitations
 
 Windows is not a Linux compositor, and four walls cannot be climbed from

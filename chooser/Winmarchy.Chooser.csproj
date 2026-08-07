@@ -15,6 +15,18 @@
          executable its icon in Explorer, the taskbar and Task Manager, and
          WinForms windows pick it up as their default window icon. -->
     <ApplicationIcon>winmarchy.ico</ApplicationIcon>
+    <!-- Truthful identity in the file's version resource. An executable with
+         no publisher, no description and no version, which installs a
+         keyboard hook and starts at login, is indistinguishable to a
+         reputation system from something that means harm. Saying plainly
+         what this is and who wrote it costs nothing and is simply accurate;
+         see docs/defender.md. -->
+    <Product>Winmarchy</Product>
+    <AssemblyTitle>Winmarchy chooser, bar, menu and tray</AssemblyTitle>
+    <Description>Winmarchy: an Omarchy-inspired desktop mode for Windows 11. Hosts the login chooser, the status bar, the system menu and the notification area icon.</Description>
+    <Company>Winmarchy (github.com/Mathew-Harvey/WinOmarchy)</Company>
+    <Copyright>MIT licensed. See LICENSE in the repository.</Copyright>
+    <Version>1.0.0</Version>
     <!-- Allows building this Windows-targeted project from the Linux build
          container; the produced binaries still run on Windows only. -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
