@@ -1953,5 +1953,115 @@ lwin+p to resume: wm.rs:146 gates the whole platform_sync flush on
 !is_paused, so no focus steal occurs during the drag. Note the drop position
 is not honoured; the window tiles into the grid on resume.
 
-Status: open upstream, closed here. Reopen if issue 1080 ships, at which
-point the workaround note can go.
+Status: open upstream. Closed here by FLAG-66, which automates the pause so
+the manual workaround is no longer the routine path. Reopen if issue 1080
+ships, at which point the whole guard can be deleted.
+
+## FLAG-66: the drag guard, and the judgement calls inside it
+
+Context: FLAG-65 diagnosed the tab tear-off bug and shipped two manual
+workarounds. Mat's answer was to work around it properly and make the
+experience nice. This records what "properly" turned out to mean, because
+several of the decisions are not obvious and one of them is the only thing
+keeping the feature from causing a worse bug than it fixes.
+
+What ships: chooser/DragGuard.cs, hosted in the tray process beside the
+Windows key guard. It watches the left mouse button, and when a drag looks
+like a tab being torn out it sends "command wm-toggle-pause" to GlazeWM,
+then sends it again when the button comes up. wm.rs:146 gates the whole
+platform_sync flush on !is_paused while still running the events, so the
+torn-off window joins the tree untouched, and toggle_pause.rs:11 queues a
+redraw of the entire container tree on unpause, so the grid re-tiles around
+it the moment the drag ends. Verified in ref/glazewm, not assumed.
+
+Judgement call 1, the discriminator, and the reason the feature is safe.
+Pausing during a drag has a real cost: while paused, GlazeWM does not track
+a window being moved, so on unpause the full redraw puts it back where the
+tree says it belongs. Pause during a window drag and the window snaps back;
+do that to a floating window and moving it by mouse stops working at all.
+The way out is that a tab tear-off leaves its source window STATIONARY,
+while dragging a window moves it. So the guard requires the cursor to have
+travelled 16 pixels AND the window under the press to have exactly the same
+rectangle it had at the press. Moving a tiled window, moving a floating one,
+and resizing by any edge all fail that second test and are left completely
+alone. Without this check the feature would be a net loss.
+
+Judgement call 2, scope. The guard is not restricted to browsers. Chromium
+tab tear-off is the reported bug, but Windows Terminal, File Explorer and
+VS Code style editors all tear tabs into new windows the same way and hit
+the same upstream bug. A process name list would have covered browsers only,
+would have needed editing for every new browser, and would have earned
+nothing that the stationary-window check does not already earn. Instead the
+press must land in the top strip of a top-level window, which is where a
+title bar or tab strip is and where nothing else that matters starts. That
+depth is two caption bars, floored at 48 pixels, and it comes from
+GetSystemMetrics rather than GetDpiForWindow on purpose: this project ships
+no application manifest declaring a DPI awareness, and GetCursorPos and
+GetWindowRect are virtualised to 96 DPI for a process that is not per-monitor
+aware while a monitor's real DPI is not. GetSystemMetrics reports in the
+caller's own awareness context, so it virtualises exactly when the
+coordinates do and the comparison stays honest either way. A spurious pause,
+for instance
+reordering tabs inside one window or dragging an Explorer column header,
+costs a pause and an unpause, and the unpause redraw writes every window's
+existing rectangle back unchanged, which is invisible.
+
+Judgement call 3, polling rather than a mouse hook. A WH_MOUSE_LL hook would
+cost nothing at idle. It was rejected on two grounds: this process already
+carries one system-wide input hook and a second one is exactly the shape
+FLAG-64 and docs/defender.md are about, and a mouse hook runs against the
+same LowLevelHooksTimeout deadline that has already cost this project five
+rounds of debugging (FLAG-38, FLAG-54). The polling version is one
+GetAsyncKeyState call every 60ms on a dedicated background thread, dropping
+to every 500ms whenever GlazeWM is not running at all, which is the whole of
+Windows 11 mode.
+
+Judgement call 4, a long-lived socket. The pause has to land within a frame
+or two of the cursor crossing the threshold, and a WebSocket handshake at
+that moment would be the slowest thing on the path. PauseLink therefore
+holds the connection open and subscribes to pause_changed, so the guard
+always knows the current state without asking and pausing is a single frame
+write. It also means the guard never blocks its own poll loop waiting for an
+answer, which the first draft did, with a five second timeout on the tray's
+message loop thread.
+
+Judgement call 5, and the subtlest of them: Toggle flips its own copy of the
+paused state immediately instead of waiting for the pause_changed event to
+confirm it. Waiting is the more truthful design and it is wrong here. A
+short drag can be over before the event for its own pause has arrived, at
+which point the resume would read "not paused", conclude there was nothing
+to do, and leave tiling paused permanently. Flipping locally cannot do that.
+The cost is that the flag is then an assumption, so the resume asks with
+"query paused" as well and re-toggles if the answer disagrees, and the
+subscription still overwrites the flag either way.
+
+The safety rule, and how it is kept: tiling must never be left paused,
+because a paused window manager looks exactly like a broken one. Every exit
+from a pause goes through one Resume: the button coming up, the 30 second
+cap on a single hold, an unexpected exception in the poll loop, and the tray
+shutting down. Resume checks that the state actually came back and retries
+twice. If the socket dies while a pause is outstanding, the flag is carried
+across and the next connection re-checks the paused state and clears it. And
+if every one of those fails, lwin+p is still bound to wm-toggle-pause and
+still works, which is why that binding is kept and documented rather than
+reused for something else. A pause the user made by hand is never touched:
+the guard checks the state before pausing and stands down if it is already
+paused.
+
+Known limits, in order of likelihood. The drop position is not honoured: the
+new window tiles into the grid rather than landing where it was dropped,
+which is the same behaviour as the manual workaround and the same behaviour
+Omarchy gives. A tear-off started with the press already below the strip
+will not be recognised. If the user drags a window by its
+title bar so slowly that the cursor passes 16 pixels before Windows has
+moved the window, the guard misreads it as a tear-off and the window snaps
+back on release; one drag, no lasting effect. And a hard kill of the tray
+process during a drag leaves tiling paused until lwin+p or the next tray
+start.
+
+None of this has run on Windows yet. It is a mouse-timing feature and the
+container cannot exercise it, so the tests below are source-level assertions
+about the shape of the safety handling, exactly as for the key guard.
+Confirmation on Mat's machine is outstanding: tear a tab out of a browser,
+tear a tab out of Windows Terminal, drag a tiled window onto another and
+check it still swaps, and drag a floating window and check it stays put.

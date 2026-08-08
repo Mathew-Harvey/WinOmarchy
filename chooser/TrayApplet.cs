@@ -82,6 +82,11 @@ public static class TrayApplet
             // the Start menu; see WinKeyGuard.cs. Lives here because the
             // tray has the right lifetime: guard dies with the icon.
             WinKeyGuard.Install();
+            // Tearing a browser tab out into its own window fights GlazeWM's
+            // forced focus and springs back; see DragGuard.cs. Hosted here
+            // for the same reason as the key guard: it dies with the tray,
+            // so stopping the icon returns the mouse to stock behaviour.
+            DragGuard.Install();
 
             // With a wallpaper folder configured, a fresh picture on the
             // interval the user chose (state.wallpaperIntervalMinutes). The
@@ -119,6 +124,7 @@ public static class TrayApplet
         finally
         {
             WinKeyGuard.Uninstall();
+            DragGuard.Uninstall();
             _wallpaperTimer?.Stop();
             if (_icon != null)
             {

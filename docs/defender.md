@@ -45,6 +45,26 @@ around 400 lines including comments:
 - it is disarmed unless the recorded mode is `omarchy`, and it dies with the
   tray icon, so closing the icon returns the key to stock immediately
 
+### Polling the mouse button and reading other programs' windows
+
+`chooser/DragGuard.cs` asks `GetAsyncKeyState` whether the left mouse button
+is down, and when it is, asks `WindowFromPoint` and `GetWindowRect` about the
+window under the cursor. Watching the mouse and inspecting other people's
+windows is, again, the shape of spyware.
+
+Why it exists: dragging a browser tab out into its own window fights
+GlazeWM's forced focus and springs back, and the only fix available from
+outside GlazeWM is to pause tiling for the length of the drag. Recognising
+the drag means noticing the button, the cursor and whether the window under
+it moved.
+
+It reads a button state, a cursor position and two window rectangles, and
+nothing else. There is no keyboard involvement, no window contents, no
+titles, no clipboard, nothing written down and nothing sent anywhere. It is
+deliberately NOT a `WH_MOUSE_LL` hook, which would be cheaper at idle but
+would add a second system-wide input hook to this process for no other
+reason; the polling version is the more modest one.
+
 ### A background process that starts at login
 
 The tray icon runs windowless from an `HKCU\...\Run` entry

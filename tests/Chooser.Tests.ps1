@@ -418,5 +418,106 @@ Describe 'Never shows nothing' {
         $project = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'Winmarchy.Chooser.csproj'))
         $project | Should -Match '<RollForward>LatestMajor</RollForward>'
     }
+
+    It 'never leaves tiling paused, on any path out of a pause' {
+        # The one rule the drag guard is built around: a window manager left
+        # paused looks exactly like a broken one, and the user never asked
+        # for it. Four ways out of a pause, and all four have to resume.
+        $drag = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'DragGuard.cs'))
+        # The button coming up.
+        $tick = ($drag -split 'private static int Tick')[1]
+        $tick = ($tick -split 'private static bool LandedOnAStrip')[0]
+        $tick | Should -Match 'Resume\('
+        # The cap on a single hold, so a stuck button cannot strand it.
+        $tick | Should -Match 'MaxHoldSeconds'
+        # An exception in the poll loop.
+        $loop = ($drag -split 'private static void PollLoop')[1]
+        $loop = ($loop -split 'private static int Tick')[0]
+        $loop | Should -Match 'catch \(Exception'
+        $loop | Should -Match 'Resume\('
+        # The tray shutting down.
+        $uninstall = ($drag -split 'public static void Uninstall')[1]
+        $uninstall = ($uninstall -split 'private static void PollLoop')[0]
+        $uninstall | Should -Match 'Resume\('
+        # And the resume itself verifies rather than assuming, then says so
+        # loudly enough to act on if it truly could not.
+        $resume = ($drag -split 'private static void Resume')[1]
+        $resume | Should -Match 'Link\.Paused'
+        $resume | Should -Match 'Link\.RefreshPaused\(\)'
+        $resume | Should -Match 'lwin\+p'
+        # Two of those four paths can run at once, on different threads, and
+        # a second resume for one pause would pause tiling again. Exactly one
+        # caller gets to act.
+        $resume | Should -Match 'Interlocked\.Exchange\(ref _pausedByUs, 0\)'
+        # A pause the user made by hand is left exactly as found.
+        $pause = ($drag -split 'private static void Pause')[1]
+        $pause = ($pause -split 'private static void Resume')[0]
+        $pause | Should -Match 'if \(Link\.Paused\)'
+    }
+
+    It 'leaves a drag that moves its window alone' {
+        # The check that keeps this feature from being a net loss. While
+        # paused GlazeWM does not track a moving window, so the unpause
+        # redraw puts it back: pausing during a window drag would break
+        # moving windows by mouse, floating ones worst of all. A tab
+        # tear-off leaves its source window stationary and a window drag
+        # does not, so the rectangle at the press has to still match.
+        $drag = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'DragGuard.cs'))
+        $tick = ($drag -split 'private static int Tick')[1]
+        $tick = ($tick -split 'private static bool LandedOnAStrip')[0]
+        $tick | Should -Match 'GetWindowRect\(_source, out current\)'
+        $tick | Should -Match 'current\.Left != _sourceRect\.Left'
+        # Failing the check abandons the press rather than pausing anyway.
+        $tick | Should -Match '_candidate = false'
+    }
+
+    It 'watches the mouse without adding a second input hook' {
+        # A WH_MOUSE_LL hook would be cheaper at idle and was rejected on
+        # purpose: this process already carries one system-wide input hook,
+        # a second is exactly the profile docs/defender.md is about, and it
+        # would run against the same LowLevelHooksTimeout deadline that has
+        # already cost this project two rounds of debugging.
+        $drag = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'DragGuard.cs'))
+        $drag | Should -Not -Match 'SetWindowsHookEx'
+        $drag | Should -Match 'GetAsyncKeyState'
+        # And it costs nothing at all in Windows 11 mode, where there is no
+        # GlazeWM to pause.
+        $drag | Should -Match 'DisconnectedPollMilliseconds'
+        # The behaviour is named in the antivirus notes, not just the code.
+        $defender = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'docs' 'defender.md')))
+        $defender | Should -Match 'GetAsyncKeyState'
+        $defender | Should -Match 'DragGuard\.cs'
+    }
+
+    It 'speaks the pause half of the GlazeWM protocol the reference server defines' {
+        # Verified in ref/glazewm rather than guessed: the port and envelope
+        # from packages/wm-common/src/ipc.rs, the event name from the
+        # SubscribableEvent list in packages/wm-common/src/app_command.rs
+        # (clap rename_all snake_case, so PauseChanged is pause_changed),
+        # and wm-toggle-pause as the ONLY pause command in InvokeCommand,
+        # which is why the state is subscribed to rather than assumed.
+        $drag = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'DragGuard.cs'))
+        $drag | Should -Match 'ws://127\.0\.0\.1:6123'
+        $drag | Should -Match 'sub -e pause_changed'
+        $drag | Should -Match 'query paused'
+        $drag | Should -Match 'command wm-toggle-pause'
+        $drag | Should -Match 'event_subscription'
+        $drag | Should -Match 'client_response'
+        # The event payload's own field names, camelCase per the WmEvent
+        # serde attributes.
+        $drag | Should -Match 'eventType'
+        $drag | Should -Match 'isPaused'
+    }
+
+    It 'hangs the drag guard off the tray, so it dies with the icon' {
+        $applet = [System.IO.File]::ReadAllText((Join-Path $script:chooserDir 'TrayApplet.cs'))
+        $applet | Should -Match 'DragGuard\.Install\(\)'
+        $applet | Should -Match 'DragGuard\.Uninstall\(\)'
+        # The manual escape hatch stays bound, because it is the last resort
+        # if the guard ever fails to resume.
+        $config = [System.IO.File]::ReadAllText((Join-Path $script:repoRoot (Join-Path 'config' (Join-Path 'glazewm' 'config.yaml'))))
+        $config | Should -Match "commands: \['wm-toggle-pause'\]"
+        $config | Should -Match "bindings: \['lwin\+p'\]"
+    }
 }
 }

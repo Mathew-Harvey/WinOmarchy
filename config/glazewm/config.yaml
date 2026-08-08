@@ -232,13 +232,11 @@ keybindings:
   - commands: ['toggle-tiling-direction']
     bindings: ['lwin+j']
 
-  # Pause tiling.
-  # Pause and resume tiling. Also the way to tear a browser tab out into
-  # its own window by dragging: pause, drag the tab out, drop it, resume.
-  # GlazeWM steals focus from a window the moment it appears, which kills
-  # Chromium's drag loop, and pausing skips that entirely (upstream issue
-  # 1080; see FLAGS.md FLAG-65). Right-clicking a tab and choosing "Move
-  # tab to new window" needs no pause at all.
+  # Pause and resume tiling. Winmarchy's drag guard does this by itself for
+  # the length of a tab tear-off (see chooser/DragGuard.cs and FLAGS.md
+  # FLAG-66), so this is the manual version: the way out if tiling is ever
+  # left paused, and the way to drag a window somewhere the tiler would not
+  # let it go.
   - commands: ['wm-toggle-pause']
     bindings: ['lwin+p']
 

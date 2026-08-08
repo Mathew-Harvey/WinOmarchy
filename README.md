@@ -220,23 +220,35 @@ Omarchy mode applies all of it again. Installing Winmarchy changes none of
 it: until you first enter Omarchy mode, the machine looks and behaves
 exactly as it did before.
 
-One known rough edge: dragging a browser tab out to become its own window
-does not work smoothly. GlazeWM forces focus onto any window the moment it
-appears, and that cancels the drag Chromium is in the middle of, so the tab
-springs back. Two ways around it, and both leave the browser tiled: right
-click the tab and choose **Move tab to new window**, which creates the window
-with no drag at all, or press `lwin+p` to pause tiling, drag the tab out,
-then `lwin+p` again. This is an upstream GlazeWM limitation
+### Dragging a tab out into its own window
+
+This just works, but there is a small piece of machinery behind it worth
+knowing about. GlazeWM forces focus onto any window the moment it appears,
+and that cancels the drag Chromium is in the middle of, so a torn-off tab
+springs back and the next attempt lands on top of everything. It is an
+upstream GlazeWM limitation
 ([issue 1080](https://github.com/glzr-io/glazewm/issues/1080)), not a
-Winmarchy setting; `docs/defender.md` aside, FLAGS.md FLAG-65 has the detail.
+Winmarchy setting, and it cannot be fixed from a config file.
+
+So the tray watches for the drag and pauses tiling for its duration, then
+resumes and lets the grid re-tile around the new window. It only does this
+when a press near the top of a window is followed by the cursor moving while
+that window stays put, which is what tearing a tab out looks like and what
+dragging a window around does not, so moving and resizing windows by mouse
+are untouched. If tiling is ever left paused, `lwin+p` turns it back on.
+
+The guard lives in the tray process, so it stops when the tray does.
+FLAGS.md FLAG-66 has the detail, and FLAG-65 has the underlying diagnosis.
 
 ## If antivirus flags it
 
 Defender or SmartScreen may flag Winmarchy. It is behaviour, not a known bad
-file: the Windows key guard is a system-wide keyboard hook, the tray starts at
-login from a Run key, and the scripts run with the execution policy bypassed,
-which together look like a keylogger with persistence. The guard stores
-nothing, sends nothing, and only ever touches the Windows key; the whole
+file: the Windows key guard is a system-wide keyboard hook, the drag guard
+polls the mouse button, the tray starts at login from a Run key, and the
+scripts run with the execution policy bypassed, which together look like a
+keylogger with persistence. Both guards store nothing and send nothing; the
+key guard only ever touches the Windows key and the drag guard only reads a
+button state, a cursor position and two window rectangles. The whole
 mechanism is about 400 lines in `chooser/WinKeyGuard.cs`, and this repository
 ships no executables at all, so what runs is compiled on your own machine
 from source you can read.
