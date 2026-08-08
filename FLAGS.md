@@ -1879,3 +1879,79 @@ heuristic trigger.
 
 Status: open. Closes when a false-positive submission is accepted, or when
 the binaries are signed.
+
+## FLAG-65: browser tab tear-off, and why no config fix is shipped
+
+Context: Mat reported that dragging a tab out of a browser to make its own
+window fails under Omarchy mode: the window springs back to where it was,
+and a second attempt leaves an overlapping window. He approved floating
+browser windows if that was what it took, and asked whether GlazeWM should
+be forked and fixed.
+
+The cause, verified line by line in ref/glazewm. Chromium tears a tab off by
+creating a new top level window and then running a nested modal move loop on
+it, with the mouse button still down. Windows fires EVENT_OBJECT_SHOW the
+moment that window exists, which GlazeWM routes to manage_window with no
+drag guard (handle_window_shown.rs:28-31). manage_window queues an OS focus
+change (manage_window.rs:63), and wm.rs:146 flushes that SYNCHRONOUSLY in
+the same event turn, ending in native_window.rs:285-307, which is SendInput
+plus SetForegroundWindow with no already-foreground guard. Injecting input
+and forcing activation into a capture based modal loop cancels the drag. The
+tile reposition that follows uses SWP_NOACTIVATE, so it is the visible snap
+back but not the cause.
+
+The approved fix was NOT shipped, because it does not work. Floating the
+browser does not stop the focus steal: the queue at manage_window.rs:63 sits
+in a state agnostic block and fires for floating windows exactly as for
+tiled ones. Three further findings each independently rule it out. The
+obvious spelling "set-floating --centered=false" does not even stop the
+centre teleport, because centring is decided earlier, inside create_window
+from window_behavior.state_defaults.floating.centered; suppressing it needs
+a global setting change affecting every floating window in the system. The
+command also fails this project's own gate: tests/Configs.Tests.ps1 holds a
+closed whitelist of 24 verified command patterns and enforces it against
+every window rule, and that string matches none of them. And a window rule
+cannot tell a torn off tab from any other browser window, since rules match
+only on process, class and title, so the real cost is not "tear off works",
+it is "no browser window ever tiles again".
+
+That last cost points the wrong way. Omarchy itself TILES browsers
+(ref/omarchy/default/hypr/apps/browser.lua:4 sets tile = true); it gets
+smooth tear off for free only because Wayland never injects
+SetForegroundWindow into a Win32 modal loop. Floating browsers would move
+away from the goal, not towards it.
+
+Forking was investigated properly and rejected. Hard constraint 7 forecloses
+it outright, and three practical findings agree: the workspace pins Rust
+NIGHTLY (rust-toolchain.toml, with four nightly only feature gates), so
+every user would need a nightly toolchain and MSVC build tools; upstream
+release binaries are Authenticode signed via AzureSignTool
+(.github/workflows/package.yaml), so the component that manipulates every
+window on the machine currently arrives signed and reputable and a fork
+spends that for nothing; and an unsigned window manager binary is the worst
+possible addition to the Defender position recorded in FLAG-64. One argument
+raised against forking was WRONG and is recorded so it is not repeated:
+UIAccess is an opt in Cargo feature defaulting to off (wm/Cargo.toml:15,
+build.rs:10-19), not something a fork would lose.
+
+The real fix is upstream, and unusually well set up: issue 1080 was opened
+by the lead maintainer himself, describes this exact Chrome tear off case,
+proposes the approach and carries "help wanted". He also flags the hard
+part, that GUI_INMOVESIZE is not set yet when the window first appears and
+EVENT_SYSTEM_MOVESIZESTART arrives about 5ms after EVENT_OBJECT_SHOW. Worth
+contributing: dispatcher.is_mouse_down is ALREADY implemented for Windows
+via GetAsyncKeyState (dispatcher.rs:596-604) and is simply never called on
+this path, which closes exactly that timing hole. A previous outside attempt
+(PR 1388) was closed 73 minutes after opening with no comment, and nothing
+has merged upstream since 2026-04-08, so a patch is worth offering but
+Winmarchy must not depend on it landing.
+
+Shipped instead: the two workarounds, both verified against source. Right
+click a tab and choose "Move tab to new window" creates the window with no
+drag loop, so there is nothing to cancel. Or lwin+p to pause, drag out,
+lwin+p to resume: wm.rs:146 gates the whole platform_sync flush on
+!is_paused, so no focus steal occurs during the drag. Note the drop position
+is not honoured; the window tiles into the grid on resume.
+
+Status: open upstream, closed here. Reopen if issue 1080 ships, at which
+point the workaround note can go.

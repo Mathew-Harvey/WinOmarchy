@@ -233,6 +233,12 @@ keybindings:
     bindings: ['lwin+j']
 
   # Pause tiling.
+  # Pause and resume tiling. Also the way to tear a browser tab out into
+  # its own window by dragging: pause, drag the tab out, drop it, resume.
+  # GlazeWM steals focus from a window the moment it appears, which kills
+  # Chromium's drag loop, and pausing skips that entirely (upstream issue
+  # 1080; see FLAGS.md FLAG-65). Right-clicking a tab and choosing "Move
+  # tab to new window" needs no pause at all.
   - commands: ['wm-toggle-pause']
     bindings: ['lwin+p']
 

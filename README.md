@@ -220,6 +220,16 @@ Omarchy mode applies all of it again. Installing Winmarchy changes none of
 it: until you first enter Omarchy mode, the machine looks and behaves
 exactly as it did before.
 
+One known rough edge: dragging a browser tab out to become its own window
+does not work smoothly. GlazeWM forces focus onto any window the moment it
+appears, and that cancels the drag Chromium is in the middle of, so the tab
+springs back. Two ways around it, and both leave the browser tiled: right
+click the tab and choose **Move tab to new window**, which creates the window
+with no drag at all, or press `lwin+p` to pause tiling, drag the tab out,
+then `lwin+p` again. This is an upstream GlazeWM limitation
+([issue 1080](https://github.com/glzr-io/glazewm/issues/1080)), not a
+Winmarchy setting; `docs/defender.md` aside, FLAGS.md FLAG-65 has the detail.
+
 ## If antivirus flags it
 
 Defender or SmartScreen may flag Winmarchy. It is behaviour, not a known bad
